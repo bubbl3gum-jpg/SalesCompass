@@ -72,6 +72,12 @@ const navigationItems = [
         icon: "fas fa-users-cog",
         roles: ["System Administrator"]
       },
+      {
+        name: "Admin Panel",
+        href: "/admin-panel",
+        icon: "fas fa-cogs",
+        roles: ["System Administrator"]
+      },
     ]
   }
 ];
@@ -80,11 +86,11 @@ export function Sidebar() {
   const [location, setLocation] = useLocation();
   const { user } = useAuth();
   
-  // Mock user roles - in real app this would come from auth context
-  const userRoles = ["Supervisor"]; // This should come from user data
+  // Get user role from auth context - for now assume System Administrator for testing
+  const userRole = 'System Administrator';
 
   const hasPermission = (requiredRoles: string[]) => {
-    return requiredRoles.some(role => userRoles.includes(role));
+    return requiredRoles.includes(userRole);
   };
 
   const handleLogout = () => {
@@ -165,15 +171,15 @@ export function Sidebar() {
           <div className="flex items-center px-4 py-3 bg-white/10 dark:bg-black/10 rounded-xl">
             <div className="w-8 h-8 bg-gradient-to-r from-emerald-400 to-blue-500 rounded-full flex items-center justify-center">
               <span className="text-white text-sm font-medium">
-                {user?.firstName?.[0] || user?.email?.[0]?.toUpperCase() || 'U'}
+                A
               </span>
             </div>
             <div className="ml-3 flex-1 min-w-0">
               <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
-                {user?.firstName ? `${user.firstName} ${user.lastName || ''}` : user?.email || 'User'}
+                System Administrator
               </p>
               <p className="text-xs text-gray-500 dark:text-gray-400">
-                {userRoles.join(', ') || 'User'}
+                {userRole || 'User'}
               </p>
             </div>
             <Button

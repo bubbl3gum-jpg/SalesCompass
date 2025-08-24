@@ -16,6 +16,7 @@ import Transfers from "@/pages/transfers";
 import PriceLists from "@/pages/price-lists";
 import Discounts from "@/pages/discounts";
 import UserManagement from "@/pages/user-management";
+import AdminPanel from "@/pages/admin-panel";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -36,6 +37,7 @@ function Router() {
           <Route path="/price-lists" component={PriceLists} />
           <Route path="/discounts" component={Discounts} />
           <Route path="/user-management" component={UserManagement} />
+          <Route path="/admin-panel" component={AdminPanel} />
         </>
       )}
       <Route component={NotFound} />

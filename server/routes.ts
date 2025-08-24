@@ -651,6 +651,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get('/api/staff', isAuthenticated, async (req, res) => {
+    try {
+      const staff = await storage.getStaff();
+      res.json(staff);
+    } catch (error) {
+      res.status(500).json({ message: 'Failed to get staff list' });
+    }
+  });
+
   // Stock Opname endpoints
   app.get('/api/stock-opname', isAuthenticated, async (req, res) => {
     try {
