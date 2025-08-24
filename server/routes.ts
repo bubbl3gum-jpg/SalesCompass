@@ -306,10 +306,8 @@ function validateImportData(data: any[], tableName: string, schema: any): { vali
         if (columnMappings[tableName]) {
           if (columnMappings[tableName][trimmedKey]) {
             mappedKey = columnMappings[tableName][trimmedKey];
-            console.log(`🔄 Mapped "${key}" → "${mappedKey}" (with spaces)`);
           } else if (columnMappings[tableName][cleanKey]) {
             mappedKey = columnMappings[tableName][cleanKey];
-            console.log(`🔄 Mapped "${key}" → "${mappedKey}" (without spaces)`);
           }
         }
         
@@ -463,12 +461,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: 'No data found in file' });
       }
 
-      // Debug: Log first row to see column headers
-      console.log('🔍 DEBUG - Import Analysis:');
-      console.log('📊 Table Name:', tableName);
-      console.log('📋 Total Rows:', parsedData.length);
-      console.log('🏷️  Original Column Headers:', Object.keys(parsedData[0] || {}));
-      console.log('📄 First Row Sample:', parsedData[0]);
+      // Log import analysis
+      console.log(`Import Analysis: ${tableName} - ${parsedData.length} rows detected`);
 
       // Validate data based on table type
       let schema;
@@ -517,22 +511,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const { valid, invalid, errors } = validateImportData(parsedData, tableName, schema);
       
-      // Debug: Log validation results
-      console.log('✅ Validation Results:');
-      console.log('✅ Valid Records:', valid.length);
-      console.log('❌ Invalid Records:', invalid.length);
-      if (errors.length > 0) {
-        console.log('🚨 First 3 Errors:', errors.slice(0, 3));
-      }
-      if (valid.length > 0) {
-        console.log('📋 First Valid Record:', valid[0]);
-      }
+      // Log validation results  
+      console.log(`Validation: ${valid.length} valid, ${invalid.length} invalid records`);
       
       // Insert valid records with special handling for line items
       let successCount = 0;
       const insertErrors: string[] = [];
+      const failedRecords: Array<{ record: any; error: string; originalIndex: number }> = [];
       
-      for (const record of valid) {
+      for (let i = 0; i < valid.length; i++) {
+        const record = valid[i];
         try {
           let finalRecord = { ...record };
           
@@ -542,6 +530,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               finalRecord.soId = parsedAdditionalData.soId;
             } else {
               insertErrors.push('SO ID is required for stock opname items');
+              failedRecords.push({ record, error: 'SO ID is required for stock opname items', originalIndex: i });
               continue;
             }
             
@@ -564,7 +553,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
             if (parsedAdditionalData?.toId) {
               finalRecord.toId = parsedAdditionalData.toId;
             } else {
-              insertErrors.push('Transfer Order ID is required for transfer items');
+              const errorMsg = 'Transfer Order ID is required for transfer items';
+              insertErrors.push(errorMsg);
+              failedRecords.push({ record, error: errorMsg, originalIndex: i });
               continue;
             }
           }
@@ -573,17 +564,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
             await (storage as any)[storageMethod](finalRecord);
             successCount++;
           } else {
-            insertErrors.push(`Method ${storageMethod} not implemented`);
+            const errorMsg = `Method ${storageMethod} not implemented`;
+            insertErrors.push(errorMsg);
+            failedRecords.push({ record, error: errorMsg, originalIndex: i });
           }
         } catch (error) {
-          insertErrors.push(`Failed to insert record: ${error instanceof Error ? error.message : 'Unknown error'}`);
+          const errorMsg = `Failed to insert record: ${error instanceof Error ? error.message : 'Unknown error'}`;
+          insertErrors.push(errorMsg);
+          failedRecords.push({ record, error: errorMsg, originalIndex: i });
         }
       }
+      
+      // Add validation failed records to failedRecords array
+      invalid.forEach((record, index) => {
+        failedRecords.push({ 
+          record, 
+          error: errors[index] || 'Validation failed', 
+          originalIndex: valid.length + index 
+        });
+      });
       
       res.json({
         success: successCount,
         failed: invalid.length + insertErrors.length,
-        errors: [...errors, ...insertErrors].slice(0, 50) // Limit errors to prevent huge responses
+        errors: [...errors, ...insertErrors].slice(0, 50), // Limit errors to prevent huge responses
+        failedRecords: failedRecords.slice(0, 10) // Limit to first 10 failed records for review
       });
       
     } catch (error) {
@@ -591,6 +596,80 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ 
         message: 'Import failed', 
         error: error instanceof Error ? error.message : 'Unknown error' 
+      });
+    }
+  });
+
+  // Retry single failed import record
+  app.post('/api/import/retry', isAuthenticated, async (req, res) => {
+    try {
+      const { tableName, record } = req.body;
+      
+      if (!tableName || !record) {
+        return res.status(400).json({ message: 'Table name and record data required' });
+      }
+
+      // Validate data based on table type
+      let schema;
+      let storageMethod: string;
+      
+      switch (tableName) {
+        case 'reference-sheet':
+          schema = insertReferenceSheetSchema;
+          storageMethod = 'createReferenceSheet';
+          break;
+        case 'pricelist':
+          schema = insertPricelistSchema;
+          storageMethod = 'createPricelist';
+          break;
+        case 'discounts':
+          schema = insertDiscountTypeSchema;
+          storageMethod = 'createDiscountType';
+          break;
+        case 'stores':
+          schema = insertStoreSchema;
+          storageMethod = 'createStore';
+          break;
+        case 'staff':
+          schema = insertStaffSchema;
+          storageMethod = 'createStaff';
+          break;
+        case 'stock-opname':
+          schema = insertStockOpnameSchema;
+          storageMethod = 'createStockOpname';
+          break;
+        case 'stock-opname-items':
+          schema = insertSoItemListSchema;
+          storageMethod = 'createSoItemList';
+          break;
+        case 'transfers':
+          schema = insertTransferOrderSchema;
+          storageMethod = 'createTransferOrder';
+          break;
+        case 'transfer-items':
+          schema = insertToItemListSchema;
+          storageMethod = 'createToItemList';
+          break;
+        default:
+          return res.status(400).json({ message: 'Invalid table name' });
+      }
+
+      // Validate the record
+      const validatedRecord = schema.parse(record);
+      
+      // Insert the record
+      if (typeof (storage as any)[storageMethod] === 'function') {
+        const result = await (storage as any)[storageMethod](validatedRecord);
+        res.json({ success: true, record: result });
+      } else {
+        throw new Error(`Method ${storageMethod} not implemented`);
+      }
+      
+    } catch (error) {
+      console.error('Retry import error:', error);
+      res.status(400).json({ 
+        success: false,
+        message: error instanceof Error ? error.message : 'Unknown error' 
       });
     }
   });

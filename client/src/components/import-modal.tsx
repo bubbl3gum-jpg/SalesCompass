@@ -9,6 +9,9 @@ import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Card, CardContent } from "@/components/ui/card";
+import { apiRequest } from "@/lib/queryClient";
 
 interface ImportModalProps {
   isOpen: boolean;
@@ -42,7 +45,10 @@ export function ImportModal({
     success: number;
     failed: number;
     errors: string[];
+    failedRecords?: Array<{ record: any; error: string; originalIndex: number }>;
   } | null>(null);
+  const [editingRecord, setEditingRecord] = useState<any>(null);
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
 
   const importMutation = useMutation({
     mutationFn: async (file: File) => {
@@ -164,10 +170,69 @@ export function ImportModal({
     setSelectedFile(null);
     setImportResults(null);
     setUploadProgress(0);
+    setEditingRecord(null);
+    setEditingIndex(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
     onClose();
+  };
+
+  const retryMutation = useMutation({
+    mutationFn: async (record: any) => {
+      const response = await apiRequest('POST', '/api/import/retry', {
+        tableName,
+        record
+      });
+      return response.json();
+    },
+    onSuccess: (data, variables) => {
+      // Remove the successfully retried record from failed records
+      if (importResults && importResults.failedRecords) {
+        const updatedFailedRecords = importResults.failedRecords.filter(
+          (_, index) => index !== editingIndex
+        );
+        setImportResults({
+          ...importResults,
+          success: importResults.success + 1,
+          failed: importResults.failed - 1,
+          failedRecords: updatedFailedRecords
+        });
+      }
+      
+      queryClient.invalidateQueries({ queryKey: [queryKey] });
+      setEditingRecord(null);
+      setEditingIndex(null);
+      
+      toast({
+        title: "Success",
+        description: "Record imported successfully",
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Retry Failed",
+        description: (error as Error).message || "Failed to import record",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleEditRecord = (record: any, index: number) => {
+    setEditingRecord({ ...record });
+    setEditingIndex(index);
+  };
+
+  const handleRetryRecord = () => {
+    if (editingRecord) {
+      retryMutation.mutate(editingRecord);
+    }
+  };
+
+  const handleFieldChange = (field: string, value: string) => {
+    if (editingRecord) {
+      setEditingRecord({ ...editingRecord, [field]: value });
+    }
   };
 
   const getFileIcon = (fileName: string) => {
@@ -258,36 +323,132 @@ export function ImportModal({
 
           {/* Import Results */}
           {importResults && (
-            <div className="space-y-3">
+            <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
-                <div className="p-3 bg-green-50 dark:bg-green-900/20 rounded-lg text-center">
-                  <p className="text-2xl font-bold text-green-600">{importResults.success}</p>
-                  <p className="text-sm text-green-600">Successfully Imported</p>
-                </div>
-                <div className="p-3 bg-red-50 dark:bg-red-900/20 rounded-lg text-center">
-                  <p className="text-2xl font-bold text-red-600">{importResults.failed}</p>
-                  <p className="text-sm text-red-600">Failed</p>
-                </div>
+                <Card className="bg-green-50 border-green-200">
+                  <CardContent className="p-4 text-center">
+                    <div className="text-2xl font-bold text-green-600">{importResults.success}</div>
+                    <div className="text-sm text-green-700">Successfully Imported</div>
+                  </CardContent>
+                </Card>
+                <Card className="bg-red-50 border-red-200">
+                  <CardContent className="p-4 text-center">
+                    <div className="text-2xl font-bold text-red-600">{importResults.failed}</div>
+                    <div className="text-sm text-red-700">Failed</div>
+                  </CardContent>
+                </Card>
               </div>
-              
+
               {importResults.errors.length > 0 && (
-                <Alert variant="destructive">
-                  <AlertDescription>
-                    <div className="space-y-1">
-                      <p className="font-medium">Import Errors:</p>
-                      <ul className="list-disc list-inside text-sm space-y-1">
-                        {importResults.errors.slice(0, 5).map((error, index) => (
-                          <li key={index}>{error}</li>
-                        ))}
-                        {importResults.errors.length > 5 && (
-                          <li>... and {importResults.errors.length - 5} more errors</li>
-                        )}
-                      </ul>
+                <Card className="bg-slate-50 border-slate-200">
+                  <CardContent className="p-4">
+                    <h4 className="font-medium text-slate-900 mb-2">Import Errors:</h4>
+                    <ul className="space-y-1 text-sm text-slate-700">
+                      {importResults.errors.map((error, index) => (
+                        <li key={index} className="flex items-start space-x-2">
+                          <span className="text-red-500 mt-1">•</span>
+                          <span>{error}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </CardContent>
+                </Card>
+              )}
+
+              {importResults.failedRecords && importResults.failedRecords.length > 0 && (
+                <Card className="bg-amber-50 border-amber-200">
+                  <CardContent className="p-4">
+                    <h4 className="font-medium text-amber-900 mb-4">Failed Records - Click to Edit & Retry</h4>
+                    <div className="max-h-64 overflow-y-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead className="w-12">#</TableHead>
+                            <TableHead>Data</TableHead>
+                            <TableHead>Error</TableHead>
+                            <TableHead className="w-20">Action</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {importResults.failedRecords.map((failedRecord, index) => (
+                            <TableRow key={index} className="hover:bg-amber-100 cursor-pointer">
+                              <TableCell className="font-mono text-xs">{failedRecord.originalIndex + 1}</TableCell>
+                              <TableCell className="max-w-xs">
+                                <div className="text-xs space-y-1">
+                                  {Object.entries(failedRecord.record).map(([key, value]) => (
+                                    <div key={key} className="flex">
+                                      <span className="font-medium text-slate-600 mr-2">{key}:</span>
+                                      <span className="text-slate-800 truncate">{String(value)}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </TableCell>
+                              <TableCell className="text-xs text-red-600 max-w-xs">
+                                {failedRecord.error}
+                              </TableCell>
+                              <TableCell>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleEditRecord(failedRecord.record, index)}
+                                  data-testid={`button-edit-failed-record-${index}`}
+                                >
+                                  Edit
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
                     </div>
-                  </AlertDescription>
-                </Alert>
+                  </CardContent>
+                </Card>
               )}
             </div>
+          )}
+
+          {/* Edit Failed Record Modal */}
+          {editingRecord && (
+            <Card className="mt-4 bg-blue-50 border-blue-200">
+              <CardContent className="p-4">
+                <h4 className="font-medium text-blue-900 mb-4">Edit Failed Record</h4>
+                <div className="space-y-3">
+                  {Object.entries(editingRecord).map(([key, value]) => (
+                    <div key={key}>
+                      <Label htmlFor={`edit-${key}`} className="text-sm font-medium text-blue-800">
+                        {key}
+                      </Label>
+                      <Input
+                        id={`edit-${key}`}
+                        value={String(value || '')}
+                        onChange={(e) => handleFieldChange(key, e.target.value)}
+                        className="mt-1"
+                        data-testid={`input-edit-${key}`}
+                      />
+                    </div>
+                  ))}
+                </div>
+                <div className="flex justify-end space-x-2 mt-4">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setEditingRecord(null);
+                      setEditingIndex(null);
+                    }}
+                    data-testid="button-cancel-edit"
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={handleRetryRecord}
+                    disabled={retryMutation.isPending}
+                    data-testid="button-retry-record"
+                  >
+                    {retryMutation.isPending ? 'Retrying...' : 'Retry Import'}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
           )}
 
           {/* Action Buttons */}
@@ -300,23 +461,20 @@ export function ImportModal({
             >
               {importResults ? 'Close' : 'Cancel'}
             </Button>
-            <Button 
-              onClick={handleImport}
-              disabled={!selectedFile || importMutation.isPending}
-              data-testid="button-start-import"
-            >
-              {importMutation.isPending ? (
-                <>
-                  <i className="fas fa-spinner fa-spin mr-2"></i>
-                  Importing...
-                </>
-              ) : (
-                <>
-                  <i className="fas fa-upload mr-2"></i>
-                  Import Data
-                </>
-              )}
-            </Button>
+            {selectedFile && !importResults && (
+              <Button
+                onClick={handleImport}
+                disabled={importMutation.isPending}
+                data-testid="button-start-import"
+              >
+                {importMutation.isPending ? 'Importing...' : 'Import Data'}
+              </Button>
+            )}
+            {importResults && importResults.failed === 0 && (
+              <Button onClick={handleClose} data-testid="button-finish-import">
+                Finish
+              </Button>
+            )}
           </div>
         </div>
       </DialogContent>
