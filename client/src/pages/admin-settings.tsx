@@ -163,10 +163,7 @@ export default function AdminSettings() {
       const config = getCurrentConfig();
       if (!config) throw new Error('Invalid table configuration');
       
-      return await apiRequest(`${config.endpoint}`, {
-        method: 'POST',
-        body: JSON.stringify(data),
-      });
+      return await apiRequest('POST', `${config.endpoint}`, data);
     },
     onSuccess: () => {
       const config = getCurrentConfig();
@@ -268,7 +265,7 @@ export default function AdminSettings() {
               </div>
             ) : (
               <div className="space-y-4">
-                {data && data.length > 0 ? (
+                {Array.isArray(data) && data.length > 0 ? (
                   <div className="grid gap-4">
                     {data.map((item: any, index: number) => (
                       <div key={item[config.keyField] || index} className="p-4 bg-white/5 dark:bg-black/5 rounded-lg">
@@ -591,7 +588,6 @@ export default function AdminSettings() {
           isOpen={showImportModal}
           onClose={() => setShowImportModal(false)}
           tableName={getCurrentConfig()?.importTable || activeTab}
-          onSuccess={handleImportSuccess}
         />
       )}
     </div>
