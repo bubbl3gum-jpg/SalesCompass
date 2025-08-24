@@ -166,13 +166,14 @@ function validateImportData(data: any[], tableName: string, schema: any): { vali
 
   data.forEach((row, index) => {
     try {
-      // Clean and normalize column names (remove spaces, convert to camelCase)
+      // Clean and normalize column names 
       const cleanedRow: any = {};
       Object.keys(row).forEach(key => {
-        const cleanKey = key.trim().replace(/\s+/g, '').toLowerCase();
+        const trimmedKey = key.trim().toLowerCase();
+        const cleanKey = trimmedKey.replace(/\s+/g, ''); // Remove spaces for fallback
         let mappedKey = cleanKey;
         
-        // Map common column name variations
+        // Map common column name variations (check with spaces first, then without)
         const columnMappings: { [key: string]: { [key: string]: string } } = {
           'reference-sheet': {
             'kodeitem': 'kodeItem',
@@ -217,8 +218,15 @@ function validateImportData(data: any[], tableName: string, schema: any): { vali
           }
         };
         
-        if (columnMappings[tableName] && columnMappings[tableName][cleanKey]) {
-          mappedKey = columnMappings[tableName][cleanKey];
+        // Check mappings - first with spaces, then without
+        if (columnMappings[tableName]) {
+          if (columnMappings[tableName][trimmedKey]) {
+            mappedKey = columnMappings[tableName][trimmedKey];
+            console.log(`🔄 Mapped "${key}" → "${mappedKey}" (with spaces)`);
+          } else if (columnMappings[tableName][cleanKey]) {
+            mappedKey = columnMappings[tableName][cleanKey];
+            console.log(`🔄 Mapped "${key}" → "${mappedKey}" (without spaces)`);
+          }
         }
         
         cleanedRow[mappedKey] = row[key];
@@ -371,6 +379,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: 'No data found in file' });
       }
 
+      // Debug: Log first row to see column headers
+      console.log('🔍 DEBUG - Import Analysis:');
+      console.log('📊 Table Name:', tableName);
+      console.log('📋 Total Rows:', parsedData.length);
+      console.log('🏷️  Original Column Headers:', Object.keys(parsedData[0] || {}));
+      console.log('📄 First Row Sample:', parsedData[0]);
+
       // Validate data based on table type
       let schema;
       let storageMethod: string;
@@ -417,6 +432,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const { valid, invalid, errors } = validateImportData(parsedData, tableName, schema);
+      
+      // Debug: Log validation results
+      console.log('✅ Validation Results:');
+      console.log('✅ Valid Records:', valid.length);
+      console.log('❌ Invalid Records:', invalid.length);
+      if (errors.length > 0) {
+        console.log('🚨 First 3 Errors:', errors.slice(0, 3));
+      }
+      if (valid.length > 0) {
+        console.log('📋 First Valid Record:', valid[0]);
+      }
       
       // Insert valid records with special handling for line items
       let successCount = 0;
