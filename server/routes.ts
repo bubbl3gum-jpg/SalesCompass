@@ -372,15 +372,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       switch (tableName) {
         case 'reference-sheet':
-          schema = insertReferenceSheetSchema.omit({ refId: true });
+          schema = insertReferenceSheetSchema;
           storageMethod = 'createReferenceSheet';
           break;
         case 'pricelist':
-          schema = insertPricelistSchema.omit({ pricelistId: true });
+          schema = insertPricelistSchema;
           storageMethod = 'createPricelist';
           break;
         case 'discounts':
-          schema = insertDiscountTypeSchema.omit({ discountId: true });
+          schema = insertDiscountTypeSchema;
           storageMethod = 'createDiscountType';
           break;
         case 'stores':
@@ -392,19 +392,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
           storageMethod = 'createStaff';
           break;
         case 'stock-opname':
-          schema = insertStockOpnameSchema.omit({ soId: true });
+          schema = insertStockOpnameSchema;
           storageMethod = 'createStockOpname';
           break;
         case 'stock-opname-items':
-          schema = insertSoItemListSchema.omit({ soItemListId: true });
+          schema = insertSoItemListSchema;
           storageMethod = 'createSoItemList';
           break;
         case 'transfers':
-          schema = insertTransferOrderSchema.omit({ transferId: true });
+          schema = insertTransferOrderSchema;
           storageMethod = 'createTransferOrder';
           break;
         case 'transfer-items':
-          schema = insertToItemListSchema.omit({ toItemListId: true });
+          schema = insertToItemListSchema;
           storageMethod = 'createToItemList';
           break;
         default:
