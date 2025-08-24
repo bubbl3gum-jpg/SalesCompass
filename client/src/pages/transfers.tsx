@@ -8,6 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import { isUnauthorizedError } from "@/lib/authUtils";
 
 import { Sidebar } from "@/components/sidebar";
+import { ImportModal } from "@/components/import-modal";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -41,6 +42,7 @@ export default function Transfers() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [showTransferModal, setShowTransferModal] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
 
   const form = useForm<TransferFormData>({
     resolver: zodResolver(transferFormSchema),
@@ -127,14 +129,26 @@ export default function Transfers() {
               <h2 className="text-3xl font-bold text-gray-900 dark:text-white">Transfer Orders</h2>
               <p className="text-gray-600 dark:text-gray-400 mt-1">Manage stock transfers between stores</p>
             </div>
-            <Button
-              onClick={() => setShowTransferModal(true)}
-              className="bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700"
-              data-testid="button-new-transfer"
-            >
-              <i className="fas fa-plus mr-2"></i>
-              New Transfer
-            </Button>
+            <div className="flex space-x-3">
+              <Button
+                variant="outline"
+                onClick={() => setShowImportModal(true)}
+                className="border-emerald-600 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20"
+                data-testid="button-import-transfers"
+              >
+                <i className="fas fa-upload mr-2"></i>
+                Import
+              </Button>
+              
+              <Button
+                onClick={() => setShowTransferModal(true)}
+                className="bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700"
+                data-testid="button-new-transfer"
+              >
+                <i className="fas fa-plus mr-2"></i>
+                New Transfer
+              </Button>
+            </div>
           </div>
         </header>
 
@@ -336,6 +350,22 @@ export default function Transfers() {
           </Form>
         </DialogContent>
       </Dialog>
+
+      {/* Import Modal */}
+      <ImportModal
+        isOpen={showImportModal}
+        onClose={() => setShowImportModal(false)}
+        title="Import Transfer Orders Data"
+        tableName="transfers"
+        queryKey="/api/transfers"
+        endpoint="/api/import"
+        sampleData={[
+          'dariGudang (source store code)',
+          'keGudang (destination store code)',
+          'tanggal (YYYY-MM-DD)',
+          'status (optional)'
+        ]}
+      />
     </div>
   );
 }

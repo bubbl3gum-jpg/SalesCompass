@@ -5,6 +5,7 @@ import { useToast } from "@/hooks/use-toast";
 import { isUnauthorizedError } from "@/lib/authUtils";
 import { apiRequest } from "@/lib/queryClient";
 import { Sidebar } from "@/components/sidebar";
+import { ImportModal } from "@/components/import-modal";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,6 +27,7 @@ export default function StockOpname() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showAddItemModal, setShowAddItemModal] = useState(false);
   const [selectedSoId, setSelectedSoId] = useState<number | null>(null);
+  const [showImportModal, setShowImportModal] = useState(false);
 
   // Form states
   const [newSoDate, setNewSoDate] = useState(new Date().toISOString().split('T')[0]);
@@ -240,51 +242,63 @@ export default function StockOpname() {
                 </select>
               )}
 
-              {/* Create New Stock Opname */}
-              <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
-                <DialogTrigger asChild>
-                  <Button 
-                    className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white"
-                    data-testid="button-new-stock-opname"
-                  >
-                    <i className="fas fa-plus mr-2"></i>
-                    New Stock Opname
-                  </Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Create New Stock Opname</DialogTitle>
-                  </DialogHeader>
-                  <div className="space-y-4">
-                    <div>
-                      <Label htmlFor="so-date">Date</Label>
-                      <Input
-                        id="so-date"
-                        type="date"
-                        value={newSoDate}
-                        onChange={(e) => setNewSoDate(e.target.value)}
-                        data-testid="input-so-date"
-                      />
+              {/* Import and Create Buttons */}
+              <div className="flex space-x-3">
+                <Button 
+                  variant="outline"
+                  onClick={() => setShowImportModal(true)}
+                  className="border-emerald-600 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20"
+                  data-testid="button-import-stock-opname"
+                >
+                  <i className="fas fa-upload mr-2"></i>
+                  Import SO
+                </Button>
+                
+                <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
+                  <DialogTrigger asChild>
+                    <Button 
+                      className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white"
+                      data-testid="button-new-stock-opname"
+                    >
+                      <i className="fas fa-plus mr-2"></i>
+                      New Stock Opname
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>Create New Stock Opname</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4">
+                      <div>
+                        <Label htmlFor="so-date">Date</Label>
+                        <Input
+                          id="so-date"
+                          type="date"
+                          value={newSoDate}
+                          onChange={(e) => setNewSoDate(e.target.value)}
+                          data-testid="input-so-date"
+                        />
+                      </div>
+                      <div className="flex justify-end space-x-2">
+                        <Button 
+                          variant="outline" 
+                          onClick={() => setShowCreateModal(false)}
+                          data-testid="button-cancel-so"
+                        >
+                          Cancel
+                        </Button>
+                        <Button 
+                          onClick={handleCreateSo}
+                          disabled={createSoMutation.isPending}
+                          data-testid="button-create-so"
+                        >
+                          {createSoMutation.isPending ? "Creating..." : "Create"}
+                        </Button>
+                      </div>
                     </div>
-                    <div className="flex justify-end space-x-2">
-                      <Button 
-                        variant="outline" 
-                        onClick={() => setShowCreateModal(false)}
-                        data-testid="button-cancel-so"
-                      >
-                        Cancel
-                      </Button>
-                      <Button 
-                        onClick={handleCreateSo}
-                        disabled={createSoMutation.isPending}
-                        data-testid="button-create-so"
-                      >
-                        {createSoMutation.isPending ? "Creating..." : "Create"}
-                      </Button>
-                    </div>
-                  </div>
-                </DialogContent>
-              </Dialog>
+                  </DialogContent>
+                </Dialog>
+              </div>
             </div>
           </div>
         </header>
@@ -469,6 +483,20 @@ export default function StockOpname() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Import Modal */}
+      <ImportModal
+        isOpen={showImportModal}
+        onClose={() => setShowImportModal(false)}
+        title="Import Stock Opname Data"
+        tableName="stock-opname"
+        queryKey="/api/stock-opname"
+        endpoint="/api/import"
+        sampleData={[
+          'kodeGudang',
+          'tanggal (YYYY-MM-DD)'
+        ]}
+      />
     </div>
   );
 }

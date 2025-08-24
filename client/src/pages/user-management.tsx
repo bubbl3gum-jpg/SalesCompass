@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Sidebar } from "@/components/sidebar";
+import { ImportModal } from "@/components/import-modal";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,6 +21,7 @@ const roleDescriptions = {
 export default function UserManagement() {
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [roleFilter, setRoleFilter] = useState<string>('');
+  const [showImportModal, setShowImportModal] = useState(false);
 
   // Mock user data - in real app this would come from API
   const mockUsers = [
@@ -69,6 +71,15 @@ export default function UserManagement() {
               <p className="text-gray-600 dark:text-gray-400 mt-1">Manage user accounts and role assignments</p>
             </div>
             <div className="flex items-center space-x-4">
+              <Button
+                variant="outline"
+                onClick={() => setShowImportModal(true)}
+                className="bg-white/20 dark:bg-black/20 backdrop-blur-xl border border-white/20 dark:border-gray-800/50 border-emerald-600 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20"
+                data-testid="button-import-staff"
+              >
+                <i className="fas fa-upload mr-2"></i>
+                Import Staff
+              </Button>
               <Button
                 variant="outline"
                 className="bg-white/20 dark:bg-black/20 backdrop-blur-xl border border-white/20 dark:border-gray-800/50"
@@ -259,6 +270,24 @@ export default function UserManagement() {
           </Card>
         </main>
       </div>
+
+      {/* Import Modal */}
+      <ImportModal
+        isOpen={showImportModal}
+        onClose={() => setShowImportModal(false)}
+        title="Import Staff Data"
+        tableName="staff"
+        queryKey="/api/users"
+        endpoint="/api/import"
+        sampleData={[
+          'name',
+          'email',
+          'roles (comma-separated)',
+          'status (Active/Inactive)',
+          'phoneNumber (optional)',
+          'department (optional)'
+        ]}
+      />
     </div>
   );
 }

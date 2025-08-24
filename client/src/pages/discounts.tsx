@@ -8,6 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import { isUnauthorizedError } from "@/lib/authUtils";
 
 import { Sidebar } from "@/components/sidebar";
+import { ImportModal } from "@/components/import-modal";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -41,6 +42,7 @@ export default function Discounts() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [showDiscountModal, setShowDiscountModal] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
   const [searchTerm, setSearchTerm] = useState<string>('');
 
   const form = useForm<DiscountFormData>({
@@ -133,14 +135,26 @@ export default function Discounts() {
               <h2 className="text-3xl font-bold text-gray-900 dark:text-white">Discount Management</h2>
               <p className="text-gray-600 dark:text-gray-400 mt-1">Create and manage discount types and promotions</p>
             </div>
-            <Button
-              onClick={() => setShowDiscountModal(true)}
-              className="bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700"
-              data-testid="button-new-discount"
-            >
-              <i className="fas fa-plus mr-2"></i>
-              New Discount
-            </Button>
+            <div className="flex space-x-3">
+              <Button
+                variant="outline"
+                onClick={() => setShowImportModal(true)}
+                className="border-emerald-600 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20"
+                data-testid="button-import-discounts"
+              >
+                <i className="fas fa-upload mr-2"></i>
+                Import
+              </Button>
+              
+              <Button
+                onClick={() => setShowDiscountModal(true)}
+                className="bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700"
+                data-testid="button-new-discount"
+              >
+                <i className="fas fa-plus mr-2"></i>
+                New Discount
+              </Button>
+            </div>
           </div>
         </header>
 
@@ -358,6 +372,22 @@ export default function Discounts() {
           </Form>
         </DialogContent>
       </Dialog>
+
+      {/* Import Modal */}
+      <ImportModal
+        isOpen={showImportModal}
+        onClose={() => setShowImportModal(false)}
+        title="Import Discount Data"
+        tableName="discounts"
+        queryKey="/api/discounts"
+        endpoint="/api/import"
+        sampleData={[
+          'discountName',
+          'discountAmount',
+          'startFrom (YYYY-MM-DD)',
+          'endAt (YYYY-MM-DD)'
+        ]}
+      />
     </div>
   );
 }

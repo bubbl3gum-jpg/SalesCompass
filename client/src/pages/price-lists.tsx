@@ -8,6 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import { isUnauthorizedError } from "@/lib/authUtils";
 
 import { Sidebar } from "@/components/sidebar";
+import { ImportModal } from "@/components/import-modal";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -46,6 +47,7 @@ export default function PriceLists() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [showPriceModal, setShowPriceModal] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
   const [searchTerm, setSearchTerm] = useState<string>('');
 
   const form = useForm<PricelistFormData>({
@@ -147,6 +149,7 @@ export default function PriceLists() {
             <div className="flex items-center space-x-4">
               <Button
                 variant="outline"
+                onClick={() => setShowImportModal(true)}
                 className="bg-white/20 dark:bg-black/20 backdrop-blur-xl border border-white/20 dark:border-gray-800/50"
                 data-testid="button-import-prices"
               >
@@ -475,6 +478,26 @@ export default function PriceLists() {
           </Form>
         </DialogContent>
       </Dialog>
+
+      {/* Import Modal */}
+      <ImportModal
+        isOpen={showImportModal}
+        onClose={() => setShowImportModal(false)}
+        title="Import Price List Data"
+        tableName="pricelist"
+        queryKey="/api/pricelist"
+        endpoint="/api/import"
+        sampleData={[
+          'kodeItem',
+          'serialNumber (optional)',
+          'normalPrice',
+          'sp (special price, optional)',
+          'kelompok (optional)',
+          'family (optional)',
+          'deskripsiMaterial (optional)',
+          'kodeMotif (optional)'
+        ]}
+      />
     </div>
   );
 }

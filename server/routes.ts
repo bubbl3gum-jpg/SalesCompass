@@ -3,12 +3,21 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./replitAuth";
 import { z } from "zod";
+import multer from "multer";
+import * as XLSX from "xlsx";
+import * as csv from "csv-parser";
+import { Readable } from "stream";
 import { 
   insertLaporanPenjualanSchema, 
   insertSettlementSchema,
   insertTransferOrderSchema,
   insertStockOpnameSchema,
   insertSoItemListSchema,
+  insertReferenceSheetSchema,
+  insertPricelistSchema,
+  insertDiscountTypeSchema,
+  insertStoreSchema,
+  insertStaffSchema,
   type Pricelist 
 } from "@shared/schema";
 
@@ -104,6 +113,121 @@ const checkRole = (allowedRoles: string[]) => {
     next();
   };
 };
+
+// Configure multer for file uploads
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 10 * 1024 * 1024, // 10MB limit
+  },
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = [
+      'text/csv',
+      'application/vnd.ms-excel',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    ];
+    
+    if (allowedTypes.includes(file.mimetype) || file.originalname.match(/\.(csv|xlsx?|xlsm)$/i)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Invalid file type. Only CSV and Excel files are allowed.'));
+    }
+  }
+});
+
+// Helper function to parse CSV data
+function parseCSV(buffer: Buffer): Promise<any[]> {
+  return new Promise((resolve, reject) => {
+    const results: any[] = [];
+    const stream = Readable.from(buffer.toString());
+    
+    stream
+      .pipe(csv())
+      .on('data', (data) => results.push(data))
+      .on('end', () => resolve(results))
+      .on('error', reject);
+  });
+}
+
+// Helper function to parse Excel data
+function parseExcel(buffer: Buffer): any[] {
+  const workbook = XLSX.read(buffer, { type: 'buffer' });
+  const sheetName = workbook.SheetNames[0];
+  const worksheet = workbook.Sheets[sheetName];
+  return XLSX.utils.sheet_to_json(worksheet);
+}
+
+// Helper function to validate and transform import data
+function validateImportData(data: any[], tableName: string, schema: any): { valid: any[], invalid: any[], errors: string[] } {
+  const valid: any[] = [];
+  const invalid: any[] = [];
+  const errors: string[] = [];
+
+  data.forEach((row, index) => {
+    try {
+      // Clean and normalize column names (remove spaces, convert to camelCase)
+      const cleanedRow: any = {};
+      Object.keys(row).forEach(key => {
+        const cleanKey = key.trim().replace(/\s+/g, '').toLowerCase();
+        let mappedKey = cleanKey;
+        
+        // Map common column name variations
+        const columnMappings: { [key: string]: { [key: string]: string } } = {
+          'reference-sheet': {
+            'kodeitem': 'kodeItem',
+            'namaitem': 'namaItem',
+            'deskripsiitem': 'deskripsiItem',
+            'serialnumber': 'serialNumber',
+            'deskripsimaterial': 'deskripsiMaterial',
+            'kodemotif': 'kodeMotif'
+          },
+          'pricelist': {
+            'kodeitem': 'kodeItem',
+            'normalprice': 'normalPrice',
+            'deskripsimaterial': 'deskripsiMaterial',
+            'kodemotif': 'kodeMotif'
+          },
+          'discounts': {
+            'discountcode': 'discountCode',
+            'discounttype': 'discountType',
+            'discountvalue': 'discountValue',
+            'isactive': 'isActive'
+          },
+          'stores': {
+            'kodegudang': 'kodeGudang',
+            'namagudang': 'namaGudang'
+          },
+          'staff': {
+            'firstname': 'firstName',
+            'lastname': 'lastName'
+          },
+          'stock-opname': {
+            'kodegudang': 'kodeGudang'
+          },
+          'transfers': {
+            'fromgudang': 'fromGudang',
+            'togudang': 'toGudang',
+            'kodeitem': 'kodeItem'
+          }
+        };
+        
+        if (columnMappings[tableName] && columnMappings[tableName][cleanKey]) {
+          mappedKey = columnMappings[tableName][cleanKey];
+        }
+        
+        cleanedRow[mappedKey] = row[key];
+      });
+      
+      const validated = schema.parse(cleanedRow);
+      valid.push(validated);
+    } catch (error) {
+      invalid.push(row);
+      errors.push(`Row ${index + 1}: ${error instanceof Error ? error.message : 'Validation failed'}`);
+    }
+  });
+
+  return { valid, invalid, errors };
+}
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Auth middleware
@@ -203,6 +327,102 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('Opening stock query error:', error);
       res.status(500).json({ message: 'Failed to get opening stock information' });
+    }
+  });
+
+  // Import endpoint for bulk data upload
+  app.post('/api/import', isAuthenticated, upload.single('file'), async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ message: 'No file uploaded' });
+      }
+
+      const { tableName } = req.body;
+      if (!tableName) {
+        return res.status(400).json({ message: 'Table name is required' });
+      }
+
+      let parsedData: any[];
+      
+      // Parse file based on type
+      if (req.file.mimetype === 'text/csv' || req.file.originalname.endsWith('.csv')) {
+        parsedData = await parseCSV(req.file.buffer);
+      } else {
+        parsedData = parseExcel(req.file.buffer);
+      }
+
+      if (parsedData.length === 0) {
+        return res.status(400).json({ message: 'No data found in file' });
+      }
+
+      // Validate data based on table type
+      let schema;
+      let storageMethod: string;
+      
+      switch (tableName) {
+        case 'reference-sheet':
+          schema = insertReferenceSheetSchema.omit({ itemId: true });
+          storageMethod = 'createReferenceSheetItem';
+          break;
+        case 'pricelist':
+          schema = insertPricelistSchema.omit({ pricelistId: true });
+          storageMethod = 'createPricelist';
+          break;
+        case 'discounts':
+          schema = insertDiscountTypeSchema.omit({ discountId: true });
+          storageMethod = 'createDiscount';
+          break;
+        case 'stores':
+          schema = insertStoreSchema;
+          storageMethod = 'createStore';
+          break;
+        case 'staff':
+          schema = insertStaffSchema;
+          storageMethod = 'createStaff';
+          break;
+        case 'stock-opname':
+          schema = insertStockOpnameSchema.omit({ soId: true });
+          storageMethod = 'createStockOpname';
+          break;
+        case 'transfers':
+          schema = insertTransferOrderSchema.omit({ transferId: true });
+          storageMethod = 'createTransfer';
+          break;
+        default:
+          return res.status(400).json({ message: 'Invalid table name' });
+      }
+
+      const { valid, invalid, errors } = validateImportData(parsedData, tableName, schema);
+      
+      // Insert valid records
+      let successCount = 0;
+      const insertErrors: string[] = [];
+      
+      for (const record of valid) {
+        try {
+          if (typeof (storage as any)[storageMethod] === 'function') {
+            await (storage as any)[storageMethod](record);
+            successCount++;
+          } else {
+            insertErrors.push(`Method ${storageMethod} not implemented`);
+          }
+        } catch (error) {
+          insertErrors.push(`Failed to insert record: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
+      }
+      
+      res.json({
+        success: successCount,
+        failed: invalid.length + insertErrors.length,
+        errors: [...errors, ...insertErrors].slice(0, 50) // Limit errors to prevent huge responses
+      });
+      
+    } catch (error) {
+      console.error('Import error:', error);
+      res.status(500).json({ 
+        message: 'Import failed', 
+        error: error instanceof Error ? error.message : 'Unknown error' 
+      });
     }
   });
 
