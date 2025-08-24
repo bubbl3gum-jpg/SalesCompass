@@ -196,7 +196,12 @@ function validateImportData(data: any[], tableName: string, schema: any): { vali
           },
           'stores': {
             'kodegudang': 'kodeGudang',
-            'namagudang': 'namaGudang'
+            'namagudang': 'namaGudang',
+            'jenisgudang': 'jenisGudang',
+            // Handle space-separated headers
+            'kode gudang': 'kodeGudang',
+            'nama gudang': 'namaGudang', 
+            'jenis gudang': 'jenisGudang'
           },
           'staff': {
             'firstname': 'firstName',
