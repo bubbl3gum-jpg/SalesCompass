@@ -430,7 +430,7 @@ export default function StockOpname() {
 
       {/* Add Item Modal */}
       <Dialog open={showAddItemModal} onOpenChange={setShowAddItemModal}>
-        <DialogContent>
+        <DialogContent className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white shadow-2xl">
           <DialogHeader>
             <DialogTitle>Add Item to Stock Opname</DialogTitle>
           </DialogHeader>

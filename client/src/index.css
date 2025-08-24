@@ -63,16 +63,16 @@
 }
 
 .dark {
-  /* Dark mode backgrounds */
+  /* Dark mode backgrounds - improved contrast */
   --background: hsl(222.2 84% 4.9%);
   --foreground: hsl(210 40% 98%);
   
-  /* Dark mode cards */
-  --card: hsl(222.2 84% 4.9%);
+  /* Dark mode cards - better visibility */
+  --card: hsl(222.2 60% 8%);
   --card-foreground: hsl(210 40% 98%);
   
-  /* Dark mode popovers */
-  --popover: hsl(222.2 84% 4.9%);
+  /* Dark mode popovers - enhanced contrast */
+  --popover: hsl(222.2 60% 8%);
   --popover-foreground: hsl(210 40% 98%);
   
   /* Primary colors remain the same */
@@ -331,4 +331,59 @@ input:focus, textarea:focus {
   h3 {
     @apply text-lg;
   }
+}
+
+/* Enhanced contrast fixes for dialogs and modals */
+[role="dialog"], 
+.dialog-content,
+[data-radix-collection-item],
+[data-state="open"][data-side] {
+  background: white !important;
+  color: #1f2937 !important;
+  border: 1px solid #d1d5db !important;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25) !important;
+}
+
+.dark [role="dialog"], 
+.dark .dialog-content,
+.dark [data-radix-collection-item],
+.dark [data-state="open"][data-side] {
+  background: #111827 !important;
+  color: #f9fafb !important;
+  border: 1px solid #374151 !important;
+}
+
+/* Input field contrast improvements */
+input[type="text"],
+input[type="email"], 
+input[type="password"],
+input[type="file"],
+input[type="date"],
+textarea,
+select {
+  background: white !important;
+  color: #1f2937 !important;
+  border: 1px solid #d1d5db !important;
+}
+
+.dark input[type="text"],
+.dark input[type="email"], 
+.dark input[type="password"],
+.dark input[type="file"],
+.dark input[type="date"],
+.dark textarea,
+.dark select {
+  background: #1f2937 !important;
+  color: #f9fafb !important;
+  border: 1px solid #4b5563 !important;
+}
+
+/* Label contrast improvements */
+label {
+  color: #1f2937 !important;
+  font-weight: 500 !important;
+}
+
+.dark label {
+  color: #f3f4f6 !important;
 }

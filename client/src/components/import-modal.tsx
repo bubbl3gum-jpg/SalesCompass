@@ -178,10 +178,10 @@ export function ImportModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white shadow-2xl">
         <DialogHeader>
           <DialogTitle className="flex items-center">
-            <i className="fas fa-upload mr-2 text-blue-600"></i>
+            <i className="fas fa-upload mr-2 text-blue-600 dark:text-blue-400"></i>
             {title}
           </DialogTitle>
         </DialogHeader>
@@ -189,7 +189,7 @@ export function ImportModal({
         <div className="space-y-6">
           {/* File Selection */}
           <div className="space-y-3">
-            <Label htmlFor="import-file">Select File</Label>
+            <Label htmlFor="import-file" className="text-gray-900 dark:text-gray-100 font-medium">Select File</Label>
             <div className="flex items-center space-x-3">
               <Input
                 ref={fileInputRef}
@@ -198,7 +198,7 @@ export function ImportModal({
                 accept={acceptedFormats}
                 onChange={handleFileSelect}
                 disabled={importMutation.isPending}
-                className="flex-1"
+                className="flex-1 bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white"
                 data-testid="input-import-file"
               />
               <Button

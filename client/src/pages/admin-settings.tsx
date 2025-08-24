@@ -532,14 +532,14 @@ export default function AdminSettings() {
 
       {/* Create Modal */}
       <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
-        <DialogContent className="bg-white/10 dark:bg-black/10 backdrop-blur-xl border-white/20 dark:border-gray-800/50 text-gray-900 dark:text-white">
+        <DialogContent className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white shadow-2xl">
           <DialogHeader>
             <DialogTitle>Add New {getCurrentConfig()?.displayName}</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-4">
             {getCurrentConfig()?.fields.map((field) => (
               <div key={field.key}>
-                <Label htmlFor={field.key} className="text-gray-700 dark:text-gray-300">
+                <Label htmlFor={field.key} className="text-gray-900 dark:text-gray-100 font-medium">
                   {field.label} {field.required && <span className="text-red-500">*</span>}
                 </Label>
                 {field.type === 'select' ? (
@@ -547,7 +547,7 @@ export default function AdminSettings() {
                     value={formData[field.key] || ''}
                     onValueChange={(value) => setFormData({ ...formData, [field.key]: value })}
                   >
-                    <SelectTrigger className="bg-white/5 dark:bg-black/5 border-white/20 dark:border-gray-700/50">
+                    <SelectTrigger className="bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white">
                       <SelectValue placeholder={`Select ${field.label}`} />
                     </SelectTrigger>
                     <SelectContent>
@@ -565,7 +565,7 @@ export default function AdminSettings() {
                     value={formData[field.key] || ''}
                     onChange={(e) => setFormData({ ...formData, [field.key]: e.target.value })}
                     required={field.required}
-                    className="bg-white/5 dark:bg-black/5 border-white/20 dark:border-gray-700/50"
+                    className="bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white"
                   />
                 )}
               </div>
