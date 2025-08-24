@@ -19,6 +19,7 @@ interface ImportModalProps {
   endpoint: string;
   acceptedFormats?: string;
   sampleData?: string[];
+  additionalData?: Record<string, any>;
 }
 
 export function ImportModal({
@@ -29,7 +30,8 @@ export function ImportModal({
   queryKey,
   endpoint,
   acceptedFormats = ".csv,.xlsx,.xls",
-  sampleData = []
+  sampleData = [],
+  additionalData
 }: ImportModalProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -47,6 +49,11 @@ export function ImportModal({
       const formData = new FormData();
       formData.append('file', file);
       formData.append('tableName', tableName);
+      
+      // Add additional data if provided
+      if (additionalData) {
+        formData.append('additionalData', JSON.stringify(additionalData));
+      }
 
       const response = await fetch(endpoint, {
         method: 'POST',

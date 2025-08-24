@@ -43,6 +43,7 @@ export default function Transfers() {
   const queryClient = useQueryClient();
   const [showTransferModal, setShowTransferModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
+  const [selectedTransferId, setSelectedTransferId] = useState<number | null>(null);
 
   const form = useForm<TransferFormData>({
     resolver: zodResolver(transferFormSchema),
@@ -54,13 +55,13 @@ export default function Transfers() {
   });
 
   // Get stores
-  const { data: stores } = useQuery({
+  const { data: stores } = useQuery<any[]>({
     queryKey: ["/api/stores"],
     retry: false,
   });
 
   // Get transfer orders
-  const { data: transfers, isLoading: transfersLoading } = useQuery({
+  const { data: transfers, isLoading: transfersLoading } = useQuery<any[]>({
     queryKey: ["/api/transfers"],
     retry: false,
   });
@@ -130,15 +131,6 @@ export default function Transfers() {
               <p className="text-gray-600 dark:text-gray-400 mt-1">Manage stock transfers between stores</p>
             </div>
             <div className="flex space-x-3">
-              <Button
-                variant="outline"
-                onClick={() => setShowImportModal(true)}
-                className="border-emerald-600 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20"
-                data-testid="button-import-transfers"
-              >
-                <i className="fas fa-upload mr-2"></i>
-                Import
-              </Button>
               
               <Button
                 onClick={() => setShowTransferModal(true)}
@@ -217,14 +209,29 @@ export default function Transfers() {
                           <Badge className={`${status.color} border-0`}>
                             {status.status}
                           </Badge>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
-                            data-testid={`button-view-transfer-${transfer.toId}`}
-                          >
-                            View Details
-                          </Button>
+                          <div className="flex space-x-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                setSelectedTransferId(transfer.toId);
+                                setShowImportModal(true);
+                              }}
+                              className="border-emerald-600 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20"
+                              data-testid={`button-import-items-${transfer.toId}`}
+                            >
+                              <i className="fas fa-upload mr-1"></i>
+                              Import Items
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
+                              data-testid={`button-view-transfer-${transfer.toId}`}
+                            >
+                              View Details
+                            </Button>
+                          </div>
                         </div>
                       </div>
                     );
@@ -354,16 +361,20 @@ export default function Transfers() {
       {/* Import Modal */}
       <ImportModal
         isOpen={showImportModal}
-        onClose={() => setShowImportModal(false)}
-        title="Import Transfer Orders Data"
-        tableName="transfers"
+        onClose={() => {
+          setShowImportModal(false);
+          setSelectedTransferId(null);
+        }}
+        title={`Import Items for Transfer Order #${selectedTransferId || ''}`}
+        tableName="transfer-items"
         queryKey="/api/transfers"
         endpoint="/api/import"
+        additionalData={{ toId: selectedTransferId }}
         sampleData={[
-          'dariGudang (source store code)',
-          'keGudang (destination store code)',
-          'tanggal (YYYY-MM-DD)',
-          'status (optional)'
+          'sn (serial number, optional)',
+          'kode_item (item code)',
+          'nama_item (item name)',
+          'qty (quantity to transfer)'
         ]}
       />
     </div>

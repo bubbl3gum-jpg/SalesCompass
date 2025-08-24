@@ -337,9 +337,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: 'No file uploaded' });
       }
 
-      const { tableName } = req.body;
+      const { tableName, additionalData } = req.body;
       if (!tableName) {
         return res.status(400).json({ message: 'Table name is required' });
+      }
+
+      // Parse additional data if provided
+      let parsedAdditionalData = null;
+      if (additionalData) {
+        try {
+          parsedAdditionalData = JSON.parse(additionalData);
+        } catch (error) {
+          console.error('Failed to parse additional data:', error);
+        }
       }
 
       let parsedData: any[];
@@ -384,9 +394,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
           schema = insertStockOpnameSchema.omit({ soId: true });
           storageMethod = 'createStockOpname';
           break;
+        case 'stock-opname-items':
+          schema = insertSoItemListSchema.omit({ soItemListId: true });
+          storageMethod = 'createSoItemList';
+          break;
         case 'transfers':
           schema = insertTransferOrderSchema.omit({ transferId: true });
           storageMethod = 'createTransfer';
+          break;
+        case 'transfer-items':
+          schema = insertTransferDetailSchema.omit({ transferDetailId: true });
+          storageMethod = 'createTransferDetail';
           break;
         default:
           return res.status(400).json({ message: 'Invalid table name' });
@@ -394,14 +412,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const { valid, invalid, errors } = validateImportData(parsedData, tableName, schema);
       
-      // Insert valid records
+      // Insert valid records with special handling for line items
       let successCount = 0;
       const insertErrors: string[] = [];
       
       for (const record of valid) {
         try {
+          let finalRecord = { ...record };
+          
+          // Special handling for Stock Opname items
+          if (tableName === 'stock-opname-items') {
+            if (parsedAdditionalData?.soId) {
+              finalRecord.soId = parsedAdditionalData.soId;
+            } else {
+              insertErrors.push('SO ID is required for stock opname items');
+              continue;
+            }
+            
+            // Lookup nama_item from reference sheet if not provided
+            if (!finalRecord.namaItem && finalRecord.kodeItem) {
+              try {
+                const referenceSheets = await storage.getReferenceSheets();
+                const referenceItem = referenceSheets.find((item: any) => item.kodeItem === finalRecord.kodeItem);
+                if (referenceItem) {
+                  finalRecord.namaItem = referenceItem.namaItem;
+                }
+              } catch (error) {
+                console.warn('Failed to lookup nama_item from reference sheet:', error);
+              }
+            }
+          }
+          
+          // Special handling for Transfer items
+          if (tableName === 'transfer-items') {
+            if (parsedAdditionalData?.toId) {
+              finalRecord.toId = parsedAdditionalData.toId;
+            } else {
+              insertErrors.push('Transfer Order ID is required for transfer items');
+              continue;
+            }
+          }
+          
           if (typeof (storage as any)[storageMethod] === 'function') {
-            await (storage as any)[storageMethod](record);
+            await (storage as any)[storageMethod](finalRecord);
             successCount++;
           } else {
             insertErrors.push(`Method ${storageMethod} not implemented`);

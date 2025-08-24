@@ -52,19 +52,19 @@ export default function StockOpname() {
   }, [isAuthenticated, isLoading, toast]);
 
   // Get stores
-  const { data: stores, isLoading: storesLoading } = useQuery({
+  const { data: stores, isLoading: storesLoading } = useQuery<any[]>({
     queryKey: ["/api/stores"],
     retry: false,
   });
 
   // Get stock opname records
-  const { data: stockOpnameList, isLoading: soLoading, error: soError } = useQuery({
+  const { data: stockOpnameList, isLoading: soLoading, error: soError } = useQuery<any[]>({
     queryKey: ["/api/stock-opname"],
     retry: false,
   });
 
   // Get opening stock for comparison
-  const { data: openingStock, isLoading: openingStockLoading } = useQuery({
+  const { data: openingStock, isLoading: openingStockLoading } = useQuery<any[]>({
     queryKey: ["/api/opening-stock"],
     retry: false,
   });
@@ -242,17 +242,8 @@ export default function StockOpname() {
                 </select>
               )}
 
-              {/* Import and Create Buttons */}
+              {/* Create Button */}
               <div className="flex space-x-3">
-                <Button 
-                  variant="outline"
-                  onClick={() => setShowImportModal(true)}
-                  className="border-emerald-600 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20"
-                  data-testid="button-import-stock-opname"
-                >
-                  <i className="fas fa-upload mr-2"></i>
-                  Import SO
-                </Button>
                 
                 <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
                   <DialogTrigger asChild>
@@ -343,18 +334,33 @@ export default function StockOpname() {
                           <Badge variant="outline" className="text-blue-600 border-blue-600">
                             Active
                           </Badge>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => {
-                              setSelectedSoId(so.soId);
-                              setShowAddItemModal(true);
-                            }}
-                            data-testid={`button-add-item-${so.soId}`}
-                          >
-                            <i className="fas fa-plus mr-1"></i>
-                            Add Items
-                          </Button>
+                          <div className="flex space-x-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                setSelectedSoId(so.soId);
+                                setShowImportModal(true);
+                              }}
+                              className="border-emerald-600 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20"
+                              data-testid={`button-import-items-${so.soId}`}
+                            >
+                              <i className="fas fa-upload mr-1"></i>
+                              Import Items
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                setSelectedSoId(so.soId);
+                                setShowAddItemModal(true);
+                              }}
+                              data-testid={`button-add-item-${so.soId}`}
+                            >
+                              <i className="fas fa-plus mr-1"></i>
+                              Add Items
+                            </Button>
+                          </div>
                         </div>
                       </div>
                     ))
@@ -487,14 +493,19 @@ export default function StockOpname() {
       {/* Import Modal */}
       <ImportModal
         isOpen={showImportModal}
-        onClose={() => setShowImportModal(false)}
-        title="Import Stock Opname Data"
-        tableName="stock-opname"
+        onClose={() => {
+          setShowImportModal(false);
+          setSelectedSoId(null);
+        }}
+        title={`Import Items for Stock Opname #${selectedSoId || ''}`}
+        tableName="stock-opname-items"
         queryKey="/api/stock-opname"
         endpoint="/api/import"
+        additionalData={{ soId: selectedSoId }}
         sampleData={[
-          'kodeGudang',
-          'tanggal (YYYY-MM-DD)'
+          'sn (serial number, optional)',
+          'kode_item (item code)',
+          'qty (quantity counted)'
         ]}
       />
     </div>
