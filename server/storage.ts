@@ -4,14 +4,16 @@ import {
   stores,
   discountTypes,
   pricelist,
+  openingStock,
   laporanPenjualan,
   settlements,
-  stockLedger,
   transferOrders,
-  paymentMethods,
-  storePaymentMethods,
-  userRoles,
-  roles,
+  toItemList,
+  stockOpname,
+  soItemList,
+  edc,
+  storeEdc,
+  edcSettlement,
   staff,
   type User,
   type UpsertUser,
@@ -19,20 +21,32 @@ import {
   type Store,
   type DiscountType,
   type Pricelist,
+  type OpeningStock,
   type LaporanPenjualan,
   type Settlement,
-  type StockLedger,
   type TransferOrder,
-  type PaymentMethod,
+  type ToItemList,
+  type StockOpname,
+  type SoItemList,
+  type Edc,
+  type StoreEdc,
+  type EdcSettlement,
+  type Staff,
   type InsertReferenceSheet,
   type InsertStore,
   type InsertDiscountType,
   type InsertPricelist,
+  type InsertOpeningStock,
   type InsertLaporanPenjualan,
   type InsertSettlement,
-  type InsertStockLedger,
   type InsertTransferOrder,
-  type InsertPaymentMethod,
+  type InsertToItemList,
+  type InsertStockOpname,
+  type InsertSoItemList,
+  type InsertEdc,
+  type InsertStoreEdc,
+  type InsertEdcSettlement,
+  type InsertStaff,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, sql, desc, sum } from "drizzle-orm";
@@ -73,22 +87,34 @@ export interface IStorage {
   getSettlements(kodeGudang?: string, tanggal?: string): Promise<Settlement[]>;
   getSettlementByStoreAndDate(kodeGudang: string, tanggal: string): Promise<Settlement | undefined>;
 
-  // Stock operations
-  createStockLedgerEntry(data: InsertStockLedger): Promise<StockLedger>;
-  getStockOnHand(kodeGudang: string, kodeItem?: string): Promise<{ kodeItem: string, serialNumber: string | null, qty: number }[]>;
-  checkSerialAvailability(kodeGudang: string, serialNumber: string): Promise<boolean>;
+  // Opening Stock operations
+  getOpeningStock(): Promise<OpeningStock[]>;
+  createOpeningStock(data: InsertOpeningStock): Promise<OpeningStock>;
+  
+  // Stock Opname operations
+  getStockOpname(): Promise<StockOpname[]>;
+  createStockOpname(data: InsertStockOpname): Promise<StockOpname>;
+  createSoItemList(data: InsertSoItemList): Promise<SoItemList>;
+  getSoItemListByStockOpnameId(soId: number): Promise<SoItemList[]>;
 
   // Transfer operations
   createTransferOrder(data: InsertTransferOrder): Promise<TransferOrder>;
   getTransferOrders(): Promise<TransferOrder[]>;
 
-  // Payment method operations
-  getPaymentMethods(): Promise<PaymentMethod[]>;
-  createPaymentMethod(data: InsertPaymentMethod): Promise<PaymentMethod>;
+  // EDC operations
+  getEdc(): Promise<Edc[]>;
+  createEdc(data: InsertEdc): Promise<Edc>;
+  getStoreEdc(): Promise<StoreEdc[]>;
+  createStoreEdc(data: InsertStoreEdc): Promise<StoreEdc>;
+  createEdcSettlement(data: InsertEdcSettlement): Promise<EdcSettlement>;
 
-  // User roles and staff
-  getUserRoles(userId: string): Promise<string[]>;
-  createStaffUser(userData: any): Promise<void>;
+  // Staff operations
+  getStaff(): Promise<Staff[]>;
+  createStaff(data: InsertStaff): Promise<Staff>;
+  
+  // Transfer order item list operations
+  createToItemList(data: InsertToItemList): Promise<ToItemList>;
+  getToItemListByTransferOrderId(toId: number): Promise<ToItemList[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -164,7 +190,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getPriceBySerial(serialNumber: string): Promise<Pricelist | undefined> {
-    const [result] = await db.select().from(pricelist).where(eq(pricelist.serialNumber, serialNumber));
+    const [result] = await db.select().from(pricelist).where(eq(pricelist.sn, serialNumber));
     return result;
   }
 
@@ -189,23 +215,21 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getSales(kodeGudang?: string, tanggal?: string): Promise<LaporanPenjualan[]> {
-    let query = db.select().from(laporanPenjualan);
-    
     if (kodeGudang || tanggal) {
       const conditions = [];
       if (kodeGudang) conditions.push(eq(laporanPenjualan.kodeGudang, kodeGudang));
       if (tanggal) conditions.push(eq(laporanPenjualan.tanggal, tanggal));
-      query = query.where(and(...conditions));
+      return await db.select().from(laporanPenjualan).where(and(...conditions)).orderBy(desc(laporanPenjualan.tanggal));
     }
 
-    return await query.orderBy(desc(laporanPenjualan.tanggal));
+    return await db.select().from(laporanPenjualan).orderBy(desc(laporanPenjualan.tanggal));
   }
 
   async getSalesToday(kodeGudang: string): Promise<{ totalSales: string, count: number }> {
     const today = new Date().toISOString().split('T')[0];
     const [result] = await db
       .select({
-        totalSales: sql<string>`COALESCE(SUM(${laporanPenjualan.finalPrice}), 0)`,
+        totalSales: sql<string>`COALESCE(SUM(${laporanPenjualan.discByAmount}), 0)`,
         count: sql<number>`COUNT(*)`
       })
       .from(laporanPenjualan)
@@ -226,16 +250,14 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getSettlements(kodeGudang?: string, tanggal?: string): Promise<Settlement[]> {
-    let query = db.select().from(settlements);
-    
     if (kodeGudang || tanggal) {
       const conditions = [];
       if (kodeGudang) conditions.push(eq(settlements.kodeGudang, kodeGudang));
       if (tanggal) conditions.push(eq(settlements.tanggal, tanggal));
-      query = query.where(and(...conditions));
+      return await db.select().from(settlements).where(and(...conditions)).orderBy(desc(settlements.tanggal));
     }
 
-    return await query.orderBy(desc(settlements.tanggal));
+    return await db.select().from(settlements).orderBy(desc(settlements.tanggal));
   }
 
   async getSettlementByStoreAndDate(kodeGudang: string, tanggal: string): Promise<Settlement | undefined> {
@@ -248,48 +270,33 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
-  // Stock operations
-  async createStockLedgerEntry(data: InsertStockLedger): Promise<StockLedger> {
-    const [result] = await db.insert(stockLedger).values(data).returning();
+  // Opening Stock operations
+  async getOpeningStock(): Promise<OpeningStock[]> {
+    return await db.select().from(openingStock);
+  }
+  
+  async createOpeningStock(data: InsertOpeningStock): Promise<OpeningStock> {
+    const [result] = await db.insert(openingStock).values(data).returning();
     return result;
   }
-
-  async getStockOnHand(kodeGudang: string, kodeItem?: string): Promise<{ kodeItem: string, serialNumber: string | null, qty: number }[]> {
-    let query = db
-      .select({
-        kodeItem: stockLedger.kodeItem,
-        serialNumber: stockLedger.serialNumber,
-        qty: sql<number>`SUM(${stockLedger.qty})`
-      })
-      .from(stockLedger)
-      .where(eq(stockLedger.kodeGudang, kodeGudang))
-      .groupBy(stockLedger.kodeItem, stockLedger.serialNumber);
-
-    if (kodeItem) {
-      query = query.where(
-        and(
-          eq(stockLedger.kodeGudang, kodeGudang),
-          eq(stockLedger.kodeItem, kodeItem)
-        )
-      );
-    }
-
-    const results = await query;
-    return results.filter(r => r.qty > 0);
+  
+  // Stock Opname operations
+  async getStockOpname(): Promise<StockOpname[]> {
+    return await db.select().from(stockOpname).orderBy(desc(stockOpname.tanggal));
   }
-
-  async checkSerialAvailability(kodeGudang: string, serialNumber: string): Promise<boolean> {
-    const [result] = await db
-      .select({ qty: sql<number>`SUM(${stockLedger.qty})` })
-      .from(stockLedger)
-      .where(
-        and(
-          eq(stockLedger.kodeGudang, kodeGudang),
-          eq(stockLedger.serialNumber, serialNumber)
-        )
-      );
-
-    return (result?.qty || 0) > 0;
+  
+  async createStockOpname(data: InsertStockOpname): Promise<StockOpname> {
+    const [result] = await db.insert(stockOpname).values(data).returning();
+    return result;
+  }
+  
+  async createSoItemList(data: InsertSoItemList): Promise<SoItemList> {
+    const [result] = await db.insert(soItemList).values(data).returning();
+    return result;
+  }
+  
+  async getSoItemListByStockOpnameId(soId: number): Promise<SoItemList[]> {
+    return await db.select().from(soItemList).where(eq(soItemList.soId, soId));
   }
 
   // Transfer operations
@@ -302,38 +309,48 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(transferOrders).orderBy(desc(transferOrders.tanggal));
   }
 
-  // Payment method operations
-  async getPaymentMethods(): Promise<PaymentMethod[]> {
-    return await db.select().from(paymentMethods);
+  // EDC operations
+  async getEdc(): Promise<Edc[]> {
+    return await db.select().from(edc);
   }
-
-  async createPaymentMethod(data: InsertPaymentMethod): Promise<PaymentMethod> {
-    const [result] = await db.insert(paymentMethods).values(data).returning();
+  
+  async createEdc(data: InsertEdc): Promise<Edc> {
+    const [result] = await db.insert(edc).values(data).returning();
+    return result;
+  }
+  
+  async getStoreEdc(): Promise<StoreEdc[]> {
+    return await db.select().from(storeEdc);
+  }
+  
+  async createStoreEdc(data: InsertStoreEdc): Promise<StoreEdc> {
+    const [result] = await db.insert(storeEdc).values(data).returning();
+    return result;
+  }
+  
+  async createEdcSettlement(data: InsertEdcSettlement): Promise<EdcSettlement> {
+    const [result] = await db.insert(edcSettlement).values(data).returning();
     return result;
   }
 
-  // User roles and staff
-  async getUserRoles(userId: string): Promise<string[]> {
-    const userStaff = await db
-      .select({ roleId: userRoles.roleId })
-      .from(staff)
-      .innerJoin(userRoles, eq(staff.employeeId, userRoles.employeeId))
-      .where(eq(staff.email, userId));
-
-    if (userStaff.length === 0) return [];
-
-    const roleIds = userStaff.map(ur => ur.roleId);
-    const roleNames = await db
-      .select({ roleName: roles.roleName })
-      .from(roles)
-      .where(sql`${roles.roleId} = ANY(${roleIds})`);
-
-    return roleNames.map(r => r.roleName || '');
+  // Staff operations
+  async getStaff(): Promise<Staff[]> {
+    return await db.select().from(staff);
   }
-
-  async createStaffUser(userData: any): Promise<void> {
-    // Implementation for creating staff user
-    // This would be used during user setup/admin functions
+  
+  async createStaff(data: InsertStaff): Promise<Staff> {
+    const [result] = await db.insert(staff).values(data).returning();
+    return result;
+  }
+  
+  // Transfer order item list operations
+  async createToItemList(data: InsertToItemList): Promise<ToItemList> {
+    const [result] = await db.insert(toItemList).values(data).returning();
+    return result;
+  }
+  
+  async getToItemListByTransferOrderId(toId: number): Promise<ToItemList[]> {
+    return await db.select().from(toItemList).where(eq(toItemList.toId, toId));
   }
 }
 

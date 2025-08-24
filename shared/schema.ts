@@ -63,30 +63,24 @@ export const stores = pgTable("store", {
 // Discount Types
 export const discountTypes = pgTable("discount_types", {
   discountId: integer("discount_id").primaryKey().generatedByDefaultAsIdentity(),
-  discountName: varchar("discount_name", { length: 100 }),
-  discountAmount: decimal("discount_amount", { precision: 12, scale: 2 }),
+  discountType: varchar("discount_type", { length: 100 }),
   startFrom: date("start_from"),
   endAt: date("end_at"),
 });
 
-// Pricelist (denormalized with lookup fields)
+// Pricelist
 export const pricelist = pgTable("pricelist", {
   pricelistId: integer("pricelist_id").primaryKey().generatedByDefaultAsIdentity(),
-  serialNumber: varchar("serial_number", { length: 100 }),
-  kodeItem: varchar("kode_item", { length: 50 }).references(() => referenceSheet.kodeItem),
+  sn: varchar("sn", { length: 100 }),
+  kodeItem: varchar("kode_item", { length: 50 }),
   kelompok: varchar("kelompok", { length: 50 }),
   family: varchar("family", { length: 50 }),
-  kodeMaterial: varchar("kode_material", { length: 50 }),
-  kodeMotif: varchar("kode_motif", { length: 50 }),
   deskripsiMaterial: varchar("deskripsi_material", { length: 255 }),
+  kodeMotif: varchar("kode_motif", { length: 50 }),
+  namaMotif: varchar("nama_motif", { length: 255 }),
   normalPrice: decimal("normal_price", { precision: 12, scale: 2 }),
   sp: decimal("sp", { precision: 12, scale: 2 }),
-}, (table) => [
-  index("idx_pricelist_sn").on(table.serialNumber),
-  index("idx_pricelist_ki").on(table.kodeItem),
-  index("idx_pricelist_family_desc").on(table.family, table.deskripsiMaterial),
-  index("idx_pricelist_score").on(table.family, table.deskripsiMaterial, table.kelompok, table.kodeMotif),
-]);
+});
 
 // Pricelist Discount
 export const pricelistDiscount = pgTable("pricelist_discount", {
@@ -108,53 +102,48 @@ export const storeDiscounts = pgTable("store_discounts", {
 
 // Opening Stock
 export const openingStock = pgTable("opening_stock", {
-  openingStockId: integer("openingstock_id").primaryKey().generatedByDefaultAsIdentity(),
-  serialNumber: varchar("serial_number", { length: 100 }),
-  kodeItem: varchar("kode_item", { length: 50 }).references(() => referenceSheet.kodeItem),
+  itemId: integer("item_id").primaryKey().generatedByDefaultAsIdentity(),
+  sn: varchar("sn", { length: 100 }),
+  kodeItem: varchar("kode_item", { length: 50 }),
+  kelompok: varchar("kelompok", { length: 50 }),
+  family: varchar("family", { length: 50 }),
+  deskripsiMaterial: varchar("deskripsi_material", { length: 255 }),
+  kodeMotif: varchar("kode_motif", { length: 50 }),
+  namaItem: varchar("nama_item", { length: 255 }),
   qty: integer("qty"),
-  kodeGudang: varchar("kode_gudang", { length: 50 }).references(() => stores.kodeGudang),
-}, (table) => [
-  index("idx_opening_stock_item").on(table.kodeItem),
-  index("idx_opening_stock_gudang").on(table.kodeGudang),
-]);
-
-// Payment Methods
-export const paymentMethods = pgTable("payment_method", {
-  paymentMethodId: integer("payment_method_id").primaryKey().generatedByDefaultAsIdentity(),
-  methodName: varchar("method_name", { length: 255 }),
-  methodType: varchar("method_type", { length: 50 }),
-  provider: varchar("provider", { length: 100 }),
 });
 
-// Store Payment Methods
-export const storePaymentMethods = pgTable("store_paymentmethod", {
-  storePaymentMethodId: integer("storepaymentmethod_id").primaryKey().generatedByDefaultAsIdentity(),
-  kodeGudang: varchar("kode_gudang", { length: 50 }).references(() => stores.kodeGudang),
-  paymentMethodId: integer("payment_method_id").references(() => paymentMethods.paymentMethodId),
-}, (table) => [
-  index("uq_store_paymentmethod").on(table.kodeGudang, table.paymentMethodId),
-]);
+// EDC
+export const edc = pgTable("edc", {
+  edcId: integer("edc_id").primaryKey().generatedByDefaultAsIdentity(),
+  merchantName: varchar("merchant_name", { length: 255 }),
+  edcType: varchar("edc_type", { length: 50 }),
+});
+
+// Store EDC
+export const storeEdc = pgTable("store_edc", {
+  storeEdcId: integer("storeedc_id").primaryKey().generatedByDefaultAsIdentity(),
+  kodeGudang: varchar("kode_gudang", { length: 50 }),
+  edcId: integer("edc_id"),
+  namaGudang: varchar("nama_gudang", { length: 255 }),
+  merchantName: varchar("merchant_name", { length: 255 }),
+  edcType: varchar("edc_type", { length: 50 }),
+});
 
 // Sales (Laporan Penjualan)
 export const laporanPenjualan = pgTable("laporan_penjualan", {
   penjualanId: integer("penjualan_id").primaryKey().generatedByDefaultAsIdentity(),
-  kodeGudang: varchar("kode_gudang", { length: 50 }).references(() => stores.kodeGudang),
+  kodeGudang: varchar("kode_gudang", { length: 50 }),
+  itemId: integer("item_id"),
   tanggal: date("tanggal"),
-  serialNumber: varchar("serial_number", { length: 100 }),
-  kodeItem: varchar("kode_item", { length: 50 }).references(() => referenceSheet.kodeItem),
-  discountId: integer("discount_id").references(() => discountTypes.discountId),
+  sn: varchar("sn", { length: 100 }),
+  kodeItem: varchar("kode_item", { length: 50 }),
+  discountType: varchar("discount_type", { length: 100 }),
   discByAmount: decimal("disc_by_amount", { precision: 12, scale: 2 }),
-  paymentMethodId: integer("payment_method_id").references(() => paymentMethods.paymentMethodId),
+  paymentMethod: varchar("payment_method", { length: 100 }),
   notes: varchar("notes", { length: 255 }),
   preOrder: boolean("pre_order").default(false),
-  normalPrice: decimal("normal_price", { precision: 12, scale: 2 }),
-  unitPrice: decimal("unit_price", { precision: 12, scale: 2 }),
-  finalPrice: decimal("final_price", { precision: 12, scale: 2 }),
-}, (table) => [
-  index("idx_laporan_gudang_tanggal").on(table.kodeGudang, table.tanggal),
-  index("idx_laporan_serial").on(table.serialNumber),
-  index("idx_laporan_item").on(table.kodeItem),
-]);
+});
 
 // Settlements
 export const settlements = pgTable("settlement", {
@@ -168,19 +157,15 @@ export const settlements = pgTable("settlement", {
   index("uq_settlement_gudang_tanggal").on(table.kodeGudang, table.tanggal),
 ]);
 
-// Payment Method Settlements
-export const paymentMethodSettlements = pgTable("paymentmethod_settlement", {
-  paymentMethodSettlementId: integer("paymentmethodsettlement_id").primaryKey().generatedByDefaultAsIdentity(),
-  storePaymentMethodId: integer("storepaymentmethod_id").references(() => storePaymentMethods.storePaymentMethodId),
-  settlementId: integer("settlement_id").references(() => settlements.settlementId),
+// EDC Settlement
+export const edcSettlement = pgTable("edc_settlement", {
+  edcSettlementId: integer("edcsettlement_id").primaryKey().generatedByDefaultAsIdentity(),
+  storeEdcId: integer("storeedc_id"),
+  settlementId: integer("settlement_id"),
   tanggal: date("tanggal"),
+  namaGudang: varchar("nama_gudang", { length: 255 }),
+  merchantName: varchar("merchant_name", { length: 255 }),
   settlementValue: decimal("settlement_value", { precision: 12, scale: 2 }),
-});
-
-// Jabatan (Job Positions)
-export const jabatan = pgTable("jabatan", {
-  jabatanId: integer("jabatan_id").primaryKey().generatedByDefaultAsIdentity(),
-  jabatanName: varchar("jabatan_name", { length: 100 }).unique(),
 });
 
 // Staff
@@ -193,23 +178,8 @@ export const staff = pgTable("staff", {
   tanggalMasuk: date("tanggal_masuk"),
   bank: varchar("bank", { length: 100 }),
   noRekening: varchar("no_rekening", { length: 100 }),
-  jabatanId: integer("jabatan_id").references(() => jabatan.jabatanId),
+  jabatan: varchar("jabatan", { length: 100 }),
 });
-
-// Roles
-export const roles = pgTable("roles", {
-  roleId: integer("role_id").primaryKey().generatedByDefaultAsIdentity(),
-  roleName: varchar("role_name", { length: 50 }).unique(),
-});
-
-// User Roles
-export const userRoles = pgTable("user_roles", {
-  userRoleId: integer("user_role_id").primaryKey().generatedByDefaultAsIdentity(),
-  employeeId: integer("employee_id").references(() => staff.employeeId),
-  roleId: integer("role_id").references(() => roles.roleId),
-}, (table) => [
-  index("uq_user_role").on(table.employeeId, table.roleId),
-]);
 
 // Transfer Orders
 export const transferOrders = pgTable("transfer_order", {
@@ -226,87 +196,31 @@ export const transferOrders = pgTable("transfer_order", {
 // Transfer Order Item List
 export const toItemList = pgTable("to_itemlist", {
   toItemListId: integer("to_itemlist_id").primaryKey().generatedByDefaultAsIdentity(),
-  toId: integer("to_id").references(() => transferOrders.toId),
-  serialNumber: varchar("serial_number", { length: 100 }),
-  kodeItem: varchar("kode_item", { length: 50 }).references(() => referenceSheet.kodeItem),
+  toId: integer("to_id"),
+  sn: varchar("sn", { length: 100 }),
+  kodeItem: varchar("kode_item", { length: 50 }),
+  namaItem: varchar("nama_item", { length: 255 }),
   qty: integer("qty").default(1),
-}, (table) => [
-  index("idx_to_itemlist_to").on(table.toId),
-  index("idx_to_itemlist_serial").on(table.serialNumber),
-  index("idx_to_itemlist_item").on(table.kodeItem),
-]);
+});
 
-// Stock Ledger (source of truth)
-export const movementTypeEnum = pgEnum('movement_type', ['OPENING', 'SALE', 'TRANSFER_IN', 'TRANSFER_OUT', 'ADJUSTMENT']);
-
-export const stockLedger = pgTable("stock_ledger", {
-  stockLedgerId: integer("stock_ledger_id").primaryKey().generatedByDefaultAsIdentity(),
+// Stock Opname
+export const stockOpname = pgTable("stock_opname", {
+  soId: integer("so_id").primaryKey().generatedByDefaultAsIdentity(),
+  kodeGudang: varchar("kode_gudang", { length: 50 }),
   tanggal: date("tanggal"),
-  kodeGudang: varchar("kode_gudang", { length: 50 }).references(() => stores.kodeGudang),
-  kodeItem: varchar("kode_item", { length: 50 }).references(() => referenceSheet.kodeItem),
-  serialNumber: varchar("serial_number", { length: 100 }),
-  movementType: movementTypeEnum("movement_type"),
+});
+
+// Stock Opname Item List
+export const soItemList = pgTable("so_itemlist", {
+  soItemListId: integer("so_itemlist_id").primaryKey().generatedByDefaultAsIdentity(),
+  soId: integer("so_id"),
+  sn: varchar("sn", { length: 100 }),
+  kodeItem: varchar("kode_item", { length: 50 }),
+  namaItem: varchar("nama_item", { length: 255 }),
   qty: integer("qty"),
-  refType: varchar("ref_type", { length: 50 }),
-  refId: integer("ref_id"),
-}, (table) => [
-  index("idx_stock_gudang_tanggal").on(table.kodeGudang, table.tanggal),
-  index("idx_stock_item").on(table.kodeItem),
-  index("idx_stock_serial").on(table.serialNumber),
-  index("idx_stock_ref").on(table.refType, table.refId),
-]);
+});
 
-// Relations
-export const referenceSheetRelations = relations(referenceSheet, ({ many }) => ({
-  pricelist: many(pricelist),
-  openingStock: many(openingStock),
-  laporanPenjualan: many(laporanPenjualan),
-  toItemList: many(toItemList),
-  stockLedger: many(stockLedger),
-}));
 
-export const storesRelations = relations(stores, ({ many }) => ({
-  openingStock: many(openingStock),
-  laporanPenjualan: many(laporanPenjualan),
-  settlements: many(settlements),
-  storePaymentMethods: many(storePaymentMethods),
-  transferOrdersFrom: many(transferOrders, { relationName: "dariGudang" }),
-  transferOrdersTo: many(transferOrders, { relationName: "keGudang" }),
-  stockLedger: many(stockLedger),
-}));
-
-export const pricelistRelations = relations(pricelist, ({ one, many }) => ({
-  referenceSheet: one(referenceSheet, {
-    fields: [pricelist.kodeItem],
-    references: [referenceSheet.kodeItem],
-  }),
-  pricelistDiscounts: many(pricelistDiscount),
-}));
-
-export const discountTypesRelations = relations(discountTypes, ({ many }) => ({
-  pricelistDiscounts: many(pricelistDiscount),
-  storeDiscounts: many(storeDiscounts),
-  laporanPenjualan: many(laporanPenjualan),
-}));
-
-export const laporanPenjualanRelations = relations(laporanPenjualan, ({ one }) => ({
-  store: one(stores, {
-    fields: [laporanPenjualan.kodeGudang],
-    references: [stores.kodeGudang],
-  }),
-  referenceSheet: one(referenceSheet, {
-    fields: [laporanPenjualan.kodeItem],
-    references: [referenceSheet.kodeItem],
-  }),
-  discount: one(discountTypes, {
-    fields: [laporanPenjualan.discountId],
-    references: [discountTypes.discountId],
-  }),
-  paymentMethod: one(paymentMethods, {
-    fields: [laporanPenjualan.paymentMethodId],
-    references: [paymentMethods.paymentMethodId],
-  }),
-}));
 
 // Types
 export type UpsertUser = typeof users.$inferInsert;
@@ -324,27 +238,52 @@ export type DiscountType = typeof discountTypes.$inferSelect;
 export type InsertPricelist = typeof pricelist.$inferInsert;
 export type Pricelist = typeof pricelist.$inferSelect;
 
+export type InsertOpeningStock = typeof openingStock.$inferInsert;
+export type OpeningStock = typeof openingStock.$inferSelect;
+
 export type InsertLaporanPenjualan = typeof laporanPenjualan.$inferInsert;
 export type LaporanPenjualan = typeof laporanPenjualan.$inferSelect;
 
 export type InsertSettlement = typeof settlements.$inferInsert;
 export type Settlement = typeof settlements.$inferSelect;
 
-export type InsertStockLedger = typeof stockLedger.$inferInsert;
-export type StockLedger = typeof stockLedger.$inferSelect;
-
 export type InsertTransferOrder = typeof transferOrders.$inferInsert;
 export type TransferOrder = typeof transferOrders.$inferSelect;
 
-export type InsertPaymentMethod = typeof paymentMethods.$inferInsert;
-export type PaymentMethod = typeof paymentMethods.$inferSelect;
+export type InsertToItemList = typeof toItemList.$inferInsert;
+export type ToItemList = typeof toItemList.$inferSelect;
+
+export type InsertStockOpname = typeof stockOpname.$inferInsert;
+export type StockOpname = typeof stockOpname.$inferSelect;
+
+export type InsertSoItemList = typeof soItemList.$inferInsert;
+export type SoItemList = typeof soItemList.$inferSelect;
+
+export type InsertEdc = typeof edc.$inferInsert;
+export type Edc = typeof edc.$inferSelect;
+
+export type InsertStoreEdc = typeof storeEdc.$inferInsert;
+export type StoreEdc = typeof storeEdc.$inferSelect;
+
+export type InsertEdcSettlement = typeof edcSettlement.$inferInsert;
+export type EdcSettlement = typeof edcSettlement.$inferSelect;
+
+export type InsertStaff = typeof staff.$inferInsert;
+export type Staff = typeof staff.$inferSelect;
 
 // Schemas for validation
 export const insertReferenceSheetSchema = createInsertSchema(referenceSheet).omit({ refId: true });
 export const insertStoreSchema = createInsertSchema(stores);
 export const insertDiscountTypeSchema = createInsertSchema(discountTypes).omit({ discountId: true });
 export const insertPricelistSchema = createInsertSchema(pricelist).omit({ pricelistId: true });
+export const insertOpeningStockSchema = createInsertSchema(openingStock).omit({ itemId: true });
 export const insertLaporanPenjualanSchema = createInsertSchema(laporanPenjualan).omit({ penjualanId: true });
 export const insertSettlementSchema = createInsertSchema(settlements).omit({ settlementId: true });
-export const insertStockLedgerSchema = createInsertSchema(stockLedger).omit({ stockLedgerId: true });
 export const insertTransferOrderSchema = createInsertSchema(transferOrders).omit({ toId: true });
+export const insertToItemListSchema = createInsertSchema(toItemList).omit({ toItemListId: true });
+export const insertStockOpnameSchema = createInsertSchema(stockOpname).omit({ soId: true });
+export const insertSoItemListSchema = createInsertSchema(soItemList).omit({ soItemListId: true });
+export const insertEdcSchema = createInsertSchema(edc).omit({ edcId: true });
+export const insertStoreEdcSchema = createInsertSchema(storeEdc).omit({ storeEdcId: true });
+export const insertEdcSettlementSchema = createInsertSchema(edcSettlement).omit({ edcSettlementId: true });
+export const insertStaffSchema = createInsertSchema(staff).omit({ employeeId: true });
