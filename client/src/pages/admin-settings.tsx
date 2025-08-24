@@ -587,7 +587,10 @@ export default function AdminSettings() {
         <ImportModal
           isOpen={showImportModal}
           onClose={() => setShowImportModal(false)}
+          title={`Import ${getCurrentConfig()?.displayName || activeTab}`}
           tableName={getCurrentConfig()?.importTable || activeTab}
+          queryKey={getCurrentConfig()?.endpoint || `/api/${activeTab}`}
+          endpoint="/api/import"
         />
       )}
     </div>
