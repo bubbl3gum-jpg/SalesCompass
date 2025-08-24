@@ -140,13 +140,56 @@ const upload = multer({
 function parseCSV(buffer: Buffer): Promise<any[]> {
   return new Promise((resolve, reject) => {
     const results: any[] = [];
-    const stream = Readable.from(buffer.toString());
+    const csvContent = buffer.toString();
+    const lines = csvContent.split('\n');
     
-    stream
-      .pipe(csv.default())
-      .on('data', (data: any) => results.push(data))
-      .on('end', () => resolve(results))
-      .on('error', reject);
+    // Find the header row that contains "Kode Gudang" or similar data headers
+    let headerRowIndex = -1;
+    let headers: string[] = [];
+    
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (line.toLowerCase().includes('kode gudang') || 
+          line.toLowerCase().includes('kode_gudang') ||
+          line.toLowerCase().includes('kodegudang')) {
+        headerRowIndex = i;
+        // Parse the header row and only take first 3 columns
+        headers = line.split(',').slice(0, 3).map(h => h.trim().replace(/"/g, ''));
+        break;
+      }
+    }
+    
+    if (headerRowIndex === -1) {
+      // Fallback to old behavior if no proper header found
+      const stream = Readable.from(csvContent);
+      stream
+        .pipe(csv.default())
+        .on('data', (data: any) => results.push(data))
+        .on('end', () => resolve(results))
+        .on('error', reject);
+      return;
+    }
+    
+    console.log(`📍 Found data headers at row ${headerRowIndex + 1}:`, headers);
+    
+    // Process data rows starting after the header
+    for (let i = headerRowIndex + 1; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (line && !line.match(/^,*$/)) { // Skip empty lines
+        const values = line.split(',').slice(0, 3).map(v => v.trim().replace(/"/g, ''));
+        if (values[0]) { // Only include rows with a value in first column
+          const rowData: any = {};
+          headers.forEach((header, index) => {
+            if (header && values[index]) {
+              rowData[header] = values[index];
+            }
+          });
+          results.push(rowData);
+        }
+      }
+    }
+    
+    resolve(results);
   });
 }
 
@@ -155,7 +198,48 @@ function parseExcel(buffer: Buffer): any[] {
   const workbook = XLSX.read(buffer, { type: 'buffer' });
   const sheetName = workbook.SheetNames[0];
   const worksheet = workbook.Sheets[sheetName];
-  return XLSX.utils.sheet_to_json(worksheet);
+  const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+  
+  // Find the header row that contains "Kode Gudang" or similar
+  let headerRowIndex = -1;
+  let headers: string[] = [];
+  
+  for (let i = 0; i < jsonData.length; i++) {
+    const row = jsonData[i] as any[];
+    const rowStr = row.join(' ').toLowerCase();
+    if (rowStr.includes('kode gudang') || rowStr.includes('kode_gudang') || rowStr.includes('kodegudang')) {
+      headerRowIndex = i;
+      // Only take first 3 columns
+      headers = row.slice(0, 3).map((h: any) => String(h || '').trim());
+      break;
+    }
+  }
+  
+  if (headerRowIndex === -1) {
+    // Fallback to old behavior
+    return XLSX.utils.sheet_to_json(worksheet);
+  }
+  
+  console.log(`📍 Found Excel headers at row ${headerRowIndex + 1}:`, headers);
+  
+  // Process data rows
+  const results: any[] = [];
+  for (let i = headerRowIndex + 1; i < jsonData.length; i++) {
+    const row = jsonData[i] as any[];
+    if (row && row[0]) { // Only include rows with data in first column
+      const rowData: any = {};
+      headers.forEach((header, index) => {
+        if (header && row[index] !== undefined && row[index] !== null && row[index] !== '') {
+          rowData[header] = String(row[index]).trim();
+        }
+      });
+      if (Object.keys(rowData).length > 0) {
+        results.push(rowData);
+      }
+    }
+  }
+  
+  return results;
 }
 
 // Helper function to validate and transform import data
