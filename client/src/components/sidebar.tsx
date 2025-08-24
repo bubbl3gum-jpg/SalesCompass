@@ -67,14 +67,8 @@ const navigationItems = [
         roles: ["Supervisor", "System Administrator"]
       },
       {
-        name: "User Management",
-        href: "/user-management",
-        icon: "fas fa-users-cog",
-        roles: ["System Administrator"]
-      },
-      {
-        name: "Admin Panel",
-        href: "/admin-panel",
+        name: "Admin Settings",
+        href: "/admin-settings",
         icon: "fas fa-cogs",
         roles: ["System Administrator"]
       },

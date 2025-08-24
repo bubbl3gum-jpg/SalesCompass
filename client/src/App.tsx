@@ -15,8 +15,7 @@ import StockOpname from "@/pages/stock-opname";
 import Transfers from "@/pages/transfers";
 import PriceLists from "@/pages/price-lists";
 import Discounts from "@/pages/discounts";
-import UserManagement from "@/pages/user-management";
-import AdminPanel from "@/pages/admin-panel";
+import AdminSettings from "@/pages/admin-settings";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -36,8 +35,7 @@ function Router() {
           <Route path="/transfers" component={Transfers} />
           <Route path="/price-lists" component={PriceLists} />
           <Route path="/discounts" component={Discounts} />
-          <Route path="/user-management" component={UserManagement} />
-          <Route path="/admin-panel" component={AdminPanel} />
+          <Route path="/admin-settings" component={AdminSettings} />
         </>
       )}
       <Route component={NotFound} />
