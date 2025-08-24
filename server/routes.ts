@@ -18,6 +18,7 @@ import {
   insertDiscountTypeSchema,
   insertStoreSchema,
   insertStaffSchema,
+  insertToItemListSchema,
   type Pricelist 
 } from "@shared/schema";
 
@@ -142,8 +143,8 @@ function parseCSV(buffer: Buffer): Promise<any[]> {
     const stream = Readable.from(buffer.toString());
     
     stream
-      .pipe(csv())
-      .on('data', (data) => results.push(data))
+      .pipe(csv.default())
+      .on('data', (data: any) => results.push(data))
       .on('end', () => resolve(results))
       .on('error', reject);
   });
@@ -371,8 +372,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       switch (tableName) {
         case 'reference-sheet':
-          schema = insertReferenceSheetSchema.omit({ itemId: true });
-          storageMethod = 'createReferenceSheetItem';
+          schema = insertReferenceSheetSchema.omit({ refId: true });
+          storageMethod = 'createReferenceSheet';
           break;
         case 'pricelist':
           schema = insertPricelistSchema.omit({ pricelistId: true });
@@ -380,7 +381,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           break;
         case 'discounts':
           schema = insertDiscountTypeSchema.omit({ discountId: true });
-          storageMethod = 'createDiscount';
+          storageMethod = 'createDiscountType';
           break;
         case 'stores':
           schema = insertStoreSchema;
@@ -400,7 +401,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           break;
         case 'transfers':
           schema = insertTransferOrderSchema.omit({ transferId: true });
-          storageMethod = 'createTransfer';
+          storageMethod = 'createTransferOrder';
           break;
         case 'transfer-items':
           schema = insertToItemListSchema.omit({ toItemListId: true });
