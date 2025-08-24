@@ -403,8 +403,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           storageMethod = 'createTransfer';
           break;
         case 'transfer-items':
-          schema = insertTransferDetailSchema.omit({ transferDetailId: true });
-          storageMethod = 'createTransferDetail';
+          schema = insertToItemListSchema.omit({ toItemListId: true });
+          storageMethod = 'createToItemList';
           break;
         default:
           return res.status(400).json({ message: 'Invalid table name' });

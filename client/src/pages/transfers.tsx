@@ -262,7 +262,7 @@ export default function Transfers() {
 
       {/* New Transfer Modal */}
       <Dialog open={showTransferModal} onOpenChange={setShowTransferModal}>
-        <DialogContent className="max-w-md bg-white/90 dark:bg-gray-900/90 backdrop-blur-xl border border-white/20 dark:border-gray-800/50">
+        <DialogContent className="max-w-md bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700">
           <DialogHeader>
             <DialogTitle className="text-2xl font-bold text-gray-900 dark:text-white">
               New Transfer Order
@@ -276,7 +276,7 @@ export default function Transfers() {
                 name="dariGudang"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>From Store</FormLabel>
+                    <FormLabel className="text-gray-700 dark:text-gray-300">From Store</FormLabel>
                     <Select onValueChange={field.onChange} defaultValue={field.value}>
                       <FormControl>
                         <SelectTrigger data-testid="select-from-store">
@@ -301,7 +301,7 @@ export default function Transfers() {
                 name="keGudang"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>To Store</FormLabel>
+                    <FormLabel className="text-gray-700 dark:text-gray-300">To Store</FormLabel>
                     <Select onValueChange={field.onChange} defaultValue={field.value}>
                       <FormControl>
                         <SelectTrigger data-testid="select-to-store">
@@ -326,7 +326,7 @@ export default function Transfers() {
                 name="tanggal"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Transfer Date</FormLabel>
+                    <FormLabel className="text-gray-700 dark:text-gray-300">Transfer Date</FormLabel>
                     <FormControl>
                       <Input type="date" {...field} data-testid="input-transfer-date" />
                     </FormControl>
@@ -335,18 +335,28 @@ export default function Transfers() {
                 )}
               />
 
+              <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+                  After creating the Transfer Order, you can import items using CSV or Excel files.
+                </p>
+                <p className="text-xs text-gray-500 dark:text-gray-500">
+                  Required format: sn, kode_item, nama_item, qty (all fields must be included in transfer imports)
+                </p>
+              </div>
+
               <div className="flex justify-end space-x-4 pt-4">
                 <Button
                   type="button"
                   variant="outline"
                   onClick={() => setShowTransferModal(false)}
+                  className="border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
                   data-testid="button-cancel-transfer"
                 >
                   Cancel
                 </Button>
                 <Button
                   type="submit"
-                  className="bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700"
+                  className="bg-blue-600 hover:bg-blue-700 text-white dark:bg-blue-600 dark:hover:bg-blue-700"
                   disabled={createTransferMutation.isPending}
                   data-testid="button-create-transfer"
                 >

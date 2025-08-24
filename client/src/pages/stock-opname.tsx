@@ -255,25 +255,37 @@ export default function StockOpname() {
                       New Stock Opname
                     </Button>
                   </DialogTrigger>
-                  <DialogContent>
+                  <DialogContent className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700">
                     <DialogHeader>
-                      <DialogTitle>Create New Stock Opname</DialogTitle>
+                      <DialogTitle className="text-gray-900 dark:text-white">Create New Stock Opname</DialogTitle>
                     </DialogHeader>
                     <div className="space-y-4">
                       <div>
-                        <Label htmlFor="so-date">Date</Label>
+                        <Label htmlFor="so-date" className="text-gray-700 dark:text-gray-300">Date</Label>
                         <Input
                           id="so-date"
                           type="date"
                           value={newSoDate}
                           onChange={(e) => setNewSoDate(e.target.value)}
+                          className="bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white"
                           data-testid="input-so-date"
                         />
                       </div>
+                      
+                      <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
+                        <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+                          After creating the Stock Opname record, you can import items using CSV or Excel files.
+                        </p>
+                        <p className="text-xs text-gray-500 dark:text-gray-500">
+                          Required format: sn, kode_item, qty (nama_item will be auto-filled from reference sheet)
+                        </p>
+                      </div>
+                      
                       <div className="flex justify-end space-x-2">
                         <Button 
                           variant="outline" 
                           onClick={() => setShowCreateModal(false)}
+                          className="border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
                           data-testid="button-cancel-so"
                         >
                           Cancel
@@ -281,9 +293,10 @@ export default function StockOpname() {
                         <Button 
                           onClick={handleCreateSo}
                           disabled={createSoMutation.isPending}
+                          className="bg-blue-600 hover:bg-blue-700 text-white dark:bg-blue-600 dark:hover:bg-blue-700"
                           data-testid="button-create-so"
                         >
-                          {createSoMutation.isPending ? "Creating..." : "Create"}
+                          {createSoMutation.isPending ? "Creating..." : "Create Stock Opname"}
                         </Button>
                       </div>
                     </div>
