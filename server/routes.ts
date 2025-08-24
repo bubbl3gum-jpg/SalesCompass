@@ -620,7 +620,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const stores = await storage.getStores();
       res.json(stores);
     } catch (error) {
+      console.error('Get stores error:', error);
       res.status(500).json({ message: 'Failed to get stores' });
+    }
+  });
+
+  app.post('/api/stores', isAuthenticated, checkRole(['System Administrator']), async (req, res) => {
+    try {
+      const validatedData = insertStoreSchema.parse(req.body);
+      const store = await storage.createStore(validatedData);
+      res.json(store);
+    } catch (error) {
+      console.error('Store creation error:', error);
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ message: 'Validation error', errors: error.errors });
+      } else {
+        res.status(500).json({ message: 'Failed to create store' });
+      }
     }
   });
 
