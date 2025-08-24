@@ -38,6 +38,12 @@ const navigationItems = [
         roles: ["Supervisor", "Stockist", "Sales Administrator", "System Administrator"]
       },
       {
+        name: "Stock Opname",
+        href: "/stock-opname",
+        icon: "fas fa-clipboard-check",
+        roles: ["Stockist", "Supervisor", "System Administrator"]
+      },
+      {
         name: "Transfers", 
         href: "/transfers",
         icon: "fas fa-exchange-alt",
