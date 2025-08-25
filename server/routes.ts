@@ -392,6 +392,79 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Store authentication route
+  app.post('/api/store/auth', isAuthenticated, async (req, res) => {
+    try {
+      const { kodeGudang, username, password } = req.body;
+      
+      if (!kodeGudang || !username || !password) {
+        return res.status(400).json({ message: "Store code, username and password are required" });
+      }
+
+      const store = await storage.getStoreByKode(kodeGudang);
+      if (!store) {
+        return res.status(404).json({ message: "Store not found" });
+      }
+
+      if (store.storeUsername !== username || store.storePassword !== password) {
+        return res.status(401).json({ message: "Invalid store credentials" });
+      }
+
+      // Store the authenticated store in session
+      (req.session as any).authenticatedStore = kodeGudang;
+      res.json({ 
+        message: "Store authentication successful", 
+        store: {
+          kodeGudang: store.kodeGudang,
+          namaGudang: store.namaGudang,
+          jenisGudang: store.jenisGudang
+        }
+      });
+    } catch (error) {
+      console.error("Error authenticating store:", error);
+      res.status(500).json({ message: "Failed to authenticate store" });
+    }
+  });
+
+  // Get current authenticated store
+  app.get('/api/store/current', isAuthenticated, async (req, res) => {
+    try {
+      const authenticatedStore = (req.session as any).authenticatedStore;
+      if (!authenticatedStore) {
+        return res.json({ store: null });
+      }
+
+      const store = await storage.getStoreByKode(authenticatedStore);
+      if (!store) {
+        // Clear invalid store from session
+        delete (req.session as any).authenticatedStore;
+        return res.json({ store: null });
+      }
+
+      res.json({ 
+        store: {
+          kodeGudang: store.kodeGudang,
+          namaGudang: store.namaGudang,
+          jenisGudang: store.jenisGudang
+        }
+      });
+    } catch (error) {
+      console.error("Error fetching current store:", error);
+      res.status(500).json({ message: "Failed to fetch current store" });
+    }
+  });
+
+  // Store logout route
+  app.post('/api/store/logout', isAuthenticated, async (req, res) => {
+    try {
+      delete (req.session as any).authenticatedStore;
+      res.json({ message: "Store logout successful" });
+    } catch (error) {
+      console.error("Error logging out from store:", error);
+      res.status(500).json({ message: "Failed to logout from store" });
+    }
+  });
+
   // Price resolution endpoint
   app.get('/api/price/quote', isAuthenticated, async (req, res) => {
     try {

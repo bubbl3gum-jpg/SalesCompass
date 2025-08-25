@@ -58,6 +58,8 @@ export const stores = pgTable("store", {
   kodeGudang: varchar("kode_gudang", { length: 50 }).primaryKey(),
   namaGudang: varchar("nama_gudang", { length: 255 }),
   jenisGudang: varchar("jenis_gudang", { length: 50 }),
+  storeUsername: varchar("store_username", { length: 100 }),
+  storePassword: varchar("store_password", { length: 255 }),
 });
 
 // Discount Types

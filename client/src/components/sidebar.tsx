@@ -4,8 +4,19 @@ import { useAuth } from "@/hooks/useAuth";
 import { useSidebar } from "@/hooks/useSidebar";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { ChevronLeft, ChevronRight } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
+import { ChevronLeft, ChevronRight, Users, Store, LogOut, UserCheck } from "lucide-react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import { StoreAuthModal } from "./store-auth-modal";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 const navigationItems = [
   {
@@ -83,10 +94,27 @@ export function Sidebar() {
   const [location, setLocation] = useLocation();
   const { user, isAuthenticated } = useAuth();
   const { isExpanded, toggleSidebar } = useSidebar();
+  const [storeAuthModalOpen, setStoreAuthModalOpen] = useState(false);
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
   
   // Fetch user permissions from the backend
   const { data: userPermissions, isLoading: permissionsLoading } = useQuery({
     queryKey: ['/api/user/permissions'],
+    enabled: isAuthenticated,
+    retry: false,
+  });
+
+  // Fetch stores for store authentication
+  const { data: stores } = useQuery({
+    queryKey: ['/api/stores'],
+    enabled: isAuthenticated,
+    retry: false,
+  });
+
+  // Fetch current authenticated store
+  const { data: currentStoreData } = useQuery({
+    queryKey: ['/api/store/current'],
     enabled: isAuthenticated,
     retry: false,
   });
@@ -99,6 +127,38 @@ export function Sidebar() {
   const handleLogout = () => {
     window.location.href = '/api/logout';
   };
+
+  const handleChangeUser = () => {
+    window.location.href = '/api/logout';
+  };
+
+  // Store logout mutation
+  const storeLogoutMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest('POST', '/api/store/logout');
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Store Logout Successful",
+        description: "You have been logged out from the store",
+      });
+      queryClient.invalidateQueries({ queryKey: ['/api/store/current'] });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Logout Failed",
+        description: error.message || "Failed to logout from store",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleStoreLogout = () => {
+    storeLogoutMutation.mutate();
+  };
+
+  const currentStore = currentStoreData?.store;
 
   return (
     <div className={cn(
@@ -208,7 +268,35 @@ export function Sidebar() {
           })}
         </nav>
 
-        {/* User Profile */}
+        {/* Current Store Info */}
+        {currentStore && (
+          <div className="p-2">
+            <div className={cn(
+              "flex items-center bg-blue-500/10 dark:bg-blue-900/20 rounded-xl border border-blue-200/20 dark:border-blue-700/30",
+              isExpanded ? "px-4 py-3" : "px-2 py-3 justify-center"
+            )}>
+              <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-full flex items-center justify-center">
+                <Store className="w-4 h-4 text-white" />
+              </div>
+              {isExpanded ? (
+                <div className="ml-3 flex-1 min-w-0">
+                  <p className="text-sm font-medium text-blue-700 dark:text-blue-300 truncate">
+                    {currentStore.namaGudang}
+                  </p>
+                  <p className="text-xs text-blue-600/70 dark:text-blue-400/70">
+                    {currentStore.kodeGudang}
+                  </p>
+                </div>
+              ) : (
+                <div className="absolute left-full ml-2 px-2 py-1 bg-gray-900 dark:bg-gray-700 text-white text-xs rounded-md opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50">
+                  {currentStore.namaGudang}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* User Profile and Actions */}
         <div className="p-2">
           <div className={cn(
             "flex items-center bg-white/10 dark:bg-black/10 rounded-xl relative group",
@@ -216,48 +304,146 @@ export function Sidebar() {
           )}>
             <div className="w-8 h-8 bg-gradient-to-r from-emerald-400 to-blue-500 rounded-full flex items-center justify-center">
               <span className="text-white text-sm font-medium">
-                A
+                {user?.firstName?.charAt(0) || user?.email?.charAt(0) || 'U'}
               </span>
             </div>
             {isExpanded ? (
               <>
                 <div className="ml-3 flex-1 min-w-0">
                   <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
-                    System Administrator
+                    {user?.firstName && user?.lastName 
+                      ? `${user.firstName} ${user.lastName}`
+                      : user?.email?.split('@')[0] || 'User'
+                    }
                   </p>
                   <p className="text-xs text-gray-500 dark:text-gray-400">
                     {userPermissions?.positionName || 'User'}
                   </p>
                 </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1"
-                  onClick={handleLogout}
-                  data-testid="button-logout"
-                >
-                  <i className="fas fa-sign-out-alt"></i>
-                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1"
+                      data-testid="button-user-menu"
+                    >
+                      <UserCheck className="w-4 h-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-56">
+                    <DropdownMenuLabel>Account Options</DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem 
+                      onClick={() => setStoreAuthModalOpen(true)}
+                      data-testid="menu-change-store"
+                    >
+                      <Store className="mr-2 h-4 w-4" />
+                      {currentStore ? 'Change Store' : 'Login to Store'}
+                    </DropdownMenuItem>
+                    {currentStore && (
+                      <DropdownMenuItem 
+                        onClick={handleStoreLogout}
+                        disabled={storeLogoutMutation.isPending}
+                        data-testid="menu-store-logout"
+                      >
+                        <LogOut className="mr-2 h-4 w-4" />
+                        Logout from Store
+                      </DropdownMenuItem>
+                    )}
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem 
+                      onClick={handleChangeUser}
+                      data-testid="menu-change-user"
+                    >
+                      <Users className="mr-2 h-4 w-4" />
+                      Change User
+                    </DropdownMenuItem>
+                    <DropdownMenuItem 
+                      onClick={handleLogout}
+                      data-testid="menu-sign-out"
+                    >
+                      <LogOut className="mr-2 h-4 w-4" />
+                      Sign Out
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </>
             ) : (
               <>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="absolute -top-2 -right-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                  onClick={handleLogout}
-                  data-testid="button-logout"
-                  title="Logout"
-                >
-                  <i className="fas fa-sign-out-alt text-xs"></i>
-                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="absolute -top-2 -right-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                      data-testid="button-user-menu-collapsed"
+                      title="User Options"
+                    >
+                      <UserCheck className="w-3 h-3" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-56">
+                    <DropdownMenuLabel>Account Options</DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem 
+                      onClick={() => setStoreAuthModalOpen(true)}
+                      data-testid="menu-change-store"
+                    >
+                      <Store className="mr-2 h-4 w-4" />
+                      {currentStore ? 'Change Store' : 'Login to Store'}
+                    </DropdownMenuItem>
+                    {currentStore && (
+                      <DropdownMenuItem 
+                        onClick={handleStoreLogout}
+                        disabled={storeLogoutMutation.isPending}
+                        data-testid="menu-store-logout"
+                      >
+                        <LogOut className="mr-2 h-4 w-4" />
+                        Logout from Store
+                      </DropdownMenuItem>
+                    )}
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem 
+                      onClick={handleChangeUser}
+                      data-testid="menu-change-user"
+                    >
+                      <Users className="mr-2 h-4 w-4" />
+                      Change User
+                    </DropdownMenuItem>
+                    <DropdownMenuItem 
+                      onClick={handleLogout}
+                      data-testid="menu-sign-out"
+                    >
+                      <LogOut className="mr-2 h-4 w-4" />
+                      Sign Out
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
                 <div className="absolute left-full ml-2 px-2 py-1 bg-gray-900 dark:bg-gray-700 text-white text-xs rounded-md opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50">
-                  System Administrator
+                  {user?.firstName && user?.lastName 
+                    ? `${user.firstName} ${user.lastName}`
+                    : user?.email?.split('@')[0] || 'User'
+                  }
                 </div>
               </>
             )}
           </div>
         </div>
+
+        {/* Store Authentication Modal */}
+        <StoreAuthModal
+          open={storeAuthModalOpen}
+          onOpenChange={setStoreAuthModalOpen}
+          stores={stores}
+          onSuccess={(store) => {
+            // Optional: You can add additional logic here when store auth succeeds
+            toast({
+              title: "Store Access Granted",
+              description: `You now have access to ${store.namaGudang}`,
+            });
+          }}
+        />
       </div>
     </div>
   );
