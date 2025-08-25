@@ -58,35 +58,14 @@ export default function Landing() {
     setStorePassword("store123");
   };
 
-  const handleGoogleLogin = () => {
-    // Placeholder for Google OAuth integration
-    console.log("Google login clicked - integrate with OAuth provider");
-    // window.location.href = "/api/auth/google";
+  const handleLogin = () => {
+    // Redirect to Replit Auth login
+    window.location.href = "/api/login";
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsLoggingIn(true);
-
-    try {
-      // Simulate login process
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // Save user info if remember is checked
-      if (rememberUser && !isStoreOnlyLogin) {
-        const expiryDate = new Date();
-        expiryDate.setDate(expiryDate.getDate() + 7); // 7 days
-        localStorage.setItem('saved_user_email', email);
-        localStorage.setItem('saved_user_expiry', expiryDate.toISOString());
-      }
-
-      // For demo purposes, redirect to dashboard
-      setLocation('/');
-    } catch (error) {
-      console.error('Login failed:', error);
-    } finally {
-      setIsLoggingIn(false);
-    }
+    handleLogin();
   };
 
   const clearSavedUser = () => {
@@ -293,7 +272,7 @@ export default function Landing() {
                         type="button"
                         variant="outline"
                         className="w-full border-white/20 dark:border-gray-700/50 hover:bg-white/10 dark:hover:bg-black/10"
-                        onClick={handleGoogleLogin}
+                        onClick={handleLogin}
                         data-testid="button-google-login"
                       >
                         <i className="fab fa-google mr-2 text-red-500"></i>
