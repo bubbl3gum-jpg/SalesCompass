@@ -122,12 +122,15 @@ export interface IStorage {
   createStaff(data: InsertStaff): Promise<Staff>;
   updateStaff(employeeId: number, data: Partial<InsertStaff>): Promise<Staff>;
   deleteStaff(employeeId: number): Promise<void>;
+  getStaffByEmail(email: string): Promise<Staff | undefined>;
 
   // Position operations
   getPositions(): Promise<Position[]>;
   createPosition(data: InsertPosition): Promise<Position>;
   updatePosition(positionId: number, data: Partial<InsertPosition>): Promise<Position>;
   deletePosition(positionId: number): Promise<void>;
+  getPositionByName(positionName: string): Promise<Position | undefined>;
+  getUserPermissions(userEmail: string): Promise<Position | null>;
   
   // Transfer order item list operations
   createToItemList(data: InsertToItemList): Promise<ToItemList>;
@@ -408,6 +411,11 @@ export class DatabaseStorage implements IStorage {
     await db.delete(staff).where(eq(staff.employeeId, employeeId));
   }
 
+  async getStaffByEmail(email: string): Promise<Staff | undefined> {
+    const [result] = await db.select().from(staff).where(eq(staff.email, email));
+    return result;
+  }
+
   // Position operations
   async getPositions(): Promise<Position[]> {
     return await db.select().from(positions);
@@ -428,6 +436,57 @@ export class DatabaseStorage implements IStorage {
 
   async deletePosition(positionId: number): Promise<void> {
     await db.delete(positions).where(eq(positions.positionId, positionId));
+  }
+
+  async getPositionByName(positionName: string): Promise<Position | undefined> {
+    const [result] = await db.select().from(positions).where(eq(positions.positionName, positionName));
+    return result;
+  }
+
+  async getUserPermissions(userEmail: string): Promise<Position | null> {
+    // Get staff record by email
+    const staffMember = await this.getStaffByEmail(userEmail);
+    
+    if (!staffMember || !staffMember.jabatan) {
+      // Default permissions for users without staff record or position
+      return {
+        positionId: 0,
+        positionName: 'User',
+        description: 'Basic user',
+        canAccessDashboard: true,
+        canAccessSalesEntry: false,
+        canAccessSettlements: false,
+        canAccessStockDashboard: false,
+        canAccessStockOpname: false,
+        canAccessTransfers: false,
+        canAccessPriceLists: false,
+        canAccessDiscounts: false,
+        canAccessAdminSettings: false,
+      };
+    }
+    
+    // Get position by jabatan (position name)
+    const position = await this.getPositionByName(staffMember.jabatan);
+    
+    if (!position) {
+      // Default permissions if position not found
+      return {
+        positionId: 0,
+        positionName: staffMember.jabatan,
+        description: 'Unknown position',
+        canAccessDashboard: true,
+        canAccessSalesEntry: false,
+        canAccessSettlements: false,
+        canAccessStockDashboard: false,
+        canAccessStockOpname: false,
+        canAccessTransfers: false,
+        canAccessPriceLists: false,
+        canAccessDiscounts: false,
+        canAccessAdminSettings: false,
+      };
+    }
+    
+    return position;
   }
   
   // Transfer order item list operations

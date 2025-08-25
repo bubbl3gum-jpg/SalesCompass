@@ -5,13 +5,14 @@ import { useSidebar } from "@/hooks/useSidebar";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 
 const navigationItems = [
   {
     name: "Dashboard",
     href: "/",
     icon: "fas fa-tachometer-alt",
-    roles: ["SPG", "Supervisor", "Stockist", "Sales Administrator", "Finance", "System Administrator"]
+    permission: "canAccessDashboard"
   },
   {
     category: "Sales",
@@ -20,13 +21,13 @@ const navigationItems = [
         name: "Sales Entry",
         href: "/sales-entry", 
         icon: "fas fa-cash-register",
-        roles: ["SPG", "Supervisor", "Sales Administrator"]
+        permission: "canAccessSalesEntry"
       },
       {
         name: "Settlements",
         href: "/settlements",
         icon: "fas fa-file-invoice-dollar", 
-        roles: ["Supervisor", "Sales Administrator", "Finance", "System Administrator"]
+        permission: "canAccessSettlements"
       },
     ]
   },
@@ -37,19 +38,19 @@ const navigationItems = [
         name: "Stock Dashboard",
         href: "/stock-dashboard",
         icon: "fas fa-boxes",
-        roles: ["Supervisor", "Stockist", "Sales Administrator", "System Administrator"]
+        permission: "canAccessStockDashboard"
       },
       {
         name: "Stock Opname",
         href: "/stock-opname",
         icon: "fas fa-clipboard-check",
-        roles: ["Stockist", "Supervisor", "System Administrator"]
+        permission: "canAccessStockOpname"
       },
       {
         name: "Transfers", 
         href: "/transfers",
         icon: "fas fa-exchange-alt",
-        roles: ["Supervisor", "Stockist", "System Administrator"]
+        permission: "canAccessTransfers"
       },
     ]
   },
@@ -60,19 +61,19 @@ const navigationItems = [
         name: "Price Lists",
         href: "/price-lists",
         icon: "fas fa-tags",
-        roles: ["Supervisor", "System Administrator"]
+        permission: "canAccessPriceLists"
       },
       {
         name: "Discounts",
         href: "/discounts", 
         icon: "fas fa-percentage",
-        roles: ["Supervisor", "System Administrator"]
+        permission: "canAccessDiscounts"
       },
       {
         name: "Admin Settings",
         href: "/admin-settings",
         icon: "fas fa-cogs",
-        roles: ["System Administrator"]
+        permission: "canAccessAdminSettings"
       },
     ]
   }
@@ -80,14 +81,19 @@ const navigationItems = [
 
 export function Sidebar() {
   const [location, setLocation] = useLocation();
-  const { user } = useAuth();
+  const { user, isAuthenticated } = useAuth();
   const { isExpanded, toggleSidebar } = useSidebar();
   
-  // Get user role from auth context - for now assume System Administrator for testing
-  const userRole = 'System Administrator';
+  // Fetch user permissions from the backend
+  const { data: userPermissions, isLoading: permissionsLoading } = useQuery({
+    queryKey: ['/api/user/permissions'],
+    enabled: isAuthenticated,
+    retry: false,
+  });
 
-  const hasPermission = (requiredRoles: string[]) => {
-    return requiredRoles.includes(userRole);
+  const hasPermission = (permission: string) => {
+    if (!userPermissions) return false;
+    return userPermissions[permission] === true;
   };
 
   const handleLogout = () => {
@@ -130,7 +136,7 @@ export function Sidebar() {
           {navigationItems.map((item, index) => {
             // Handle direct navigation items
             if ('href' in item) {
-              if (!hasPermission(item.roles)) return null;
+              if (!hasPermission(item.permission)) return null;
               
               return (
                 <Button
@@ -170,7 +176,7 @@ export function Sidebar() {
                   <div className="border-t border-gray-300 dark:border-gray-600 my-2"></div>
                 )}
                 {item.items?.map((subItem, subIndex) => {
-                  if (!hasPermission(subItem.roles)) return null;
+                  if (!hasPermission(subItem.permission)) return null;
                   
                   return (
                     <Button
@@ -220,7 +226,7 @@ export function Sidebar() {
                     System Administrator
                   </p>
                   <p className="text-xs text-gray-500 dark:text-gray-400">
-                    {userRole || 'User'}
+                    {userPermissions?.positionName || 'User'}
                   </p>
                 </div>
                 <Button

@@ -380,6 +380,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // User permissions route
+  app.get('/api/user/permissions', isAuthenticated, async (req: any, res) => {
+    try {
+      const userEmail = req.user.claims.email;
+      const permissions = await storage.getUserPermissions(userEmail);
+      res.json(permissions);
+    } catch (error) {
+      console.error("Error fetching user permissions:", error);
+      res.status(500).json({ message: "Failed to fetch user permissions" });
+    }
+  });
+
   // Price resolution endpoint
   app.get('/api/price/quote', isAuthenticated, async (req, res) => {
     try {

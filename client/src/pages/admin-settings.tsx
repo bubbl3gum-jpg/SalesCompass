@@ -28,7 +28,7 @@ interface TableConfig {
   fields: {
     key: string;
     label: string;
-    type: 'text' | 'number' | 'date' | 'select';
+    type: 'text' | 'number' | 'date' | 'select' | 'checkbox';
     required?: boolean;
     options?: { value: string; label: string }[];
   }[];
@@ -76,6 +76,15 @@ const tableConfigs: TableConfig[] = [
     fields: [
       { key: 'positionName', label: 'Position Name', type: 'text', required: true },
       { key: 'description', label: 'Description', type: 'text' },
+      { key: 'canAccessDashboard', label: 'Dashboard Access', type: 'checkbox' },
+      { key: 'canAccessSalesEntry', label: 'Sales Entry Access', type: 'checkbox' },
+      { key: 'canAccessSettlements', label: 'Settlements Access', type: 'checkbox' },
+      { key: 'canAccessStockDashboard', label: 'Stock Dashboard Access', type: 'checkbox' },
+      { key: 'canAccessStockOpname', label: 'Stock Opname Access', type: 'checkbox' },
+      { key: 'canAccessTransfers', label: 'Transfers Access', type: 'checkbox' },
+      { key: 'canAccessPriceLists', label: 'Price Lists Access', type: 'checkbox' },
+      { key: 'canAccessDiscounts', label: 'Discounts Access', type: 'checkbox' },
+      { key: 'canAccessAdminSettings', label: 'Admin Settings Access', type: 'checkbox' },
     ]
   },
   {
@@ -628,6 +637,18 @@ export default function AdminSettings() {
                       ))}
                     </SelectContent>
                   </Select>
+                ) : field.type === 'checkbox' ? (
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id={field.key}
+                      checked={formData[field.key] === 'true' || formData[field.key] === true}
+                      onCheckedChange={(checked) => setFormData({ ...formData, [field.key]: checked })}
+                      data-testid={`checkbox-${field.key}`}
+                    />
+                    <label htmlFor={field.key} className="text-sm text-gray-600 dark:text-gray-400">
+                      Enable {field.label}
+                    </label>
+                  </div>
                 ) : (
                   <Input
                     id={field.key}

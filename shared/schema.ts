@@ -174,6 +174,16 @@ export const positions = pgTable("positions", {
   positionId: integer("position_id").primaryKey().generatedByDefaultAsIdentity(),
   positionName: varchar("position_name", { length: 100 }).unique(),
   description: varchar("description", { length: 255 }),
+  // System Access Permissions
+  canAccessDashboard: boolean("can_access_dashboard").default(true),
+  canAccessSalesEntry: boolean("can_access_sales_entry").default(false),
+  canAccessSettlements: boolean("can_access_settlements").default(false),
+  canAccessStockDashboard: boolean("can_access_stock_dashboard").default(false),
+  canAccessStockOpname: boolean("can_access_stock_opname").default(false),
+  canAccessTransfers: boolean("can_access_transfers").default(false),
+  canAccessPriceLists: boolean("can_access_price_lists").default(false),
+  canAccessDiscounts: boolean("can_access_discounts").default(false),
+  canAccessAdminSettings: boolean("can_access_admin_settings").default(false),
 });
 
 export const staff = pgTable("staff", {
