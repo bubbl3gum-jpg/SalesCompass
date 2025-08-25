@@ -1,13 +1,17 @@
 import { Sidebar } from "@/components/sidebar";
+import { useSidebar } from "@/hooks/useSidebar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 export default function Settlements() {
+  const { isExpanded } = useSidebar();
+  
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 dark:from-slate-900 dark:via-slate-800 dark:to-indigo-900">
       <Sidebar />
       
-      <div className="ml-64 flex-1">
+      <div className={cn("flex-1 transition-all duration-300 ease-in-out", isExpanded ? "ml-64" : "ml-16")}>
         <header className="bg-white/10 dark:bg-black/10 backdrop-blur-xl border-b border-white/20 dark:border-gray-800/50 px-6 py-4">
           <div className="flex items-center justify-between">
             <div>

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
+import { useSidebar } from "@/hooks/useSidebar";
 import { useToast } from "@/hooks/use-toast";
 import { isUnauthorizedError } from "@/lib/authUtils";
 import { Sidebar } from "@/components/sidebar";
@@ -8,10 +9,12 @@ import { SalesEntryModal } from "@/components/sales-entry-modal";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils";
 
 export default function Dashboard() {
   const { toast } = useToast();
   const { isAuthenticated, isLoading } = useAuth();
+  const { isExpanded } = useSidebar();
   const [selectedStore, setSelectedStore] = useState<string>('');
   const [showSalesModal, setShowSalesModal] = useState(false);
 
@@ -84,7 +87,7 @@ export default function Dashboard() {
       <Sidebar />
       
       {/* Main Content */}
-      <div className="ml-64 flex-1">
+      <div className={cn("flex-1 transition-all duration-300 ease-in-out", isExpanded ? "ml-64" : "ml-16")}>
         {/* Top Header */}
         <header className="bg-white/10 dark:bg-black/10 backdrop-blur-xl border-b border-white/20 dark:border-gray-800/50 px-6 py-4">
           <div className="flex items-center justify-between">

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
+import { useSidebar } from "@/hooks/useSidebar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,6 +18,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { Sidebar } from "@/components/sidebar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Edit3, Trash2, Plus, Upload } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface TableConfig {
   name: string;
@@ -141,6 +143,7 @@ function useTableData(endpoint: string) {
 
 export default function AdminSettings() {
   const { user } = useAuth();
+  const { isExpanded } = useSidebar();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -555,7 +558,7 @@ export default function AdminSettings() {
     <div className="flex h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 dark:from-gray-900 dark:via-blue-900 dark:to-indigo-950">
       <Sidebar />
       
-      <div className="flex-1 flex flex-col overflow-hidden ml-64">
+      <div className={cn("flex-1 flex flex-col overflow-hidden transition-all duration-300 ease-in-out", isExpanded ? "ml-64" : "ml-16")}>
         <div className="flex-1 overflow-y-auto p-8">
           <div className="max-w-7xl mx-auto">
             <div className="mb-8">
