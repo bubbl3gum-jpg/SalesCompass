@@ -166,10 +166,6 @@ export default function AdminSettings() {
   const [editingItem, setEditingItem] = useState<string | null>(null);
   const [formData, setFormData] = useState<Record<string, string>>({});
   
-  // User Management State
-  const [userSearchTerm, setUserSearchTerm] = useState<string>('');
-  const [userRoleFilter, setUserRoleFilter] = useState<string>('');
-  
   // Data Selection State
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
   const [selectAll, setSelectAll] = useState(false);
@@ -575,10 +571,10 @@ export default function AdminSettings() {
               <TabsList className="grid w-full grid-cols-6 bg-white/10 dark:bg-black/10 backdrop-blur-xl border-white/20 dark:border-gray-800/50">
                 <TabsTrigger value="reference-sheet" data-testid="tab-reference-sheet">Reference Sheet</TabsTrigger>
                 <TabsTrigger value="stores" data-testid="tab-stores">Stores</TabsTrigger>
+                <TabsTrigger value="positions" data-testid="tab-positions">Positions</TabsTrigger>
                 <TabsTrigger value="staff" data-testid="tab-staff">Staff</TabsTrigger>
                 <TabsTrigger value="discounts" data-testid="tab-discounts">Discounts</TabsTrigger>
                 <TabsTrigger value="edc" data-testid="tab-edc">EDC</TabsTrigger>
-                <TabsTrigger value="users" data-testid="tab-users">Users</TabsTrigger>
               </TabsList>
 
               {tableConfigs.map((config) => (
