@@ -4,13 +4,17 @@ import { Sidebar } from "@/components/sidebar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Check, ChevronsUpDown } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 export default function StockDashboard() {
   const [selectedStore, setSelectedStore] = useState<string>('');
   const [searchTerm, setSearchTerm] = useState<string>('');
+  const [storeDropdownOpen, setStoreDropdownOpen] = useState(false);
 
   // Get stores
   const { data: stores } = useQuery({
@@ -72,18 +76,59 @@ export default function StockDashboard() {
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Store
                   </label>
-                  <Select value={selectedStore} onValueChange={setSelectedStore}>
-                    <SelectTrigger data-testid="select-store-filter">
-                      <SelectValue placeholder="Select Store" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {stores?.map((store: any) => (
-                        <SelectItem key={store.kodeGudang} value={store.kodeGudang}>
-                          {store.namaGudang}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Popover open={storeDropdownOpen} onOpenChange={setStoreDropdownOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        role="combobox"
+                        aria-expanded={storeDropdownOpen}
+                        className="w-full justify-between bg-white/10 dark:bg-black/10 border-white/20 dark:border-gray-800/50 text-gray-900 dark:text-white"
+                        data-testid="select-store-filter"
+                      >
+                        {selectedStore
+                          ? stores?.find((store: any) => store.kodeGudang === selectedStore)?.namaGudang
+                          : "Search and select store..."}
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-full p-0 bg-white/90 dark:bg-black/90 backdrop-blur-xl border-white/20 dark:border-gray-800/50">
+                      <Command>
+                        <CommandInput 
+                          placeholder="Type to search stores..." 
+                          className="h-9 border-0 focus:ring-0"
+                        />
+                        <CommandList>
+                          <CommandEmpty>No store found.</CommandEmpty>
+                          <CommandGroup>
+                            {stores?.map((store: any) => (
+                              <CommandItem
+                                key={store.kodeGudang}
+                                value={`${store.kodeGudang} ${store.namaGudang}`}
+                                onSelect={() => {
+                                  setSelectedStore(store.kodeGudang);
+                                  setStoreDropdownOpen(false);
+                                }}
+                                className="cursor-pointer"
+                              >
+                                <Check
+                                  className={cn(
+                                    "mr-2 h-4 w-4",
+                                    selectedStore === store.kodeGudang ? "opacity-100" : "opacity-0"
+                                  )}
+                                />
+                                <div className="flex flex-col">
+                                  <span className="font-medium">{store.namaGudang}</span>
+                                  <span className="text-sm text-gray-500 dark:text-gray-400">
+                                    {store.kodeGudang} • {store.jenisGudang || 'Store'}
+                                  </span>
+                                </div>
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
                 </div>
 
                 <div>

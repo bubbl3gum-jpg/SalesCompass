@@ -1,0 +1,239 @@
+Build “Settlements” Page with Reconcile + CRUD
+Context & Goal
+
+I’m building an internal ERP web app (sales recap & stock). Please design and/or generate the Settlements page UI and wire it to the APIs below. The page must let users:
+
+see reconciliation for a given store/date,
+
+create settlements by entering actual amounts per payment method,
+
+manage settlements with full CRUD (Create, Read, Update, Delete).
+
+Keep the UI simple, monochrome (black/white/gray), responsive, production-ready.
+
+Key Entities
+
+Store: kode_gudang (e.g., "G01")
+
+Settlement (header): settlement_id, kode_gudang, tanggal, notes
+
+Settlement Lines: list of { payment_method_id, actual_amount, remarks? }
+
+Reconcile Summary (read-only from backend): totals per payment method, expected vs actual, diffs, and overall status OK/WARN/FAIL.
+
+APIs (contract to integrate)
+
+Use these as given. Assume JSON unless noted.
+
+1) Price quote (supporting sales flow)
+
+GET /price/quote
+
+Query: serial_number, kode_item, family, deskripsi_material, disc_by_amount
+
+Response (example):
+
+{
+  "unit_price": 1200000.00,
+  "discount_amount": 50000.00,
+  "final_price": 1150000.00,
+  "source": "serial"
+}
+
+2) Sales entry (supporting expected totals)
+
+POST /sales
+
+{
+  "kode_gudang": "G01",
+  "tanggal": "2025-08-21",
+  "serial_number": "SN123",
+  "kode_item": "ITM001",
+  "payment_method_id": 2,
+  "disc_by_amount": 0,
+  "notes": "",
+  "pre_order": false
+}
+
+3) Reconcile (read-only expected vs actual)
+
+GET /settlements/reconcile
+
+Prefer query params: ?kode_gudang=G01&tanggal=2025-08-21
+
+Response (example):
+
+{
+  "status": "OK",
+  "expected_total": 3450000.00,
+  "actual_total": 3450000.00,
+  "per_method": [
+    {"payment_method_id": 1, "expected": 1500000.00, "actual": 1500000.00, "diff": 0},
+    {"payment_method_id": 2, "expected": 1950000.00, "actual": 1950000.00, "diff": 0}
+  ],
+  "diffs": []
+}
+
+4) Settlements CRUD (implement these; if not existing, stub them for now)
+
+LIST: GET /settlements?kode_gudang=G01&from=YYYY-MM-DD&to=YYYY-MM-DD&search=...&page=1&limit=20
+
+Returns array of settlement headers with computed totals and status.
+
+READ: GET /settlements/{settlement_id}
+
+Returns header + lines + computed reconcile block for that header’s (store, date).
+
+CREATE: POST /settlements
+
+{
+  "kode_gudang": "G01",
+  "tanggal": "2025-08-21",
+  "notes": "",
+  "lines": [
+    {"payment_method_id": 1, "actual_amount": 1500000.00, "remarks": ""},
+    {"payment_method_id": 2, "actual_amount": 1950000.00, "remarks": ""}
+  ]
+}
+
+
+Response: created object (with settlement_id) and latest reconcile summary.
+
+UPDATE: PUT /settlements/{settlement_id}
+
+Same body shape as CREATE; replaces/updates header + lines.
+
+DELETE: DELETE /settlements/{settlement_id}
+
+Only allowed if business rules permit (e.g., not posted/locked).
+
+If you need a payment methods list, assume GET /payment_methods → [{ "payment_method_id": 1, "name": "Cash" }, ...].
+
+UX Requirements
+A) Page Layout
+
+Header controls (sticky):
+
+Store selector (kode_gudang)
+
+Date picker (tanggal)
+
+Buttons: Refresh Reconcile, Create Settlement
+
+Reconcile Card (read-only):
+
+Overall status badge (OK/WARN/FAIL)
+
+Expected vs Actual vs Diff (totals)
+
+Table: per payment method (method name, expected, actual, diff)
+
+Collapsible “Diff details” if any
+
+Settlements Table (below):
+
+Columns: Settlement ID, Date, Store, Total Actual, Status, Updated At, Actions
+
+Filters: date range, method, status; search box (ID/notes)
+
+Row actions: View, Edit, Delete
+
+Pagination
+
+B) “Create Settlement” (CRUD) flow
+
+Clicking Create Settlement opens a modal/drawer:
+
+Prefill kode_gudang & tanggal from page header.
+
+Lines grid:
+
+One row per available payment method (fetch GET /payment_methods).
+
+Editable actual_amount (numeric, ≥ 0), optional remarks.
+
+Row sum → Actual Total (live).
+
+Live Reconcile Preview:
+
+Fetch GET /settlements/reconcile (same store/date).
+
+Show expected per method/total, compute live diffs using current actual_amounts.
+
+Status coloring: OK (all diffs = 0), WARN (small diffs), FAIL (large diffs). Thresholds configurable.
+
+Actions: Save (POST), Cancel.
+
+On success: close modal, toast “Settlement created (#ID)”, refresh table and reconcile card.
+
+C) View / Edit / Delete
+
+View shows read-only header, lines grid, reconcile block (for that record’s store/date).
+
+Edit:
+
+Same UI as create; loads existing values (GET by id).
+
+On save: PUT, then refresh table & reconcile card.
+
+Delete:
+
+Confirm dialog: “This will permanently remove the settlement. Continue?”
+
+On success: remove from table, toast confirmation.
+
+Validation & Rules
+
+kode_gudang required; tanggal required (date only).
+
+Each actual_amount must be a valid non-negative number.
+
+Allow saving even with diffs; keep clear status (OK/WARN/FAIL) based on reconcile deltas.
+
+If backend forbids DELETE/UPDATE for locked/posted records, show readable error.
+
+Empty, Loading, Error States
+
+Reconcile card:
+
+Empty: “No sales found for this store/date.”
+
+Loading skeletons while fetching; clear errors with retry.
+
+Table:
+
+Empty state message + link “Create Settlement”.
+
+Accessibility & QA
+
+Keyboard-navigable modal and grid.
+
+Proper input labels, aria attributes.
+
+Format currency with thousands separators, 2 decimals.
+
+Success Criteria (Acceptances)
+
+I can pick G01 and 2025-08-21, click Refresh Reconcile, and see the per-method expected totals.
+
+I can click Create Settlement, enter actuals per method, and see live diffs before saving.
+
+Saving issues a POST /settlements with the body shown above and updates the table and the reconcile card.
+
+I can View/Edit/Delete an existing settlement via row actions, with correct PUT/DELETE calls and UI updates.
+
+All amounts and totals match the API responses; status badges reflect diffs correctly.
+
+Visual Style
+
+Minimal, monochrome (black/white/gray), clean spacing, clear hierarchy, subtle dividers, status badges (OK/WARN/FAIL).
+
+Sample Payloads (reuse verbatim)
+
+Use these exact examples when mocking or wiring:
+
+GET /price/quote → (see example above)
+
+POST /sales → (see example above)
+
+GET /settlements/reconcile → (see example above)
