@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { isUnauthorizedError } from "@/lib/authUtils";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -15,6 +16,7 @@ import { ImportModal } from "@/components/import-modal";
 import { apiRequest } from "@/lib/queryClient";
 import { Sidebar } from "@/components/sidebar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Edit3, Trash2, Plus, Upload } from "lucide-react";
 
 interface TableConfig {
   name: string;
@@ -73,11 +75,6 @@ const tableConfigs: TableConfig[] = [
       { key: 'namaStaff', label: 'Staff Name', type: 'text', required: true },
       { key: 'posisi', label: 'Position', type: 'text', required: true },
       { key: 'kodeGudang', label: 'Store Code', type: 'text', required: true },
-      { key: 'tanggalMasuk', label: 'Join Date', type: 'date' },
-      { key: 'status', label: 'Status', type: 'select', options: [
-        { value: 'active', label: 'Active' },
-        { value: 'inactive', label: 'Inactive' }
-      ]},
     ]
   },
   {
@@ -88,97 +85,140 @@ const tableConfigs: TableConfig[] = [
     keyField: 'discountId',
     fields: [
       { key: 'namaDiscount', label: 'Discount Name', type: 'text', required: true },
-      { key: 'persentaseDiscount', label: 'Discount Percentage', type: 'number', required: true },
-      { key: 'tglMulai', label: 'Start Date', type: 'date' },
-      { key: 'tglSelesai', label: 'End Date', type: 'date' },
+      { key: 'jenisDiscount', label: 'Discount Type', type: 'select', required: true, options: [
+        { value: 'percentage', label: 'Percentage' },
+        { value: 'amount', label: 'Fixed Amount' }
+      ] },
+      { key: 'nilaiDiscount', label: 'Discount Value', type: 'number', required: true },
     ]
   },
   {
     name: 'edc',
-    displayName: 'EDC',
+    displayName: 'EDC / Payment Methods',
     endpoint: '/api/edc',
     importTable: 'edc',
     keyField: 'edcId',
     fields: [
       { key: 'namaEdc', label: 'EDC Name', type: 'text', required: true },
-      { key: 'kodeEdc', label: 'EDC Code', type: 'text', required: true },
-      { key: 'provider', label: 'Provider', type: 'text' },
-      { key: 'merchantId', label: 'Merchant ID', type: 'text' },
+      { key: 'jenisEdc', label: 'EDC Type', type: 'text', required: true },
+      { key: 'biayaAdmin', label: 'Admin Fee', type: 'number' },
     ]
-  },
+  }
 ];
 
-const roleDescriptions = {
-  'SPG': 'Can input sales and settlements (cannot view reconciliation results)',
-  'Supervisor': 'Can input sales, create/check settlements, insert transfer orders, update opening stock, update pricelist and discounts, view dashboards',
-  'Stockist': 'Can insert transfer orders, update opening stock, update reference sheet & stores, view stock ledger and dashboards',
-  'Sales Administrator': 'Can view/verify all settlements & sales, view dashboards, access pricelist & discounts',
-  'Finance': 'Can manage payment methods, view all settlements & sales, view sales dashboard',
-  'System Administrator': 'Full access to all features and user management'
-};
+function useTableData(endpoint: string) {
+  return useQuery({
+    queryKey: [endpoint],
+    queryFn: async () => {
+      const response = await fetch(endpoint, {
+        credentials: 'include',
+      });
+      if (!response.ok) {
+        throw new Error(`${response.status}: ${response.statusText}`);
+      }
+      return response.json();
+    },
+    retry: false,
+  });
+}
 
 export default function AdminSettings() {
   const [activeTab, setActiveTab] = useState('reference-sheet');
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
+  const [editingItem, setEditingItem] = useState<string | null>(null);
   const [formData, setFormData] = useState<Record<string, string>>({});
   
   // User Management State
   const [userSearchTerm, setUserSearchTerm] = useState<string>('');
   const [userRoleFilter, setUserRoleFilter] = useState<string>('');
+  
+  // Data Selection State
+  const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
+  const [selectAll, setSelectAll] = useState(false);
 
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  // Check if user is System Administrator
-  const isSystemAdmin = true; // For now, hardcoded - in real app: user?.role === 'System Administrator'
+  // Selection handlers
+  const handleSelectAll = (checked: boolean, data: any[], config: TableConfig) => {
+    if (checked) {
+      const allIds = new Set(data.map(item => item[config.keyField]));
+      setSelectedItems(allIds);
+      setSelectAll(true);
+    } else {
+      setSelectedItems(new Set());
+      setSelectAll(false);
+    }
+  };
 
-  if (!isSystemAdmin) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 dark:from-slate-900 dark:via-slate-800 dark:to-indigo-900 flex items-center justify-center">
-        <Card className="w-96 bg-white/10 dark:bg-black/10 backdrop-blur-xl border-white/20 dark:border-gray-800/50">
-          <CardContent className="p-6 text-center">
-            <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Access Denied</h2>
-            <p className="text-gray-600 dark:text-gray-400">You must be a System Administrator to access Admin Settings.</p>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
+  const handleSelectItem = (itemId: string, checked: boolean) => {
+    const newSelected = new Set(selectedItems);
+    if (checked) {
+      newSelected.add(itemId);
+    } else {
+      newSelected.delete(itemId);
+      setSelectAll(false);
+    }
+    setSelectedItems(newSelected);
+  };
+
+  const handleBulkDelete = async (config: TableConfig) => {
+    if (selectedItems.size === 0) {
+      toast({
+        title: "No Selection",
+        description: "Please select items to delete",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      for (const itemId of Array.from(selectedItems)) {
+        await apiRequest('DELETE', `${config.endpoint}/${itemId}`);
+      }
+      
+      queryClient.invalidateQueries({ queryKey: [config.endpoint] });
+      setSelectedItems(new Set());
+      setSelectAll(false);
+      
+      toast({
+        title: "Success",
+        description: `Deleted ${selectedItems.size} items`,
+      });
+    } catch (error) {
+      toast({
+        title: "Delete Failed",
+        description: (error as Error).message || "Failed to delete items",
+        variant: "destructive",
+      });
+    }
+  };
 
   const getCurrentConfig = () => {
     return tableConfigs.find(config => config.name === activeTab);
   };
 
-  const useTableData = (endpoint: string) => {
-    return useQuery({
-      queryKey: [endpoint],
-      retry: false,
-    });
-  };
-
-  const createMutation = useMutation({
-    mutationFn: async (data: any) => {
-      const config = getCurrentConfig();
-      if (!config) throw new Error('Invalid table configuration');
-      
-      return await apiRequest('POST', `${config.endpoint}`, data);
+  const deleteMutation = useMutation({
+    mutationFn: async ({ endpoint, id }: { endpoint: string; id: string }) => {
+      const response = await apiRequest('DELETE', `${endpoint}/${id}`);
+      return response;
     },
     onSuccess: () => {
       const config = getCurrentConfig();
       if (config) {
         queryClient.invalidateQueries({ queryKey: [config.endpoint] });
       }
-      setShowCreateModal(false);
-      setFormData({});
+      
       toast({
         title: "Success",
-        description: "Record created successfully",
+        description: "Record deleted successfully",
       });
     },
     onError: (error) => {
-      if (isUnauthorizedError(error)) {
+      if (isUnauthorizedError(error as Error)) {
         toast({
           title: "Unauthorized",
           description: "You are logged out. Logging in again...",
@@ -189,17 +229,113 @@ export default function AdminSettings() {
         }, 500);
         return;
       }
+      
       toast({
-        title: "Error",
-        description: "Failed to create record",
+        title: "Delete Failed",
+        description: (error as Error).message || "Failed to delete record",
         variant: "destructive",
       });
     },
   });
 
+  const createMutation = useMutation({
+    mutationFn: async (data: Record<string, string>) => {
+      const config = getCurrentConfig();
+      if (!config) throw new Error('No configuration found');
+      
+      const response = await apiRequest('POST', config.endpoint, data);
+      return response.json();
+    },
+    onSuccess: () => {
+      const config = getCurrentConfig();
+      if (config) {
+        queryClient.invalidateQueries({ queryKey: [config.endpoint] });
+      }
+      
+      setShowCreateModal(false);
+      setFormData({});
+      
+      toast({
+        title: "Success",
+        description: "Record created successfully",
+      });
+    },
+    onError: (error) => {
+      if (isUnauthorizedError(error as Error)) {
+        toast({
+          title: "Unauthorized",
+          description: "You are logged out. Logging in again...",
+          variant: "destructive",
+        });
+        setTimeout(() => {
+          window.location.href = "/api/login";
+        }, 500);
+        return;
+      }
+      
+      toast({
+        title: "Creation Failed",
+        description: (error as Error).message || "Failed to create record",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: async (data: Record<string, string>) => {
+      const config = getCurrentConfig();
+      if (!config || !editingItem) throw new Error('No configuration or item found');
+      
+      const response = await apiRequest('PUT', `${config.endpoint}/${editingItem}`, data);
+      return response.json();
+    },
+    onSuccess: () => {
+      const config = getCurrentConfig();
+      if (config) {
+        queryClient.invalidateQueries({ queryKey: [config.endpoint] });
+      }
+      
+      setShowEditModal(false);
+      setEditingItem(null);
+      setFormData({});
+      
+      toast({
+        title: "Success",
+        description: "Record updated successfully",
+      });
+    },
+    onError: (error) => {
+      if (isUnauthorizedError(error as Error)) {
+        toast({
+          title: "Unauthorized",
+          description: "You are logged out. Logging in again...",
+          variant: "destructive",
+        });
+        setTimeout(() => {
+          window.location.href = "/api/login";
+        }, 500);
+        return;
+      }
+      
+      toast({
+        title: "Update Failed",
+        description: (error as Error).message || "Failed to update record",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleDelete = (endpoint: string, id: string) => {
+    deleteMutation.mutate({ endpoint, id });
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    createMutation.mutate(formData);
+    if (editingItem) {
+      updateMutation.mutate(formData);
+    } else {
+      createMutation.mutate(formData);
+    }
   };
 
   const handleImportSuccess = () => {
@@ -235,21 +371,36 @@ export default function AdminSettings() {
             <p className="text-gray-600 dark:text-gray-400 mt-1">
               Manage {config.displayName.toLowerCase()} records
             </p>
+            {selectedItems.size > 0 && (
+              <Badge variant="secondary" className="mt-2">
+                {selectedItems.size} selected
+              </Badge>
+            )}
           </div>
           <div className="flex space-x-2">
+            {selectedItems.size > 0 && (
+              <Button
+                onClick={() => handleBulkDelete(config)}
+                variant="destructive"
+                size="sm"
+                data-testid={`button-delete-selected-${config.name}`}
+              >
+                Delete Selected ({selectedItems.size})
+              </Button>
+            )}
             <Button
               onClick={() => setShowImportModal(true)}
               variant="outline"
               data-testid={`button-import-${config.name}`}
             >
-              <i className="fas fa-file-import mr-2"></i>
+              <Upload className="h-4 w-4 mr-2" />
               Import CSV/Excel
             </Button>
             <Button
               onClick={() => setShowCreateModal(true)}
               data-testid={`button-create-${config.name}`}
             >
-              <i className="fas fa-plus mr-2"></i>
+              <Plus className="h-4 w-4 mr-2" />
               Add New
             </Button>
           </div>
@@ -266,33 +417,81 @@ export default function AdminSettings() {
             ) : (
               <div className="space-y-4">
                 {Array.isArray(data) && data.length > 0 ? (
-                  <div className="grid gap-4">
-                    {data.map((item: any, index: number) => (
-                      <div key={item[config.keyField] || index} className="p-4 bg-white/5 dark:bg-black/5 rounded-lg">
-                        <div className="flex justify-between items-start">
-                          <div className="grid grid-cols-2 md:grid-cols-3 gap-4 flex-1">
-                            {config.fields.slice(0, 6).map((field) => (
-                              <div key={field.key}>
-                                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                                  {field.label}:
-                                </span>
-                                <p className="text-gray-900 dark:text-white mt-1">
-                                  {item[field.key] || '-'}
-                                </p>
+                  <div className="space-y-4">
+                    {/* Select All Header */}
+                    <div className="flex items-center space-x-2 p-3 bg-white/10 dark:bg-black/10 rounded-lg">
+                      <Checkbox
+                        checked={selectAll}
+                        onCheckedChange={(checked) => handleSelectAll(!!checked, data, config)}
+                        data-testid={`checkbox-select-all-${config.name}`}
+                      />
+                      <Label className="text-sm font-medium">
+                        Select All ({data.length} items)
+                      </Label>
+                    </div>
+                    
+                    <div className="grid gap-4">
+                      {data.map((item: any, index: number) => {
+                        const itemId = item[config.keyField] || index;
+                        const isSelected = selectedItems.has(itemId);
+                        
+                        return (
+                          <div key={itemId} className={`p-4 rounded-lg transition-colors ${
+                            isSelected 
+                              ? 'bg-blue-50 dark:bg-blue-900/20 border-2 border-blue-200 dark:border-blue-700' 
+                              : 'bg-white/5 dark:bg-black/5 border border-transparent'
+                          }`}>
+                            <div className="flex items-start space-x-3">
+                              <Checkbox
+                                checked={isSelected}
+                                onCheckedChange={(checked) => handleSelectItem(itemId, !!checked)}
+                                data-testid={`checkbox-select-${config.name}-${itemId}`}
+                                className="mt-1"
+                              />
+                              <div className="flex justify-between items-start flex-1">
+                                <div className="grid grid-cols-2 md:grid-cols-3 gap-4 flex-1">
+                                  {config.fields.slice(0, 6).map((field) => (
+                                    <div key={field.key}>
+                                      <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                                        {field.label}:
+                                      </span>
+                                      <div className="text-gray-900 dark:text-white break-words">
+                                        {typeof item[field.key] === 'object' && item[field.key] !== null 
+                                          ? JSON.stringify(item[field.key])
+                                          : (item[field.key] || 'N/A')
+                                        }
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                                <div className="flex space-x-2 ml-4">
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => {
+                                      setFormData(item);
+                                      setShowEditModal(true);
+                                      setEditingItem(item[config.keyField]);
+                                    }}
+                                    data-testid={`button-edit-${item[config.keyField]}`}
+                                  >
+                                    <Edit3 className="h-4 w-4" />
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleDelete(config.endpoint, item[config.keyField])}
+                                    data-testid={`button-delete-${item[config.keyField]}`}
+                                  >
+                                    <Trash2 className="h-4 w-4 text-red-500" />
+                                  </Button>
+                                </div>
                               </div>
-                            ))}
+                            </div>
                           </div>
-                          <div className="flex space-x-2">
-                            <Button variant="outline" size="sm" data-testid={`button-edit-${item[config.keyField]}`}>
-                              <i className="fas fa-edit"></i>
-                            </Button>
-                            <Button variant="outline" size="sm" data-testid={`button-delete-${item[config.keyField]}`}>
-                              <i className="fas fa-trash"></i>
-                            </Button>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
+                        );
+                      })}
+                    </div>
                   </div>
                 ) : (
                   <div className="text-center py-8">
@@ -307,247 +506,74 @@ export default function AdminSettings() {
     );
   };
 
-  const renderUserManagement = () => {
-    // Mock user data - in real app this would come from API
-    const mockUsers = [
-      { id: 1, name: 'John Doe', email: 'john@example.com', roles: ['Supervisor'], status: 'Active', lastLogin: '2024-01-15' },
-      { id: 2, name: 'Jane Smith', email: 'jane@example.com', roles: ['SPG'], status: 'Active', lastLogin: '2024-01-14' },
-      { id: 3, name: 'Bob Wilson', email: 'bob@example.com', roles: ['Stockist'], status: 'Inactive', lastLogin: '2024-01-10' },
-      { id: 4, name: 'Alice Johnson', email: 'alice@example.com', roles: ['Finance'], status: 'Active', lastLogin: '2024-01-15' },
-      { id: 5, name: 'Charlie Brown', email: 'charlie@example.com', roles: ['System Administrator'], status: 'Active', lastLogin: '2024-01-15' },
-    ];
-
-    // Filter users based on search and role
-    const filteredUsers = mockUsers.filter((user) => {
-      const matchesSearch = user.name.toLowerCase().includes(userSearchTerm.toLowerCase()) ||
-                           user.email.toLowerCase().includes(userSearchTerm.toLowerCase());
-      const matchesRole = !userRoleFilter || user.roles.includes(userRoleFilter);
-      return matchesSearch && matchesRole;
-    });
-
-    const getRoleBadgeColor = (role: string) => {
-      const colors = {
-        'SPG': 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300',
-        'Supervisor': 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300',
-        'Stockist': 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300',
-        'Sales Administrator': 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300',
-        'Finance': 'bg-pink-100 dark:bg-pink-900/30 text-pink-700 dark:text-pink-300',
-        'System Administrator': 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300',
-      };
-      return colors[role as keyof typeof colors] || 'bg-gray-100 dark:bg-gray-900/30 text-gray-700 dark:text-gray-300';
-    };
-
-    const getStatusColor = (status: string) => {
-      return status === 'Active' 
-        ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300'
-        : 'bg-gray-100 dark:bg-gray-900/30 text-gray-700 dark:text-gray-300';
-    };
-
-    return (
-      <div className="space-y-6">
-        <div className="flex justify-between items-center">
-          <div>
-            <h3 className="text-xl font-semibold text-gray-900 dark:text-white">
-              User Management
-            </h3>
-            <p className="text-gray-600 dark:text-gray-400 mt-1">
-              Manage user accounts and role assignments
-            </p>
-          </div>
-          <div className="flex items-center space-x-4">
-            <Button
-              variant="outline"
-              onClick={() => setShowImportModal(true)}
-              data-testid="button-import-users"
-            >
-              <i className="fas fa-file-import mr-2"></i>
-              Import Users
-            </Button>
-            <Button data-testid="button-add-user">
-              <i className="fas fa-plus mr-2"></i>
-              Add User
-            </Button>
-          </div>
-        </div>
-
-        {/* Filters */}
-        <Card className="bg-white/10 dark:bg-black/10 backdrop-blur-xl border-white/20 dark:border-gray-800/50">
-          <CardContent className="p-6">
-            <div className="flex space-x-4">
-              <div className="flex-1">
-                <Input
-                  placeholder="Search users..."
-                  value={userSearchTerm}
-                  onChange={(e) => setUserSearchTerm(e.target.value)}
-                  className="bg-white/5 dark:bg-black/5 border-white/20 dark:border-gray-700/50"
-                  data-testid="input-user-search"
-                />
-              </div>
-              <div className="w-48">
-                <Select value={userRoleFilter} onValueChange={setUserRoleFilter}>
-                  <SelectTrigger className="bg-white/5 dark:bg-black/5 border-white/20 dark:border-gray-700/50" data-testid="select-role-filter">
-                    <SelectValue placeholder="Filter by role" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="">All Roles</SelectItem>
-                    <SelectItem value="SPG">SPG</SelectItem>
-                    <SelectItem value="Supervisor">Supervisor</SelectItem>
-                    <SelectItem value="Stockist">Stockist</SelectItem>
-                    <SelectItem value="Sales Administrator">Sales Administrator</SelectItem>
-                    <SelectItem value="Finance">Finance</SelectItem>
-                    <SelectItem value="System Administrator">System Administrator</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* User List */}
-        <Card className="bg-white/10 dark:bg-black/10 backdrop-blur-xl border-white/20 dark:border-gray-800/50">
-          <CardContent className="p-6">
-            <div className="space-y-4">
-              {filteredUsers.map((user) => (
-                <div key={user.id} className="p-4 bg-white/5 dark:bg-black/5 rounded-lg">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-4">
-                      <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
-                        <span className="text-white font-medium">
-                          {user.name.split(' ').map(n => n[0]).join('')}
-                        </span>
-                      </div>
-                      <div>
-                        <h4 className="font-medium text-gray-900 dark:text-white">{user.name}</h4>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">{user.email}</p>
-                        <p className="text-xs text-gray-500 dark:text-gray-500">Last login: {user.lastLogin}</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center space-x-4">
-                      <div className="flex flex-wrap gap-1">
-                        {user.roles.map((role) => (
-                          <Badge
-                            key={role}
-                            className={getRoleBadgeColor(role)}
-                            data-testid={`badge-role-${role.toLowerCase().replace(' ', '-')}`}
-                          >
-                            {role}
-                          </Badge>
-                        ))}
-                      </div>
-                      <Badge
-                        className={getStatusColor(user.status)}
-                        data-testid={`badge-status-${user.status.toLowerCase()}`}
-                      >
-                        {user.status}
-                      </Badge>
-                      <div className="flex space-x-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          data-testid={`button-edit-user-${user.id}`}
-                        >
-                          <i className="fas fa-edit"></i>
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          data-testid={`button-delete-user-${user.id}`}
-                        >
-                          <i className="fas fa-trash"></i>
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Role Descriptions */}
-        <Card className="bg-white/10 dark:bg-black/10 backdrop-blur-xl border-white/20 dark:border-gray-800/50">
-          <CardHeader>
-            <CardTitle className="text-gray-900 dark:text-white">Role Descriptions</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-4">
-              {Object.entries(roleDescriptions).map(([role, description]) => (
-                <div key={role} className="p-3 bg-white/5 dark:bg-black/5 rounded-lg">
-                  <div className="flex items-start space-x-3">
-                    <Badge className={getRoleBadgeColor(role)}>
-                      {role}
-                    </Badge>
-                    <p className="text-sm text-gray-700 dark:text-gray-300 flex-1">
-                      {description}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  };
+  if (!user) {
+    return <div>Please log in to access admin settings.</div>;
+  }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 dark:from-slate-900 dark:via-slate-800 dark:to-indigo-900">
+    <div className="flex h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 dark:from-gray-900 dark:via-blue-900 dark:to-indigo-950">
       <Sidebar />
       
-      <div className="ml-64 flex-1">
-        {/* Header */}
-        <header className="bg-white/10 dark:bg-black/10 backdrop-blur-xl border-b border-white/20 dark:border-gray-800/50 px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-3xl font-bold text-gray-900 dark:text-white">Admin Settings</h2>
-              <p className="text-gray-600 dark:text-gray-400 mt-1">Manage system configuration and master data</p>
+      <div className="flex-1 flex flex-col overflow-hidden ml-64">
+        <div className="flex-1 overflow-y-auto p-8">
+          <div className="max-w-7xl mx-auto">
+            <div className="mb-8">
+              <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+                Admin Settings
+              </h1>
+              <p className="text-gray-600 dark:text-gray-400 mt-2">
+                Manage system settings, master data, and user permissions
+              </p>
             </div>
+
+            <Tabs value={activeTab} onValueChange={setActiveTab}>
+              <TabsList className="grid w-full grid-cols-6 bg-white/10 dark:bg-black/10 backdrop-blur-xl border-white/20 dark:border-gray-800/50">
+                <TabsTrigger value="reference-sheet" data-testid="tab-reference-sheet">Reference Sheet</TabsTrigger>
+                <TabsTrigger value="stores" data-testid="tab-stores">Stores</TabsTrigger>
+                <TabsTrigger value="staff" data-testid="tab-staff">Staff</TabsTrigger>
+                <TabsTrigger value="discounts" data-testid="tab-discounts">Discounts</TabsTrigger>
+                <TabsTrigger value="edc" data-testid="tab-edc">EDC</TabsTrigger>
+                <TabsTrigger value="users" data-testid="tab-users">Users</TabsTrigger>
+              </TabsList>
+
+              {tableConfigs.map((config) => (
+                <TabsContent key={config.name} value={config.name} className="mt-6">
+                  {renderTableContent(config)}
+                </TabsContent>
+              ))}
+            </Tabs>
           </div>
-        </header>
-
-        {/* Main Content */}
-        <main className="p-6">
-          <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className="grid w-full grid-cols-6 bg-white/10 dark:bg-black/10 backdrop-blur-xl border-white/20 dark:border-gray-800/50">
-              <TabsTrigger value="reference-sheet" data-testid="tab-reference-sheet">Reference Sheet</TabsTrigger>
-              <TabsTrigger value="stores" data-testid="tab-stores">Stores</TabsTrigger>
-              <TabsTrigger value="staff" data-testid="tab-staff">Staff</TabsTrigger>
-              <TabsTrigger value="discounts" data-testid="tab-discounts">Discounts</TabsTrigger>
-              <TabsTrigger value="edc" data-testid="tab-edc">EDC</TabsTrigger>
-              <TabsTrigger value="users" data-testid="tab-users">Users</TabsTrigger>
-            </TabsList>
-
-            {tableConfigs.map((config) => (
-              <TabsContent key={config.name} value={config.name} className="mt-6">
-                {renderTableContent(config)}
-              </TabsContent>
-            ))}
-
-            <TabsContent value="users" className="mt-6">
-              {renderUserManagement()}
-            </TabsContent>
-          </Tabs>
-        </main>
+        </div>
       </div>
 
-      {/* Create Modal */}
-      <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
-        <DialogContent className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white shadow-2xl">
+      {/* Create/Edit Modal */}
+      <Dialog open={showCreateModal || showEditModal} onOpenChange={(open) => {
+        if (!open) {
+          setShowCreateModal(false);
+          setShowEditModal(false);
+          setEditingItem(null);
+          setFormData({});
+        }
+      }}>
+        <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Add New {getCurrentConfig()?.displayName}</DialogTitle>
+            <DialogTitle>
+              {editingItem ? 'Edit' : 'Create'} {getCurrentConfig()?.displayName} Record
+            </DialogTitle>
           </DialogHeader>
+          
           <form onSubmit={handleSubmit} className="space-y-4">
             {getCurrentConfig()?.fields.map((field) => (
               <div key={field.key}>
-                <Label htmlFor={field.key} className="text-gray-900 dark:text-gray-100 font-medium">
-                  {field.label} {field.required && <span className="text-red-500">*</span>}
+                <Label htmlFor={field.key}>
+                  {field.label} {field.required && '*'}
                 </Label>
                 {field.type === 'select' ? (
-                  <Select
-                    value={formData[field.key] || ''}
+                  <Select 
+                    value={formData[field.key] || ''} 
                     onValueChange={(value) => setFormData({ ...formData, [field.key]: value })}
                   >
-                    <SelectTrigger className="bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white">
+                    <SelectTrigger>
                       <SelectValue placeholder={`Select ${field.label}`} />
                     </SelectTrigger>
                     <SelectContent>
@@ -565,17 +591,34 @@ export default function AdminSettings() {
                     value={formData[field.key] || ''}
                     onChange={(e) => setFormData({ ...formData, [field.key]: e.target.value })}
                     required={field.required}
-                    className="bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white"
+                    data-testid={`input-${field.key}`}
                   />
                 )}
               </div>
             ))}
+            
             <div className="flex justify-end space-x-2 pt-4">
-              <Button type="button" variant="outline" onClick={() => setShowCreateModal(false)}>
+              <Button 
+                type="button" 
+                variant="outline" 
+                onClick={() => {
+                  setShowCreateModal(false);
+                  setShowEditModal(false);
+                  setEditingItem(null);
+                  setFormData({});
+                }}
+              >
                 Cancel
               </Button>
-              <Button type="submit" disabled={createMutation.isPending}>
-                {createMutation.isPending ? 'Creating...' : 'Create'}
+              <Button 
+                type="submit" 
+                disabled={createMutation.isPending || updateMutation.isPending}
+                data-testid="button-submit-form"
+              >
+                {createMutation.isPending || updateMutation.isPending 
+                  ? 'Saving...' 
+                  : editingItem ? 'Update' : 'Create'
+                }
               </Button>
             </div>
           </form>
@@ -583,16 +626,16 @@ export default function AdminSettings() {
       </Dialog>
 
       {/* Import Modal */}
-      {showImportModal && (
-        <ImportModal
-          isOpen={showImportModal}
-          onClose={() => setShowImportModal(false)}
-          title={`Import ${getCurrentConfig()?.displayName || activeTab}`}
-          tableName={getCurrentConfig()?.importTable || activeTab}
-          queryKey={getCurrentConfig()?.endpoint || `/api/${activeTab}`}
-          endpoint="/api/import"
-        />
-      )}
+      <ImportModal
+        isOpen={showImportModal}
+        onClose={() => setShowImportModal(false)}
+        title={`Import ${getCurrentConfig()?.displayName || 'Data'}`}
+        tableName={getCurrentConfig()?.importTable || ''}
+        queryKey={getCurrentConfig()?.endpoint || ''}
+        endpoint="/api/import"
+        acceptedFormats=".csv,.xlsx,.xls"
+        sampleData={getCurrentConfig()?.fields.map(f => f.label) || []}
+      />
     </div>
   );
 }

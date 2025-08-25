@@ -314,6 +314,34 @@ function validateImportData(data: any[], tableName: string, schema: any): { vali
         cleanedRow[mappedKey] = row[key];
       });
       
+      // Special validation for stores - check for blank store code or name
+      if (tableName === 'stores') {
+        if (!cleanedRow.kodeGudang || cleanedRow.kodeGudang.toString().trim() === '') {
+          invalid.push(row);
+          errors.push(`Row ${index + 1}: Store code cannot be blank`);
+          return;
+        }
+        if (!cleanedRow.namaGudang || cleanedRow.namaGudang.toString().trim() === '') {
+          invalid.push(row);
+          errors.push(`Row ${index + 1}: Store name cannot be blank`);
+          return;
+        }
+      }
+      
+      // Special validation for reference sheet - check for blank item code or name
+      if (tableName === 'reference-sheet') {
+        if (!cleanedRow.kodeItem || cleanedRow.kodeItem.toString().trim() === '') {
+          invalid.push(row);
+          errors.push(`Row ${index + 1}: Item code cannot be blank`);
+          return;
+        }
+        if (!cleanedRow.namaItem || cleanedRow.namaItem.toString().trim() === '') {
+          invalid.push(row);
+          errors.push(`Row ${index + 1}: Item name cannot be blank`);
+          return;
+        }
+      }
+      
       const validated = schema.parse(cleanedRow);
       valid.push(validated);
     } catch (error) {

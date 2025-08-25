@@ -366,7 +366,7 @@ export function ImportModal({
                             <TableHead className="w-12">#</TableHead>
                             <TableHead>Data</TableHead>
                             <TableHead>Error</TableHead>
-                            <TableHead className="w-20">Action</TableHead>
+                            <TableHead className="w-24">Action</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -392,6 +392,7 @@ export function ImportModal({
                                   variant="outline"
                                   onClick={() => handleEditRecord(failedRecord.record, index)}
                                   data-testid={`button-edit-failed-record-${index}`}
+                                  className="w-full"
                                 >
                                   Edit
                                 </Button>
