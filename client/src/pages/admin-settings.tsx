@@ -66,15 +66,32 @@ const tableConfigs: TableConfig[] = [
     ]
   },
   {
+    name: 'positions',
+    displayName: 'Positions',
+    endpoint: '/api/positions',
+    importTable: 'positions',
+    keyField: 'positionId',
+    fields: [
+      { key: 'positionName', label: 'Position Name', type: 'text', required: true },
+      { key: 'description', label: 'Description', type: 'text' },
+    ]
+  },
+  {
     name: 'staff',
     displayName: 'Staff',
     endpoint: '/api/staff',
     importTable: 'staff',
-    keyField: 'staffId',
+    keyField: 'employeeId',
     fields: [
-      { key: 'namaStaff', label: 'Staff Name', type: 'text', required: true },
-      { key: 'posisi', label: 'Position', type: 'text', required: true },
-      { key: 'kodeGudang', label: 'Store Code', type: 'text', required: true },
+      { key: 'email', label: 'Email', type: 'text', required: true },
+      { key: 'namaLengkap', label: 'Full Name', type: 'text', required: true },
+      { key: 'kota', label: 'City', type: 'text' },
+      { key: 'alamat', label: 'Address', type: 'text' },
+      { key: 'noHp', label: 'Phone Number', type: 'text' },
+      { key: 'tempatLahir', label: 'Place of Birth', type: 'text' },
+      { key: 'tanggalLahir', label: 'Date of Birth', type: 'date' },
+      { key: 'tanggalMasuk', label: 'Date Joined', type: 'date' },
+      { key: 'jabatan', label: 'Position', type: 'select', required: true, options: [] },
     ]
   },
   {
@@ -123,6 +140,25 @@ function useTableData(endpoint: string) {
 }
 
 export default function AdminSettings() {
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  // Fetch positions for staff form  
+  const { data: positions = [] } = useQuery({
+    queryKey: ['/api/positions'],
+    queryFn: async () => {
+      const response = await fetch('/api/positions', {
+        credentials: 'include',
+      });
+      if (!response.ok) {
+        throw new Error(`${response.status}: ${response.statusText}`);
+      }
+      return response.json();
+    },
+    retry: false,
+  });
+
   const [activeTab, setActiveTab] = useState('reference-sheet');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -137,10 +173,6 @@ export default function AdminSettings() {
   // Data Selection State
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
   const [selectAll, setSelectAll] = useState(false);
-
-  const { user } = useAuth();
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
 
   // Selection handlers
   const handleSelectAll = (checked: boolean, data: any[], config: TableConfig) => {
@@ -198,7 +230,20 @@ export default function AdminSettings() {
   };
 
   const getCurrentConfig = () => {
-    return tableConfigs.find(config => config.name === activeTab);
+    const config = tableConfigs.find(config => config.name === activeTab);
+    // Dynamically populate position options for staff
+    if (config?.name === 'staff') {
+      const updatedConfig = { ...config };
+      const jabatanField = updatedConfig.fields.find(f => f.key === 'jabatan');
+      if (jabatanField) {
+        jabatanField.options = positions.map((pos: any) => ({
+          value: pos.positionName,
+          label: pos.positionName
+        }));
+      }
+      return updatedConfig;
+    }
+    return config;
   };
 
   const deleteMutation = useMutation({
