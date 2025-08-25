@@ -891,7 +891,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { refId } = req.params;
       const validatedData = insertReferenceSheetSchema.partial().parse(req.body);
-      const referenceSheet = await storage.updateReferenceSheet(refId, validatedData);
+      const referenceSheet = await storage.updateReferenceSheet(parseInt(refId), validatedData);
       res.json(referenceSheet);
     } catch (error) {
       console.error('Reference sheet update error:', error);
@@ -906,7 +906,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete('/api/reference-sheets/:refId', isAuthenticated, checkRole(['System Administrator']), async (req, res) => {
     try {
       const { refId } = req.params;
-      await storage.deleteReferenceSheet(refId);
+      await storage.deleteReferenceSheet(parseInt(refId));
       res.json({ success: true });
     } catch (error) {
       console.error('Reference sheet deletion error:', error);
@@ -942,7 +942,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { discountId } = req.params;
       const validatedData = insertDiscountTypeSchema.partial().parse(req.body);
-      const discount = await storage.updateDiscountType(discountId, validatedData);
+      const discount = await storage.updateDiscountType(parseInt(discountId), validatedData);
       res.json(discount);
     } catch (error) {
       console.error('Discount update error:', error);
@@ -957,7 +957,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete('/api/discounts/:discountId', isAuthenticated, checkRole(['System Administrator']), async (req, res) => {
     try {
       const { discountId } = req.params;
-      await storage.deleteDiscountType(discountId);
+      await storage.deleteDiscountType(parseInt(discountId));
       res.json({ success: true });
     } catch (error) {
       console.error('Discount deletion error:', error);
@@ -976,12 +976,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post('/api/edc', isAuthenticated, checkRole(['System Administrator']), async (req, res) => {
     try {
-      const edcSchema = z.object({
-        namaEdc: z.string(),
-        jenisEdc: z.string(),
-        biayaAdmin: z.coerce.number().optional(),
-      });
-      const validatedData = edcSchema.parse(req.body);
+      const validatedData = z.object({
+        merchantName: z.string(),
+        edcType: z.string()
+      }).parse(req.body);
       const edc = await storage.createEdc(validatedData);
       res.json(edc);
     } catch (error) {
@@ -997,13 +995,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put('/api/edc/:edcId', isAuthenticated, checkRole(['System Administrator']), async (req, res) => {
     try {
       const { edcId } = req.params;
-      const edcSchema = z.object({
-        namaEdc: z.string().optional(),
-        jenisEdc: z.string().optional(),
-        biayaAdmin: z.coerce.number().optional(),
-      });
-      const validatedData = edcSchema.parse(req.body);
-      const edc = await storage.updateEdc(edcId, validatedData);
+      const validatedData = z.object({
+        merchantName: z.string().optional(),
+        edcType: z.string().optional()
+      }).parse(req.body);
+      const edc = await storage.updateEdc(parseInt(edcId), validatedData);
       res.json(edc);
     } catch (error) {
       console.error('EDC update error:', error);
@@ -1018,7 +1014,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete('/api/edc/:edcId', isAuthenticated, checkRole(['System Administrator']), async (req, res) => {
     try {
       const { edcId } = req.params;
-      await storage.deleteEdc(edcId);
+      await storage.deleteEdc(parseInt(edcId));
       res.json({ success: true });
     } catch (error) {
       console.error('EDC deletion error:', error);
@@ -1050,11 +1046,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put('/api/staff/:staffId', isAuthenticated, checkRole(['System Administrator']), async (req, res) => {
+  app.put('/api/staff/:employeeId', isAuthenticated, checkRole(['System Administrator']), async (req, res) => {
     try {
-      const { staffId } = req.params;
+      const { employeeId } = req.params;
       const validatedData = insertStaffSchema.partial().parse(req.body);
-      const staff = await storage.updateStaff(staffId, validatedData);
+      const staff = await storage.updateStaff(parseInt(employeeId), validatedData);
       res.json(staff);
     } catch (error) {
       console.error('Staff update error:', error);
@@ -1066,10 +1062,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete('/api/staff/:staffId', isAuthenticated, checkRole(['System Administrator']), async (req, res) => {
+  app.delete('/api/staff/:employeeId', isAuthenticated, checkRole(['System Administrator']), async (req, res) => {
     try {
-      const { staffId } = req.params;
-      await storage.deleteStaff(staffId);
+      const { employeeId } = req.params;
+      await storage.deleteStaff(parseInt(employeeId));
       res.json({ success: true });
     } catch (error) {
       console.error('Staff deletion error:', error);

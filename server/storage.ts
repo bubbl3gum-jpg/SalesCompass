@@ -59,8 +59,8 @@ export interface IStorage {
   // Reference Sheet operations
   getReferenceSheets(): Promise<ReferenceSheet[]>;
   createReferenceSheet(data: InsertReferenceSheet): Promise<ReferenceSheet>;
-  updateReferenceSheet(refId: string, data: Partial<InsertReferenceSheet>): Promise<ReferenceSheet>;
-  deleteReferenceSheet(refId: string): Promise<void>;
+  updateReferenceSheet(refId: number, data: Partial<InsertReferenceSheet>): Promise<ReferenceSheet>;
+  deleteReferenceSheet(refId: number): Promise<void>;
   getReferenceSheetByKodeItem(kodeItem: string): Promise<ReferenceSheet | undefined>;
 
   // Store operations
@@ -71,8 +71,8 @@ export interface IStorage {
   // Discount operations
   getDiscountTypes(): Promise<DiscountType[]>;
   createDiscountType(data: InsertDiscountType): Promise<DiscountType>;
-  updateDiscountType(discountId: string, data: Partial<InsertDiscountType>): Promise<DiscountType>;
-  deleteDiscountType(discountId: string): Promise<void>;
+  updateDiscountType(discountId: number, data: Partial<InsertDiscountType>): Promise<DiscountType>;
+  deleteDiscountType(discountId: number): Promise<void>;
 
   // Pricelist operations
   getPricelist(): Promise<Pricelist[]>;
@@ -108,8 +108,8 @@ export interface IStorage {
   // EDC operations
   getEdc(): Promise<Edc[]>;
   createEdc(data: InsertEdc): Promise<Edc>;
-  updateEdc(edcId: string, data: Partial<InsertEdc>): Promise<Edc>;
-  deleteEdc(edcId: string): Promise<void>;
+  updateEdc(edcId: number, data: Partial<InsertEdc>): Promise<Edc>;
+  deleteEdc(edcId: number): Promise<void>;
   getStoreEdc(): Promise<StoreEdc[]>;
   createStoreEdc(data: InsertStoreEdc): Promise<StoreEdc>;
   createEdcSettlement(data: InsertEdcSettlement): Promise<EdcSettlement>;
@@ -117,8 +117,8 @@ export interface IStorage {
   // Staff operations
   getStaff(): Promise<Staff[]>;
   createStaff(data: InsertStaff): Promise<Staff>;
-  updateStaff(staffId: string, data: Partial<InsertStaff>): Promise<Staff>;
-  deleteStaff(staffId: string): Promise<void>;
+  updateStaff(employeeId: number, data: Partial<InsertStaff>): Promise<Staff>;
+  deleteStaff(employeeId: number): Promise<void>;
   
   // Transfer order item list operations
   createToItemList(data: InsertToItemList): Promise<ToItemList>;
@@ -157,7 +157,7 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
-  async updateReferenceSheet(refId: string, data: Partial<InsertReferenceSheet>): Promise<ReferenceSheet> {
+  async updateReferenceSheet(refId: number, data: Partial<InsertReferenceSheet>): Promise<ReferenceSheet> {
     const [result] = await db.update(referenceSheet)
       .set(data)
       .where(eq(referenceSheet.refId, refId))
@@ -165,7 +165,7 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
-  async deleteReferenceSheet(refId: string): Promise<void> {
+  async deleteReferenceSheet(refId: number): Promise<void> {
     await db.delete(referenceSheet).where(eq(referenceSheet.refId, refId));
   }
 
@@ -199,7 +199,7 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
-  async updateDiscountType(discountId: string, data: Partial<InsertDiscountType>): Promise<DiscountType> {
+  async updateDiscountType(discountId: number, data: Partial<InsertDiscountType>): Promise<DiscountType> {
     const [result] = await db.update(discountTypes)
       .set(data)
       .where(eq(discountTypes.discountId, discountId))
@@ -207,7 +207,7 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
-  async deleteDiscountType(discountId: string): Promise<void> {
+  async deleteDiscountType(discountId: number): Promise<void> {
     await db.delete(discountTypes).where(eq(discountTypes.discountId, discountId));
   }
 
@@ -351,7 +351,7 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
-  async updateEdc(edcId: string, data: Partial<InsertEdc>): Promise<Edc> {
+  async updateEdc(edcId: number, data: Partial<InsertEdc>): Promise<Edc> {
     const [result] = await db.update(edc)
       .set(data)
       .where(eq(edc.edcId, edcId))
@@ -359,7 +359,7 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
-  async deleteEdc(edcId: string): Promise<void> {
+  async deleteEdc(edcId: number): Promise<void> {
     await db.delete(edc).where(eq(edc.edcId, edcId));
   }
   
@@ -387,16 +387,16 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
-  async updateStaff(staffId: string, data: Partial<InsertStaff>): Promise<Staff> {
+  async updateStaff(employeeId: number, data: Partial<InsertStaff>): Promise<Staff> {
     const [result] = await db.update(staff)
       .set(data)
-      .where(eq(staff.staffId, staffId))
+      .where(eq(staff.employeeId, employeeId))
       .returning();
     return result;
   }
 
-  async deleteStaff(staffId: string): Promise<void> {
-    await db.delete(staff).where(eq(staff.staffId, staffId));
+  async deleteStaff(employeeId: number): Promise<void> {
+    await db.delete(staff).where(eq(staff.employeeId, employeeId));
   }
   
   // Transfer order item list operations
