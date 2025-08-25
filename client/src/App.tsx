@@ -13,6 +13,7 @@ import SalesEntry from "@/pages/sales-entry";
 import Settlements from "@/pages/settlements";
 import StockDashboard from "@/pages/stock-dashboard";
 import StockOpname from "@/pages/stock-opname";
+import StoresOverview from "@/pages/stores-overview";
 import Transfers from "@/pages/transfers";
 import PriceLists from "@/pages/price-lists";
 import Discounts from "@/pages/discounts";
@@ -33,6 +34,7 @@ function Router() {
           <Route path="/settlements" component={Settlements} />
           <Route path="/stock-dashboard" component={StockDashboard} />
           <Route path="/stock-opname" component={StockOpname} />
+          <Route path="/stores-overview" component={StoresOverview} />
           <Route path="/transfers" component={Transfers} />
           <Route path="/price-lists" component={PriceLists} />
           <Route path="/discounts" component={Discounts} />

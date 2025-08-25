@@ -56,6 +56,10 @@ export default function Landing() {
     setPassword("demo123");
     setStoreId("STORE001");
     setStorePassword("store123");
+    
+    // Also set up sysadmin login
+    setEmail("leestephenabraham7@gmail.com");
+    setPassword("demo123");
   };
 
   const handleLogin = () => {

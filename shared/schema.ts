@@ -191,6 +191,7 @@ export const positions = pgTable("positions", {
 export const staff = pgTable("staff", {
   employeeId: integer("employee_id").primaryKey().generatedByDefaultAsIdentity(),
   email: varchar("email", { length: 255 }).unique(),
+  password: varchar("password", { length: 255 }),
   namaLengkap: varchar("nama_lengkap", { length: 255 }),
   kota: varchar("kota", { length: 100 }),
   alamat: varchar("alamat", { length: 255 }),

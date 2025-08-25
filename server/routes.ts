@@ -465,6 +465,99 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Staff authentication route
+  app.post('/api/staff/auth', async (req, res) => {
+    try {
+      const { email, password } = req.body;
+      
+      if (!email || !password) {
+        return res.status(400).json({ message: "Email and password are required" });
+      }
+
+      const staff = await storage.getStaffByEmail(email);
+      if (!staff || staff.password !== password) {
+        return res.status(401).json({ message: "Invalid email or password" });
+      }
+
+      // Store the authenticated staff in session
+      (req.session as any).authenticatedStaff = {
+        employeeId: staff.employeeId,
+        email: staff.email,
+        namaLengkap: staff.namaLengkap,
+        jabatan: staff.jabatan
+      };
+
+      res.json({ 
+        message: "Staff authentication successful", 
+        staff: {
+          employeeId: staff.employeeId,
+          email: staff.email,
+          namaLengkap: staff.namaLengkap,
+          jabatan: staff.jabatan
+        }
+      });
+    } catch (error) {
+      console.error("Error authenticating staff:", error);
+      res.status(500).json({ message: "Failed to authenticate staff" });
+    }
+  });
+
+  // Get current authenticated staff
+  app.get('/api/staff/current', async (req, res) => {
+    try {
+      const authenticatedStaff = (req.session as any).authenticatedStaff;
+      res.json({ staff: authenticatedStaff || null });
+    } catch (error) {
+      console.error("Error fetching current staff:", error);
+      res.status(500).json({ message: "Failed to fetch current staff" });
+    }
+  });
+
+  // Staff logout route
+  app.post('/api/staff/logout', async (req, res) => {
+    try {
+      delete (req.session as any).authenticatedStaff;
+      res.json({ message: "Staff logout successful" });
+    } catch (error) {
+      console.error("Error logging out staff:", error);
+      res.status(500).json({ message: "Failed to logout staff" });
+    }
+  });
+
+  // Store dashboard with aggregated data from all stores
+  app.get('/api/stores/dashboard', isAuthenticated, async (req, res) => {
+    try {
+      const stores = await storage.getStores();
+      const dashboardData = [];
+
+      for (const store of stores) {
+        // Get metrics for each store
+        const metrics = await storage.getDashboardMetrics(store.kodeGudang);
+        const recentSales = await storage.getRecentSales(store.kodeGudang, 5); // Get last 5 sales
+
+        dashboardData.push({
+          store: {
+            kodeGudang: store.kodeGudang,
+            namaGudang: store.namaGudang,
+            jenisGudang: store.jenisGudang
+          },
+          metrics: metrics || {
+            totalSales: '0',
+            totalItems: 0,
+            totalRevenue: '0',
+            averageOrderValue: '0'
+          },
+          recentSales: recentSales || []
+        });
+      }
+
+      res.json(dashboardData);
+    } catch (error) {
+      console.error("Error fetching stores dashboard:", error);
+      res.status(500).json({ message: "Failed to fetch stores dashboard" });
+    }
+  });
+
   // Price resolution endpoint
   app.get('/api/price/quote', isAuthenticated, async (req, res) => {
     try {
