@@ -18,6 +18,7 @@ import {
   insertDiscountTypeSchema,
   insertStoreSchema,
   insertStaffSchema,
+  insertPositionSchema,
   insertToItemListSchema,
   type Pricelist 
 } from "@shared/schema";
@@ -1070,6 +1071,58 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('Staff deletion error:', error);
       res.status(500).json({ message: 'Failed to delete staff' });
+    }
+  });
+
+  // Position endpoints
+  app.get('/api/positions', isAuthenticated, async (req, res) => {
+    try {
+      const positions = await storage.getPositions();
+      res.json(positions);
+    } catch (error) {
+      res.status(500).json({ message: 'Failed to get positions' });
+    }
+  });
+
+  app.post('/api/positions', isAuthenticated, checkRole(['System Administrator']), async (req, res) => {
+    try {
+      const validatedData = insertPositionSchema.parse(req.body);
+      const position = await storage.createPosition(validatedData);
+      res.json(position);
+    } catch (error) {
+      console.error('Position creation error:', error);
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ message: 'Validation error', errors: error.errors });
+      } else {
+        res.status(500).json({ message: 'Failed to create position' });
+      }
+    }
+  });
+
+  app.put('/api/positions/:positionId', isAuthenticated, checkRole(['System Administrator']), async (req, res) => {
+    try {
+      const { positionId } = req.params;
+      const validatedData = insertPositionSchema.partial().parse(req.body);
+      const position = await storage.updatePosition(parseInt(positionId), validatedData);
+      res.json(position);
+    } catch (error) {
+      console.error('Position update error:', error);
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ message: 'Validation error', errors: error.errors });
+      } else {
+        res.status(500).json({ message: 'Failed to update position' });
+      }
+    }
+  });
+
+  app.delete('/api/positions/:positionId', isAuthenticated, checkRole(['System Administrator']), async (req, res) => {
+    try {
+      const { positionId } = req.params;
+      await storage.deletePosition(parseInt(positionId));
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Position deletion error:', error);
+      res.status(500).json({ message: 'Failed to delete position' });
     }
   });
 

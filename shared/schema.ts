@@ -169,15 +169,23 @@ export const edcSettlement = pgTable("edc_settlement", {
 });
 
 // Staff
+// Position table for job positions
+export const positions = pgTable("positions", {
+  positionId: integer("position_id").primaryKey().generatedByDefaultAsIdentity(),
+  positionName: varchar("position_name", { length: 100 }).unique(),
+  description: varchar("description", { length: 255 }),
+});
+
 export const staff = pgTable("staff", {
   employeeId: integer("employee_id").primaryKey().generatedByDefaultAsIdentity(),
   email: varchar("email", { length: 255 }).unique(),
   namaLengkap: varchar("nama_lengkap", { length: 255 }),
   kota: varchar("kota", { length: 100 }),
+  alamat: varchar("alamat", { length: 255 }),
+  noHp: varchar("no_hp", { length: 20 }),
+  tempatLahir: varchar("tempat_lahir", { length: 100 }),
   tanggalLahir: date("tanggal_lahir"),
   tanggalMasuk: date("tanggal_masuk"),
-  bank: varchar("bank", { length: 100 }),
-  noRekening: varchar("no_rekening", { length: 100 }),
   jabatan: varchar("jabatan", { length: 100 }),
 });
 
@@ -271,6 +279,9 @@ export type EdcSettlement = typeof edcSettlement.$inferSelect;
 export type InsertStaff = typeof staff.$inferInsert;
 export type Staff = typeof staff.$inferSelect;
 
+export type InsertPosition = typeof positions.$inferInsert;
+export type Position = typeof positions.$inferSelect;
+
 // Schemas for validation
 export const insertReferenceSheetSchema = createInsertSchema(referenceSheet).omit({ refId: true });
 export const insertStoreSchema = createInsertSchema(stores);
@@ -287,3 +298,4 @@ export const insertEdcSchema = createInsertSchema(edc).omit({ edcId: true });
 export const insertStoreEdcSchema = createInsertSchema(storeEdc).omit({ storeEdcId: true });
 export const insertEdcSettlementSchema = createInsertSchema(edcSettlement).omit({ edcSettlementId: true });
 export const insertStaffSchema = createInsertSchema(staff).omit({ employeeId: true });
+export const insertPositionSchema = createInsertSchema(positions).omit({ positionId: true });

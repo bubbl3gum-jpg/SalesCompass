@@ -15,6 +15,7 @@ import {
   storeEdc,
   edcSettlement,
   staff,
+  positions,
   type User,
   type UpsertUser,
   type ReferenceSheet,
@@ -32,6 +33,7 @@ import {
   type StoreEdc,
   type EdcSettlement,
   type Staff,
+  type Position,
   type InsertReferenceSheet,
   type InsertStore,
   type InsertDiscountType,
@@ -47,6 +49,7 @@ import {
   type InsertStoreEdc,
   type InsertEdcSettlement,
   type InsertStaff,
+  type InsertPosition,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, sql, desc, sum } from "drizzle-orm";
@@ -119,6 +122,12 @@ export interface IStorage {
   createStaff(data: InsertStaff): Promise<Staff>;
   updateStaff(employeeId: number, data: Partial<InsertStaff>): Promise<Staff>;
   deleteStaff(employeeId: number): Promise<void>;
+
+  // Position operations
+  getPositions(): Promise<Position[]>;
+  createPosition(data: InsertPosition): Promise<Position>;
+  updatePosition(positionId: number, data: Partial<InsertPosition>): Promise<Position>;
+  deletePosition(positionId: number): Promise<void>;
   
   // Transfer order item list operations
   createToItemList(data: InsertToItemList): Promise<ToItemList>;
@@ -397,6 +406,28 @@ export class DatabaseStorage implements IStorage {
 
   async deleteStaff(employeeId: number): Promise<void> {
     await db.delete(staff).where(eq(staff.employeeId, employeeId));
+  }
+
+  // Position operations
+  async getPositions(): Promise<Position[]> {
+    return await db.select().from(positions);
+  }
+
+  async createPosition(data: InsertPosition): Promise<Position> {
+    const [result] = await db.insert(positions).values(data).returning();
+    return result;
+  }
+
+  async updatePosition(positionId: number, data: Partial<InsertPosition>): Promise<Position> {
+    const [result] = await db.update(positions)
+      .set(data)
+      .where(eq(positions.positionId, positionId))
+      .returning();
+    return result;
+  }
+
+  async deletePosition(positionId: number): Promise<void> {
+    await db.delete(positions).where(eq(positions.positionId, positionId));
   }
   
   // Transfer order item list operations
