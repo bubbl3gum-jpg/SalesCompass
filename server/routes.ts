@@ -872,12 +872,96 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post('/api/reference-sheets', isAuthenticated, checkRole(['System Administrator']), async (req, res) => {
+    try {
+      const validatedData = insertReferenceSheetSchema.parse(req.body);
+      const referenceSheet = await storage.createReferenceSheet(validatedData);
+      res.json(referenceSheet);
+    } catch (error) {
+      console.error('Reference sheet creation error:', error);
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ message: 'Validation error', errors: error.errors });
+      } else {
+        res.status(500).json({ message: 'Failed to create reference sheet' });
+      }
+    }
+  });
+
+  app.put('/api/reference-sheets/:refId', isAuthenticated, checkRole(['System Administrator']), async (req, res) => {
+    try {
+      const { refId } = req.params;
+      const validatedData = insertReferenceSheetSchema.partial().parse(req.body);
+      const referenceSheet = await storage.updateReferenceSheet(refId, validatedData);
+      res.json(referenceSheet);
+    } catch (error) {
+      console.error('Reference sheet update error:', error);
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ message: 'Validation error', errors: error.errors });
+      } else {
+        res.status(500).json({ message: 'Failed to update reference sheet' });
+      }
+    }
+  });
+
+  app.delete('/api/reference-sheets/:refId', isAuthenticated, checkRole(['System Administrator']), async (req, res) => {
+    try {
+      const { refId } = req.params;
+      await storage.deleteReferenceSheet(refId);
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Reference sheet deletion error:', error);
+      res.status(500).json({ message: 'Failed to delete reference sheet' });
+    }
+  });
+
   app.get('/api/discounts', isAuthenticated, async (req, res) => {
     try {
       const discounts = await storage.getDiscountTypes();
       res.json(discounts);
     } catch (error) {
       res.status(500).json({ message: 'Failed to get discounts' });
+    }
+  });
+
+  app.post('/api/discounts', isAuthenticated, checkRole(['System Administrator']), async (req, res) => {
+    try {
+      const validatedData = insertDiscountTypeSchema.parse(req.body);
+      const discount = await storage.createDiscountType(validatedData);
+      res.json(discount);
+    } catch (error) {
+      console.error('Discount creation error:', error);
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ message: 'Validation error', errors: error.errors });
+      } else {
+        res.status(500).json({ message: 'Failed to create discount' });
+      }
+    }
+  });
+
+  app.put('/api/discounts/:discountId', isAuthenticated, checkRole(['System Administrator']), async (req, res) => {
+    try {
+      const { discountId } = req.params;
+      const validatedData = insertDiscountTypeSchema.partial().parse(req.body);
+      const discount = await storage.updateDiscountType(discountId, validatedData);
+      res.json(discount);
+    } catch (error) {
+      console.error('Discount update error:', error);
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ message: 'Validation error', errors: error.errors });
+      } else {
+        res.status(500).json({ message: 'Failed to update discount' });
+      }
+    }
+  });
+
+  app.delete('/api/discounts/:discountId', isAuthenticated, checkRole(['System Administrator']), async (req, res) => {
+    try {
+      const { discountId } = req.params;
+      await storage.deleteDiscountType(discountId);
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Discount deletion error:', error);
+      res.status(500).json({ message: 'Failed to delete discount' });
     }
   });
 
@@ -890,12 +974,106 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post('/api/edc', isAuthenticated, checkRole(['System Administrator']), async (req, res) => {
+    try {
+      const edcSchema = z.object({
+        namaEdc: z.string(),
+        jenisEdc: z.string(),
+        biayaAdmin: z.coerce.number().optional(),
+      });
+      const validatedData = edcSchema.parse(req.body);
+      const edc = await storage.createEdc(validatedData);
+      res.json(edc);
+    } catch (error) {
+      console.error('EDC creation error:', error);
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ message: 'Validation error', errors: error.errors });
+      } else {
+        res.status(500).json({ message: 'Failed to create EDC' });
+      }
+    }
+  });
+
+  app.put('/api/edc/:edcId', isAuthenticated, checkRole(['System Administrator']), async (req, res) => {
+    try {
+      const { edcId } = req.params;
+      const edcSchema = z.object({
+        namaEdc: z.string().optional(),
+        jenisEdc: z.string().optional(),
+        biayaAdmin: z.coerce.number().optional(),
+      });
+      const validatedData = edcSchema.parse(req.body);
+      const edc = await storage.updateEdc(edcId, validatedData);
+      res.json(edc);
+    } catch (error) {
+      console.error('EDC update error:', error);
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ message: 'Validation error', errors: error.errors });
+      } else {
+        res.status(500).json({ message: 'Failed to update EDC' });
+      }
+    }
+  });
+
+  app.delete('/api/edc/:edcId', isAuthenticated, checkRole(['System Administrator']), async (req, res) => {
+    try {
+      const { edcId } = req.params;
+      await storage.deleteEdc(edcId);
+      res.json({ success: true });
+    } catch (error) {
+      console.error('EDC deletion error:', error);
+      res.status(500).json({ message: 'Failed to delete EDC' });
+    }
+  });
+
   app.get('/api/staff', isAuthenticated, async (req, res) => {
     try {
       const staff = await storage.getStaff();
       res.json(staff);
     } catch (error) {
       res.status(500).json({ message: 'Failed to get staff list' });
+    }
+  });
+
+  app.post('/api/staff', isAuthenticated, checkRole(['System Administrator']), async (req, res) => {
+    try {
+      const validatedData = insertStaffSchema.parse(req.body);
+      const staff = await storage.createStaff(validatedData);
+      res.json(staff);
+    } catch (error) {
+      console.error('Staff creation error:', error);
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ message: 'Validation error', errors: error.errors });
+      } else {
+        res.status(500).json({ message: 'Failed to create staff' });
+      }
+    }
+  });
+
+  app.put('/api/staff/:staffId', isAuthenticated, checkRole(['System Administrator']), async (req, res) => {
+    try {
+      const { staffId } = req.params;
+      const validatedData = insertStaffSchema.partial().parse(req.body);
+      const staff = await storage.updateStaff(staffId, validatedData);
+      res.json(staff);
+    } catch (error) {
+      console.error('Staff update error:', error);
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ message: 'Validation error', errors: error.errors });
+      } else {
+        res.status(500).json({ message: 'Failed to update staff' });
+      }
+    }
+  });
+
+  app.delete('/api/staff/:staffId', isAuthenticated, checkRole(['System Administrator']), async (req, res) => {
+    try {
+      const { staffId } = req.params;
+      await storage.deleteStaff(staffId);
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Staff deletion error:', error);
+      res.status(500).json({ message: 'Failed to delete staff' });
     }
   });
 

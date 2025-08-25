@@ -59,6 +59,8 @@ export interface IStorage {
   // Reference Sheet operations
   getReferenceSheets(): Promise<ReferenceSheet[]>;
   createReferenceSheet(data: InsertReferenceSheet): Promise<ReferenceSheet>;
+  updateReferenceSheet(refId: string, data: Partial<InsertReferenceSheet>): Promise<ReferenceSheet>;
+  deleteReferenceSheet(refId: string): Promise<void>;
   getReferenceSheetByKodeItem(kodeItem: string): Promise<ReferenceSheet | undefined>;
 
   // Store operations
@@ -69,6 +71,8 @@ export interface IStorage {
   // Discount operations
   getDiscountTypes(): Promise<DiscountType[]>;
   createDiscountType(data: InsertDiscountType): Promise<DiscountType>;
+  updateDiscountType(discountId: string, data: Partial<InsertDiscountType>): Promise<DiscountType>;
+  deleteDiscountType(discountId: string): Promise<void>;
 
   // Pricelist operations
   getPricelist(): Promise<Pricelist[]>;
@@ -104,6 +108,8 @@ export interface IStorage {
   // EDC operations
   getEdc(): Promise<Edc[]>;
   createEdc(data: InsertEdc): Promise<Edc>;
+  updateEdc(edcId: string, data: Partial<InsertEdc>): Promise<Edc>;
+  deleteEdc(edcId: string): Promise<void>;
   getStoreEdc(): Promise<StoreEdc[]>;
   createStoreEdc(data: InsertStoreEdc): Promise<StoreEdc>;
   createEdcSettlement(data: InsertEdcSettlement): Promise<EdcSettlement>;
@@ -111,6 +117,8 @@ export interface IStorage {
   // Staff operations
   getStaff(): Promise<Staff[]>;
   createStaff(data: InsertStaff): Promise<Staff>;
+  updateStaff(staffId: string, data: Partial<InsertStaff>): Promise<Staff>;
+  deleteStaff(staffId: string): Promise<void>;
   
   // Transfer order item list operations
   createToItemList(data: InsertToItemList): Promise<ToItemList>;
@@ -149,6 +157,18 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
+  async updateReferenceSheet(refId: string, data: Partial<InsertReferenceSheet>): Promise<ReferenceSheet> {
+    const [result] = await db.update(referenceSheet)
+      .set(data)
+      .where(eq(referenceSheet.refId, refId))
+      .returning();
+    return result;
+  }
+
+  async deleteReferenceSheet(refId: string): Promise<void> {
+    await db.delete(referenceSheet).where(eq(referenceSheet.refId, refId));
+  }
+
   async getReferenceSheetByKodeItem(kodeItem: string): Promise<ReferenceSheet | undefined> {
     const [result] = await db.select().from(referenceSheet).where(eq(referenceSheet.kodeItem, kodeItem));
     return result;
@@ -177,6 +197,18 @@ export class DatabaseStorage implements IStorage {
   async createDiscountType(data: InsertDiscountType): Promise<DiscountType> {
     const [result] = await db.insert(discountTypes).values(data).returning();
     return result;
+  }
+
+  async updateDiscountType(discountId: string, data: Partial<InsertDiscountType>): Promise<DiscountType> {
+    const [result] = await db.update(discountTypes)
+      .set(data)
+      .where(eq(discountTypes.discountId, discountId))
+      .returning();
+    return result;
+  }
+
+  async deleteDiscountType(discountId: string): Promise<void> {
+    await db.delete(discountTypes).where(eq(discountTypes.discountId, discountId));
   }
 
   // Pricelist operations
@@ -318,6 +350,18 @@ export class DatabaseStorage implements IStorage {
     const [result] = await db.insert(edc).values(data).returning();
     return result;
   }
+
+  async updateEdc(edcId: string, data: Partial<InsertEdc>): Promise<Edc> {
+    const [result] = await db.update(edc)
+      .set(data)
+      .where(eq(edc.edcId, edcId))
+      .returning();
+    return result;
+  }
+
+  async deleteEdc(edcId: string): Promise<void> {
+    await db.delete(edc).where(eq(edc.edcId, edcId));
+  }
   
   async getStoreEdc(): Promise<StoreEdc[]> {
     return await db.select().from(storeEdc);
@@ -341,6 +385,18 @@ export class DatabaseStorage implements IStorage {
   async createStaff(data: InsertStaff): Promise<Staff> {
     const [result] = await db.insert(staff).values(data).returning();
     return result;
+  }
+
+  async updateStaff(staffId: string, data: Partial<InsertStaff>): Promise<Staff> {
+    const [result] = await db.update(staff)
+      .set(data)
+      .where(eq(staff.staffId, staffId))
+      .returning();
+    return result;
+  }
+
+  async deleteStaff(staffId: string): Promise<void> {
+    await db.delete(staff).where(eq(staff.staffId, staffId));
   }
   
   // Transfer order item list operations
