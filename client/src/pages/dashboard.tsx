@@ -347,57 +347,57 @@ export default function Dashboard() {
           {selectedStore ? (
             <div className="space-y-6">
               {/* Store Overview - Compact KPIs */}
-              <Card className="bg-white/20 dark:bg-black/20 backdrop-blur-xl border border-white/20 dark:border-gray-800/50">
+              <Card className="bg-white/70 dark:bg-black/60 backdrop-blur-xl border border-white/30 dark:border-gray-700/50 shadow-lg">
                 <CardHeader className="pb-3">
-                  <CardTitle className="text-lg flex items-center gap-2">
+                  <CardTitle className="text-lg flex items-center gap-2 text-gray-900 dark:text-white">
                     <Package className="w-5 h-5" />
                     Store Overview
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div className="bg-white/10 dark:bg-black/10 rounded-lg p-4">
+                    <div className="bg-white/40 dark:bg-black/40 rounded-lg p-4 border border-white/20 dark:border-gray-600/30">
                       <div className="flex items-center justify-between">
                         <div>
-                          <p className="text-sm font-medium text-gray-600 dark:text-gray-400">On-hand</p>
+                          <p className="text-sm font-medium text-gray-700 dark:text-gray-300">On-hand</p>
                           <p className="text-xl font-bold text-gray-900 dark:text-white" data-testid="text-onhand">
                             {stockData.length.toLocaleString()}
                           </p>
                         </div>
-                        <Package className="w-8 h-8 text-blue-500" />
+                        <Package className="w-8 h-8 text-blue-600 dark:text-blue-400" />
                       </div>
                     </div>
-                    <div className="bg-white/10 dark:bg-black/10 rounded-lg p-4">
+                    <div className="bg-white/40 dark:bg-black/40 rounded-lg p-4 border border-white/20 dark:border-gray-600/30">
                       <div className="flex items-center justify-between">
                         <div>
-                          <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Sold Today</p>
+                          <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Sold Today</p>
                           <p className="text-xl font-bold text-gray-900 dark:text-white" data-testid="text-sold-today">
                             Rp {(metrics?.todaySales || 0).toLocaleString()}
                           </p>
                         </div>
-                        <DollarSign className="w-8 h-8 text-green-500" />
+                        <DollarSign className="w-8 h-8 text-green-600 dark:text-green-400" />
                       </div>
                     </div>
-                    <div className="bg-white/10 dark:bg-black/10 rounded-lg p-4">
+                    <div className="bg-white/40 dark:bg-black/40 rounded-lg p-4 border border-white/20 dark:border-gray-600/30">
                       <div className="flex items-center justify-between">
                         <div>
-                          <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Low-Stock</p>
+                          <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Low-Stock</p>
                           <p className="text-xl font-bold text-gray-900 dark:text-white" data-testid="text-low-stock-alerts">
                             {stockData.filter(item => item.qty > 0 && item.qty < 10).length}
                           </p>
                         </div>
-                        <AlertTriangle className="w-8 h-8 text-orange-500" />
+                        <AlertTriangle className="w-8 h-8 text-orange-600 dark:text-orange-400" />
                       </div>
                     </div>
-                    <div className="bg-white/10 dark:bg-black/10 rounded-lg p-4">
+                    <div className="bg-white/40 dark:bg-black/40 rounded-lg p-4 border border-white/20 dark:border-gray-600/30">
                       <div className="flex items-center justify-between">
                         <div>
-                          <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Inbound</p>
+                          <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Inbound</p>
                           <p className="text-xl font-bold text-gray-900 dark:text-white" data-testid="text-inbound">
                             {metrics?.activeTransfers || 0}
                           </p>
                         </div>
-                        <TrendingUp className="w-8 h-8 text-purple-500" />
+                        <TrendingUp className="w-8 h-8 text-purple-600 dark:text-purple-400" />
                       </div>
                     </div>
                   </div>
@@ -405,9 +405,9 @@ export default function Dashboard() {
               </Card>
 
               {/* Quick Actions - Grouped Together */}
-              <Card className="bg-white/20 dark:bg-black/20 backdrop-blur-xl border border-white/20 dark:border-gray-800/50">
+              <Card className="bg-white/70 dark:bg-black/60 backdrop-blur-xl border border-white/30 dark:border-gray-700/50 shadow-lg">
                 <CardHeader className="pb-3">
-                  <CardTitle className="text-lg flex items-center gap-2">
+                  <CardTitle className="text-lg flex items-center gap-2 text-gray-900 dark:text-white">
                     <Plus className="w-5 h-5" />
                     Quick Actions
                   </CardTitle>
@@ -417,7 +417,7 @@ export default function Dashboard() {
                     {/* Quick Transfer */}
                     <Dialog open={showTransferModal} onOpenChange={setShowTransferModal}>
                       <DialogTrigger asChild>
-                        <Button variant="outline" className="h-20 flex flex-col items-center gap-2 bg-white/10 dark:bg-black/10 hover:bg-white/20 dark:hover:bg-black/20">
+                        <Button variant="outline" className="h-20 flex flex-col items-center gap-2 bg-white/50 dark:bg-black/50 hover:bg-white/70 dark:hover:bg-black/70 border-white/30 dark:border-gray-600/30 text-gray-900 dark:text-white">
                           <ArrowRightLeft className="w-6 h-6" />
                           <span className="text-sm">New Transfer</span>
                         </Button>
@@ -484,7 +484,7 @@ export default function Dashboard() {
                     {/* Quick Settlement */}
                     <Dialog open={showSettlementModal} onOpenChange={setShowSettlementModal}>
                       <DialogTrigger asChild>
-                        <Button variant="outline" className="h-20 flex flex-col items-center gap-2 bg-white/10 dark:bg-black/10 hover:bg-white/20 dark:hover:bg-black/20">
+                        <Button variant="outline" className="h-20 flex flex-col items-center gap-2 bg-white/50 dark:bg-black/50 hover:bg-white/70 dark:hover:bg-black/70 border-white/30 dark:border-gray-600/30 text-gray-900 dark:text-white">
                           <Calculator className="w-6 h-6" />
                           <span className="text-sm">Record Settlement</span>
                         </Button>
@@ -596,7 +596,7 @@ export default function Dashboard() {
                     <Button 
                       onClick={() => setShowSalesModal(true)}
                       variant="outline" 
-                      className="h-20 flex flex-col items-center gap-2 bg-white/10 dark:bg-black/10 hover:bg-white/20 dark:hover:bg-black/20"
+                      className="h-20 flex flex-col items-center gap-2 bg-white/50 dark:bg-black/50 hover:bg-white/70 dark:hover:bg-black/70 border-white/30 dark:border-gray-600/30 text-gray-900 dark:text-white"
                     >
                       <ShoppingCart className="w-6 h-6" />
                       <span className="text-sm">Quick Sale</span>
@@ -608,29 +608,29 @@ export default function Dashboard() {
               {/* Analytics Section */}
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* Sales Today */}
-                <Card className="bg-white/20 dark:bg-black/20 backdrop-blur-xl border border-white/20 dark:border-gray-800/50">
+                <Card className="bg-white/70 dark:bg-black/60 backdrop-blur-xl border border-white/30 dark:border-gray-700/50 shadow-lg">
                   <CardHeader className="pb-3">
-                    <CardTitle className="text-base flex items-center justify-between">
+                    <CardTitle className="text-base flex items-center justify-between text-gray-900 dark:text-white">
                       <span>Sales Today</span>
                       <DollarSign className="w-4 h-4" />
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-2">
-                      <div className="text-2xl font-bold">Rp {(metrics?.todaySales || 0).toLocaleString()}</div>
-                      <div className="text-sm text-gray-600 dark:text-gray-400">{metrics?.salesCount || 0} transactions</div>
+                      <div className="text-2xl font-bold text-gray-900 dark:text-white">Rp {(metrics?.todaySales || 0).toLocaleString()}</div>
+                      <div className="text-sm text-gray-700 dark:text-gray-300">{metrics?.salesCount || 0} transactions</div>
                       <div className="flex items-center text-sm">
-                        <TrendingUp className="w-4 h-4 text-green-500 mr-1" />
-                        <span className="text-green-600 dark:text-green-400">+12% vs yesterday</span>
+                        <TrendingUp className="w-4 h-4 text-green-600 dark:text-green-400 mr-1" />
+                        <span className="text-green-700 dark:text-green-300">+12% vs yesterday</span>
                       </div>
                     </div>
                   </CardContent>
                 </Card>
 
                 {/* Pending vs Settled */}
-                <Card className="bg-white/20 dark:bg-black/20 backdrop-blur-xl border border-white/20 dark:border-gray-800/50">
+                <Card className="bg-white/70 dark:bg-black/60 backdrop-blur-xl border border-white/30 dark:border-gray-700/50 shadow-lg">
                   <CardHeader className="pb-3">
-                    <CardTitle className="text-base flex items-center justify-between">
+                    <CardTitle className="text-base flex items-center justify-between text-gray-900 dark:text-white">
                       <span>Settlement Status</span>
                       <Clock className="w-4 h-4" />
                     </CardTitle>
@@ -638,15 +638,15 @@ export default function Dashboard() {
                   <CardContent>
                     <div className="space-y-3">
                       <div className="flex justify-between">
-                        <span className="text-sm">Pending</span>
-                        <span className="font-semibold text-orange-600">{metrics?.pendingSettlements || 0}</span>
+                        <span className="text-sm text-gray-700 dark:text-gray-300">Pending</span>
+                        <span className="font-semibold text-orange-700 dark:text-orange-300">{metrics?.pendingSettlements || 0}</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-sm">Completed</span>
-                        <span className="font-semibold text-green-600">{(metrics?.salesCount || 0) - (metrics?.pendingSettlements || 0)}</span>
+                        <span className="text-sm text-gray-700 dark:text-gray-300">Completed</span>
+                        <span className="font-semibold text-green-700 dark:text-green-300">{(metrics?.salesCount || 0) - (metrics?.pendingSettlements || 0)}</span>
                       </div>
                       <Progress value={metrics?.pendingSettlements ? ((metrics.salesCount || 0) - metrics.pendingSettlements) / (metrics.salesCount || 1) * 100 : 100} className="h-2" />
-                      <div className="text-xs text-center">
+                      <div className="text-xs text-center text-gray-700 dark:text-gray-300">
                         {metrics?.pendingSettlements ? (metrics.pendingSettlements > 5 ? '🔴 WARN' : '🟡 OK') : '🟢 OK'}
                       </div>
                     </div>
@@ -654,9 +654,9 @@ export default function Dashboard() {
                 </Card>
 
                 {/* Stock Movement */}
-                <Card className="bg-white/20 dark:bg-black/20 backdrop-blur-xl border border-white/20 dark:border-gray-800/50">
+                <Card className="bg-white/70 dark:bg-black/60 backdrop-blur-xl border border-white/30 dark:border-gray-700/50 shadow-lg">
                   <CardHeader className="pb-3">
-                    <CardTitle className="text-base flex items-center justify-between">
+                    <CardTitle className="text-base flex items-center justify-between text-gray-900 dark:text-white">
                       <span>Stock Movement</span>
                       <Package className="w-4 h-4" />
                     </CardTitle>
@@ -664,16 +664,19 @@ export default function Dashboard() {
                   <CardContent>
                     <div className="space-y-3">
                       <div className="flex justify-between">
-                        <span className="text-sm">In Stock</span>
-                        <span className="font-semibold text-green-600">{stockData.filter(item => item.qty >= 10).length}</span>
+                        <span className="text-sm text-gray-700 dark:text-gray-300">In Stock</span>
+                        <span className="font-semibold text-green-700 dark:text-green-300">{stockData.filter(item => item.qty >= 10).length}</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-sm">Low Stock</span>
-                        <span className="font-semibold text-orange-600">{stockData.filter(item => item.qty > 0 && item.qty < 10).length}</span>
+                        <span className="text-sm text-gray-700 dark:text-gray-300">Low Stock</span>
+                        <span className="font-semibold text-orange-700 dark:text-orange-300">{stockData.filter(item => item.qty > 0 && item.qty < 10).length}</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-sm">Out of Stock</span>
-                        <span className="font-semibold text-red-600">{stockData.filter(item => item.qty === 0).length}</span>
+                        <span className="text-sm text-gray-700 dark:text-gray-300">Out of Stock</span>
+                        <span className="font-semibold text-red-700 dark:text-red-300">{stockData.filter(item => item.qty === 0).length}</span>
+                      </div>
+                      <div className="text-xs text-center text-gray-700 dark:text-gray-300">
+                        {stockData.filter(item => item.qty < 10).length > 20 ? '🔴 Critical' : stockData.filter(item => item.qty < 10).length > 10 ? '🟡 Monitor' : '🟢 Healthy'}
                       </div>
                     </div>
                   </CardContent>
@@ -683,9 +686,9 @@ export default function Dashboard() {
               {/* Imports Widget - Live Progress */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Imports Widget */}
-                <Card className="bg-white/20 dark:bg-black/20 backdrop-blur-xl border border-white/20 dark:border-gray-800/50">
+                <Card className="bg-white/70 dark:bg-black/60 backdrop-blur-xl border border-white/30 dark:border-gray-700/50 shadow-lg">
                   <CardHeader className="pb-3">
-                    <CardTitle className="text-lg flex items-center gap-2">
+                    <CardTitle className="text-lg flex items-center gap-2 text-gray-900 dark:text-white">
                       <Upload className="w-5 h-5" />
                       Import Activity
                       {importJobs.filter(job => job.status === 'processing' || job.status === 'queued').length > 0 && (
@@ -712,7 +715,7 @@ export default function Dashboard() {
                           const isActive = job.status === 'processing' || job.status === 'queued';
                           
                           return (
-                            <div key={job.id} className="space-y-2 p-3 bg-white/10 dark:bg-black/10 rounded-lg">
+                            <div key={job.id} className="space-y-2 p-3 bg-white/40 dark:bg-black/40 rounded-lg border border-white/20 dark:border-gray-600/30">
                               <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-2">
                                   {getImportStatusIcon(job.status)}
@@ -720,7 +723,7 @@ export default function Dashboard() {
                                     <p className="font-medium text-sm text-gray-900 dark:text-white">
                                       {job.fileName}
                                     </p>
-                                    <p className="text-xs text-gray-600 dark:text-gray-400">
+                                    <p className="text-xs text-gray-700 dark:text-gray-300">
                                       {job.tableName} • {formatDuration(job.createdAt, job.completedAt)}
                                     </p>
                                   </div>
@@ -733,8 +736,8 @@ export default function Dashboard() {
                               {isActive && (
                                 <div className="space-y-1">
                                   <div className="flex justify-between text-xs">
-                                    <span className="text-gray-600 dark:text-gray-400">{job.progress.stage}</span>
-                                    <span className="text-gray-600 dark:text-gray-400">
+                                    <span className="text-gray-700 dark:text-gray-300">{job.progress.stage}</span>
+                                    <span className="text-gray-700 dark:text-gray-300">
                                       {job.progress.current.toLocaleString()} / {job.progress.total.toLocaleString()}
                                       {job.progress.throughputRps && ` (${Math.round(job.progress.throughputRps)}/s)`}
                                     </span>
@@ -744,17 +747,17 @@ export default function Dashboard() {
                               )}
                               
                               {job.status === 'completed' && job.result && (
-                                <div className="flex justify-between text-xs text-gray-600 dark:text-gray-400">
+                                <div className="flex justify-between text-xs text-gray-700 dark:text-gray-300">
                                   <span>✅ {job.result.newRecords} new</span>
                                   <span>🔄 {job.result.updatedRecords} updated</span>
                                   {job.result.errorRecords > 0 && (
-                                    <span className="text-red-600">❌ {job.result.errorRecords} errors</span>
+                                    <span className="text-red-700 dark:text-red-300">❌ {job.result.errorRecords} errors</span>
                                   )}
                                 </div>
                               )}
                               
                               {job.status === 'failed' && job.error && (
-                                <p className="text-xs text-red-600 dark:text-red-400 truncate">
+                                <p className="text-xs text-red-700 dark:text-red-300 truncate">
                                   Error: {job.error}
                                 </p>
                               )}
@@ -764,8 +767,8 @@ export default function Dashboard() {
                       </div>
                     ) : (
                       <div className="text-center py-6">
-                        <FileText className="w-12 h-12 text-gray-400 mx-auto mb-3" />
-                        <p className="text-sm text-gray-600 dark:text-gray-400">No recent imports</p>
+                        <FileText className="w-12 h-12 text-gray-500 dark:text-gray-400 mx-auto mb-3" />
+                        <p className="text-sm text-gray-700 dark:text-gray-300">No recent imports</p>
                       </div>
                     )}
                   </CardContent>
@@ -773,9 +776,9 @@ export default function Dashboard() {
 
                 {/* Recent Sales Activity */}
                 {recentSales.length > 0 && (
-                  <Card className="bg-white/20 dark:bg-black/20 backdrop-blur-xl border border-white/20 dark:border-gray-800/50">
+                  <Card className="bg-white/70 dark:bg-black/60 backdrop-blur-xl border border-white/30 dark:border-gray-700/50 shadow-lg">
                     <CardHeader className="pb-3">
-                      <CardTitle className="text-lg flex items-center gap-2">
+                      <CardTitle className="text-lg flex items-center gap-2 text-gray-900 dark:text-white">
                         <ShoppingCart className="w-5 h-5" />
                         Recent Sales Activity
                       </CardTitle>
@@ -783,10 +786,10 @@ export default function Dashboard() {
                     <CardContent>
                       <div className="space-y-3 max-h-80 overflow-y-auto">
                         {recentSales.slice(0, 8).map((sale, index) => (
-                          <div key={index} className="flex items-center justify-between p-3 bg-white/10 dark:bg-black/10 rounded-lg">
+                          <div key={index} className="flex items-center justify-between p-3 bg-white/40 dark:bg-black/40 rounded-lg border border-white/20 dark:border-gray-600/30">
                             <div className="flex-1">
                               <p className="font-medium text-gray-900 dark:text-white">{sale.kodeItem}</p>
-                              <p className="text-sm text-gray-600 dark:text-gray-400">
+                              <p className="text-sm text-gray-700 dark:text-gray-300">
                                 {new Date(sale.tanggalJual).toLocaleString('id-ID')}
                               </p>
                             </div>
@@ -794,7 +797,7 @@ export default function Dashboard() {
                               <p className="font-bold text-gray-900 dark:text-white">
                                 Rp {(sale.totalHarga || 0).toLocaleString()}
                               </p>
-                              <p className="text-sm text-gray-600 dark:text-gray-400">
+                              <p className="text-sm text-gray-700 dark:text-gray-300">
                                 Qty: {sale.qty || 0}
                               </p>
                             </div>
