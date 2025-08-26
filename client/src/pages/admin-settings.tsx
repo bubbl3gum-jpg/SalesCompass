@@ -111,21 +111,6 @@ const tableConfigs: TableConfig[] = [
     ]
   },
   {
-    name: 'discounts',
-    displayName: 'Discount Types',
-    endpoint: '/api/discounts',
-    importTable: 'discounts',
-    keyField: 'discountId',
-    fields: [
-      { key: 'namaDiscount', label: 'Discount Name', type: 'text', required: true },
-      { key: 'jenisDiscount', label: 'Discount Type', type: 'select', required: true, options: [
-        { value: 'percentage', label: 'Percentage' },
-        { value: 'amount', label: 'Fixed Amount' }
-      ] },
-      { key: 'nilaiDiscount', label: 'Discount Value', type: 'number', required: true },
-    ]
-  },
-  {
     name: 'edc',
     displayName: 'EDC / Payment Methods',
     endpoint: '/api/edc',

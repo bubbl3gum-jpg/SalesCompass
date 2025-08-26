@@ -64,7 +64,9 @@ export const stores = pgTable("store", {
 // Discount Types
 export const discountTypes = pgTable("discount_types", {
   discountId: integer("discount_id").primaryKey().generatedByDefaultAsIdentity(),
+  discountName: varchar("discount_name", { length: 255 }),
   discountType: varchar("discount_type", { length: 100 }),
+  discountAmount: decimal("discount_amount", { precision: 12, scale: 2 }),
   startFrom: date("start_from"),
   endAt: date("end_at"),
 });

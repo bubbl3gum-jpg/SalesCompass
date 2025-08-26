@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Dialog,
   DialogContent,
@@ -31,6 +32,9 @@ import {
 
 const discountFormSchema = z.object({
   discountName: z.string().min(1, "Discount name is required"),
+  discountType: z.enum(["percentage", "amount"], {
+    required_error: "Please select a discount type",
+  }),
   discountAmount: z.string().min(1, "Discount amount is required"),
   startFrom: z.string().min(1, "Start date is required"),
   endAt: z.string().min(1, "End date is required"),
@@ -49,6 +53,7 @@ export default function Discounts() {
     resolver: zodResolver(discountFormSchema),
     defaultValues: {
       discountName: "",
+      discountType: "percentage" as const,
       discountAmount: "",
       startFrom: "",
       endAt: "",
@@ -62,9 +67,9 @@ export default function Discounts() {
   });
 
   // Filter discounts based on search
-  const filteredDiscounts = discounts?.filter((discount: any) => 
+  const filteredDiscounts = Array.isArray(discounts) ? discounts.filter((discount: any) => 
     discount.discountName?.toLowerCase().includes(searchTerm.toLowerCase())
-  ) || [];
+  ) : [];
 
   // Create discount mutation
   const createDiscountMutation = useMutation({
@@ -310,12 +315,44 @@ export default function Discounts() {
 
               <FormField
                 control={form.control}
+                name="discountType"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Discount Type</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <FormControl>
+                        <SelectTrigger data-testid="select-discount-type">
+                          <SelectValue placeholder="Select discount type" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="percentage">Percentage (%)</SelectItem>
+                        <SelectItem value="amount">Fixed Amount ($)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
                 name="discountAmount"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Discount Percentage (%)</FormLabel>
+                    <FormLabel>
+                      {form.watch("discountType") === "percentage" ? "Discount Percentage (%)" : "Discount Amount ($)"}
+                    </FormLabel>
                     <FormControl>
-                      <Input type="number" min="0" max="100" placeholder="10" {...field} data-testid="input-discount-amount" />
+                      <Input 
+                        type="number" 
+                        min="0" 
+                        max={form.watch("discountType") === "percentage" ? "100" : undefined}
+                        placeholder={form.watch("discountType") === "percentage" ? "10" : "5.00"} 
+                        step={form.watch("discountType") === "percentage" ? "1" : "0.01"}
+                        {...field} 
+                        data-testid="input-discount-amount" 
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>

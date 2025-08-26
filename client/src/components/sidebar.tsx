@@ -40,6 +40,12 @@ const navigationItems = [
         icon: "fas fa-file-invoice-dollar", 
         permission: "canAccessSettlements"
       },
+      {
+        name: "Discounts",
+        href: "/discounts", 
+        icon: "fas fa-percentage",
+        permission: "canAccessDiscounts"
+      },
     ]
   },
   {
@@ -73,12 +79,6 @@ const navigationItems = [
         href: "/price-lists",
         icon: "fas fa-tags",
         permission: "canAccessPriceLists"
-      },
-      {
-        name: "Discounts",
-        href: "/discounts", 
-        icon: "fas fa-percentage",
-        permission: "canAccessDiscounts"
       },
       {
         name: "Admin Settings",
