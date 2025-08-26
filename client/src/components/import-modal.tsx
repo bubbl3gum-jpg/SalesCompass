@@ -44,8 +44,15 @@ export function ImportModal({
   const [importResults, setImportResults] = useState<{
     success: number;
     failed: number;
-    errors: string[];
+    errors?: string[];
     failedRecords?: Array<{ record: any; error: string; originalIndex: number }>;
+    summary?: {
+      totalRecords: number;
+      newRecords: number;
+      updatedRecords: number;
+      duplicatesRemoved: number;
+      errorRecords: number;
+    };
   } | null>(null);
   const [editingRecord, setEditingRecord] = useState<any>(null);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
@@ -61,6 +68,7 @@ export function ImportModal({
         formData.append('additionalData', JSON.stringify(additionalData));
       }
 
+      // Start the import
       const response = await fetch(endpoint, {
         method: 'POST',
         body: formData,
@@ -72,7 +80,34 @@ export function ImportModal({
         throw new Error(errorData.message || 'Import failed');
       }
 
-      return response.json();
+      const result = await response.json();
+      
+      // If we get an importId, start progress tracking
+      if (result.importId) {
+        const pollProgress = async () => {
+          try {
+            const progressResponse = await apiRequest('GET', `/api/import/progress/${result.importId}`);
+            const progressData = await progressResponse.json();
+            
+            if (progressData.current !== undefined && progressData.total !== undefined) {
+              const percentage = progressData.total > 0 ? Math.round((progressData.current / progressData.total) * 100) : 0;
+              setUploadProgress(percentage);
+            }
+            
+            // Continue polling if not completed
+            if (progressData.status && !progressData.status.includes('Completed') && !progressData.status.includes('Failed')) {
+              setTimeout(pollProgress, 1000);
+            }
+          } catch (error) {
+            console.error('Progress polling error:', error);
+          }
+        };
+        
+        // Start polling immediately
+        setTimeout(pollProgress, 500);
+      }
+
+      return result;
     },
     onSuccess: (data) => {
       setImportResults(data);
@@ -324,27 +359,57 @@ export function ImportModal({
           {/* Import Results */}
           {importResults && (
             <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <Card className="bg-green-50 border-green-200">
-                  <CardContent className="p-4 text-center">
-                    <div className="text-2xl font-bold text-green-600">{importResults.success}</div>
-                    <div className="text-sm text-green-700">Successfully Imported</div>
-                  </CardContent>
-                </Card>
-                <Card className="bg-red-50 border-red-200">
-                  <CardContent className="p-4 text-center">
-                    <div className="text-2xl font-bold text-red-600">{importResults.failed}</div>
-                    <div className="text-sm text-red-700">Failed</div>
-                  </CardContent>
-                </Card>
-              </div>
+              {/* Enhanced Summary for Bulk Operations */}
+              {importResults.summary ? (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <Card className="bg-blue-50 border-blue-200">
+                    <CardContent className="p-3 text-center">
+                      <div className="text-xl font-bold text-blue-600">{importResults.summary.totalRecords}</div>
+                      <div className="text-xs text-blue-700">Total Processed</div>
+                    </CardContent>
+                  </Card>
+                  <Card className="bg-green-50 border-green-200">
+                    <CardContent className="p-3 text-center">
+                      <div className="text-xl font-bold text-green-600">{importResults.summary.newRecords}</div>
+                      <div className="text-xs text-green-700">New Records</div>
+                    </CardContent>
+                  </Card>
+                  <Card className="bg-amber-50 border-amber-200">
+                    <CardContent className="p-3 text-center">
+                      <div className="text-xl font-bold text-amber-600">{importResults.summary.updatedRecords}</div>
+                      <div className="text-xs text-amber-700">Updated Records</div>
+                    </CardContent>
+                  </Card>
+                  <Card className="bg-purple-50 border-purple-200">
+                    <CardContent className="p-3 text-center">
+                      <div className="text-xl font-bold text-purple-600">{importResults.summary.duplicatesRemoved}</div>
+                      <div className="text-xs text-purple-700">Duplicates Removed</div>
+                    </CardContent>
+                  </Card>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-4">
+                  <Card className="bg-green-50 border-green-200">
+                    <CardContent className="p-4 text-center">
+                      <div className="text-2xl font-bold text-green-600">{importResults.success}</div>
+                      <div className="text-sm text-green-700">Successfully Imported</div>
+                    </CardContent>
+                  </Card>
+                  <Card className="bg-red-50 border-red-200">
+                    <CardContent className="p-4 text-center">
+                      <div className="text-2xl font-bold text-red-600">{importResults.failed}</div>
+                      <div className="text-sm text-red-700">Failed</div>
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
 
-              {importResults.errors.length > 0 && (
+              {importResults.errors && importResults.errors.length > 0 && (
                 <Card className="bg-slate-50 border-slate-200">
                   <CardContent className="p-4">
                     <h4 className="font-medium text-slate-900 mb-2">Import Errors:</h4>
                     <ul className="space-y-1 text-sm text-slate-700">
-                      {importResults.errors.map((error, index) => (
+                      {importResults.errors?.map((error, index) => (
                         <li key={index} className="flex items-start space-x-2">
                           <span className="text-red-500 mt-1">•</span>
                           <span>{error}</span>
