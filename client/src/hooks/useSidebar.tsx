@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, ReactNode } from 'react';
+import { createContext, useContext, useState, ReactNode, useCallback, useMemo } from 'react';
 
 interface SidebarContextType {
   isExpanded: boolean;
@@ -11,16 +11,22 @@ const SidebarContext = createContext<SidebarContextType | undefined>(undefined);
 export function SidebarProvider({ children }: { children: ReactNode }) {
   const [isExpanded, setIsExpanded] = useState(true);
 
-  const toggleSidebar = () => {
-    setIsExpanded(!isExpanded);
-  };
+  const toggleSidebar = useCallback(() => {
+    setIsExpanded(prev => !prev);
+  }, []);
 
-  const setSidebarExpanded = (expanded: boolean) => {
+  const setSidebarExpanded = useCallback((expanded: boolean) => {
     setIsExpanded(expanded);
-  };
+  }, []);
+
+  const value = useMemo(() => ({
+    isExpanded,
+    toggleSidebar,
+    setSidebarExpanded
+  }), [isExpanded, toggleSidebar, setSidebarExpanded]);
 
   return (
-    <SidebarContext.Provider value={{ isExpanded, toggleSidebar, setSidebarExpanded }}>
+    <SidebarContext.Provider value={value}>
       {children}
     </SidebarContext.Provider>
   );
