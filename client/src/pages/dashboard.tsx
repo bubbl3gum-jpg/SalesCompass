@@ -84,7 +84,6 @@ export default function Dashboard() {
   const [priceSearchTerm, setPriceSearchTerm] = useState<string>('');
   const [stockSearchTerm, setStockSearchTerm] = useState<string>('');
   const [storeDropdownOpen, setStoreDropdownOpen] = useState(false);
-  const [activeImports, setActiveImports] = useState<Map<string, EventSource>>(new Map());
 
   // Transfer form state
   const [transferForm, setTransferForm] = useState({
@@ -218,56 +217,7 @@ export default function Dashboard() {
     setShowSettlementModal(false);
   };
 
-  // Import helpers
-  const setupSSEForJob = (jobId: string) => {
-    if (activeImports.has(jobId)) return; // Already listening
-
-    const eventSource = new EventSource(`/api/import/progress/${jobId}/stream`);
-    
-    eventSource.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        if (data.type === 'status' || data.type === 'progress') {
-          // Trigger refetch to update the UI with latest progress
-          refetchImports();
-        }
-      } catch (error) {
-        console.error('Failed to parse SSE data:', error);
-      }
-    };
-
-    eventSource.onerror = () => {
-      eventSource.close();
-      activeImports.delete(jobId);
-      setActiveImports(new Map(activeImports));
-    };
-
-    activeImports.set(jobId, eventSource);
-    setActiveImports(new Map(activeImports));
-  };
-
-  // Setup SSE for active import jobs
-  useEffect(() => {
-    importJobs.forEach(job => {
-      if ((job.status === 'queued' || job.status === 'processing') && !activeImports.has(job.id)) {
-        setupSSEForJob(job.id);
-      }
-    });
-
-    // Cleanup closed connections
-    activeImports.forEach((eventSource, jobId) => {
-      const job = importJobs.find(j => j.id === jobId);
-      if (!job || (job.status !== 'queued' && job.status !== 'processing')) {
-        eventSource.close();
-        activeImports.delete(jobId);
-      }
-    });
-
-    return () => {
-      // Cleanup all connections on unmount
-      activeImports.forEach(eventSource => eventSource.close());
-    };
-  }, [importJobs]);
+  // Import progress is handled via polling in the useQuery refetchInterval above
 
   const getImportStatusIcon = (status: string) => {
     switch (status) {
