@@ -146,19 +146,27 @@ function parseCSV(buffer: Buffer, tableName?: string): Promise<any[]> {
     
     // Staff-specific parsing with proper field mapping
     if (tableName === 'staff') {
+      console.log(`🔍 CSV Debug - Total lines: ${lines.length}`);
+      console.log(`🔍 First 3 lines:`, lines.slice(0, 3));
+      
       // Look for staff data headers
       let headerRowIndex = -1;
       let headers: string[] = [];
       
-      for (let i = 0; i < lines.length; i++) {
+      for (let i = 0; i < Math.min(5, lines.length); i++) {
         const line = lines[i].trim();
-        // Look for common staff headers
+        console.log(`🔍 Line ${i}: ${line.substring(0, 100)}...`);
+        
+        // Look for common staff headers (more flexible)
         if (line.toLowerCase().includes('nik') || 
             line.toLowerCase().includes('email') ||
             line.toLowerCase().includes('full name') ||
-            line.toLowerCase().includes('password')) {
+            line.toLowerCase().includes('password') ||
+            line.toLowerCase().includes('city') ||
+            line.toLowerCase().includes('address')) {
           headerRowIndex = i;
           headers = line.split(',').map(h => h.trim().replace(/"/g, ''));
+          console.log(`✅ Headers found at row ${i}:`, headers);
           break;
         }
       }
@@ -167,49 +175,49 @@ function parseCSV(buffer: Buffer, tableName?: string): Promise<any[]> {
         // If no header row found, assume first row is headers
         headerRowIndex = 0;
         headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
+        console.log(`⚠️ No header row detected, using first row:`, headers);
       }
       
-      console.log(`📍 Found staff headers at row ${headerRowIndex + 1}:`, headers);
+      console.log(`📍 Final headers (${headers.length}):`, headers);
       
-      // Define mapping from CSV headers to database fields
-      const fieldMapping: { [key: string]: string } = {
-        'NIK': 'nik',
-        'nik': 'nik',
-        'Email': 'email',
-        'email': 'email',
-        'Password': 'password',
-        'password': 'password',
-        'Full Name': 'namaLengkap',
-        'full name': 'namaLengkap',
-        'nama lengkap': 'namaLengkap',
-        'namalengkap': 'namaLengkap',
-        'City': 'kota',
-        'city': 'kota',
-        'kota': 'kota',
-        'Address': 'alamat',
-        'address': 'alamat',
-        'alamat': 'alamat',
-        'Phone Number': 'noHp',
-        'phone number': 'noHp',
-        'phone': 'noHp',
-        'no hp': 'noHp',
-        'nohp': 'noHp',
-        'Place of Birth': 'tempatLahir',
-        'place of birth': 'tempatLahir',
-        'tempat lahir': 'tempatLahir',
-        'tempatlahir': 'tempatLahir',
-        'Date of Birth': 'tanggalLahir',
-        'date of birth': 'tanggalLahir',
-        'tanggal lahir': 'tanggalLahir',
-        'tanggallahir': 'tanggalLahir',
-        'Date Joined': 'tanggalMasuk',
-        'date joined': 'tanggalMasuk',
-        'tanggal masuk': 'tanggalMasuk',
-        'tanggalmasuk': 'tanggalMasuk',
-        'Position': 'jabatan',
-        'position': 'jabatan',
-        'jabatan': 'jabatan'
+      // Define mapping from CSV headers to database fields (case-insensitive and flexible)
+      const getFieldMapping = (header: string): string | null => {
+        const cleanHeader = header.toLowerCase().trim().replace(/[\s_-]+/g, ' ');
+        
+        const mappings: { [key: string]: string } = {
+          'nik': 'nik',
+          'email': 'email', 
+          'password': 'password',
+          'full name': 'namaLengkap',
+          'nama lengkap': 'namaLengkap',
+          'city': 'kota',
+          'kota': 'kota',
+          'address': 'alamat',
+          'alamat': 'alamat',
+          'phone number': 'noHp',
+          'phone': 'noHp',
+          'no hp': 'noHp',
+          'place of birth': 'tempatLahir',
+          'tempat lahir': 'tempatLahir',
+          'date of birth': 'tanggalLahir',
+          'tanggal lahir': 'tanggalLahir',
+          'date joined': 'tanggalMasuk',
+          'tanggal masuk': 'tanggalMasuk',
+          'position': 'jabatan',
+          'jabatan': 'jabatan'
+        };
+        
+        return mappings[cleanHeader] || null;
       };
+      
+      // Show field mappings for debugging
+      console.log(`🗂️ Testing field mappings:`);
+      headers.forEach((header, index) => {
+        const mappedField = getFieldMapping(header);
+        console.log(`  "${header}" → ${mappedField || 'NOT MAPPED'}`);
+      });
+      
+      console.log(`📊 Processing ${lines.length - headerRowIndex - 1} data rows...`);
       
       // Process data rows
       for (let i = headerRowIndex + 1; i < lines.length; i++) {
@@ -218,12 +226,25 @@ function parseCSV(buffer: Buffer, tableName?: string): Promise<any[]> {
           const values = line.split(',').map(v => v.trim().replace(/"/g, ''));
           if (values[0]) { // Only process rows with data in first column
             const rowData: any = {};
+            
+            // Debug log for first row
+            if (i === headerRowIndex + 1) {
+              console.log(`🔍 Sample row values (${values.length}):`, values.slice(0, 8));
+            }
+            
             headers.forEach((header, index) => {
-              const mappedField = fieldMapping[header.toLowerCase()] || fieldMapping[header];
-              if (mappedField && values[index]) {
+              const mappedField = getFieldMapping(header);
+              const value = values[index];
+              
+              // Debug for first row
+              if (i === headerRowIndex + 1 && index < 8) {
+                console.log(`  ${header} [${index}] → ${mappedField} = "${value}"`);
+              }
+              
+              if (mappedField && value && value.trim() !== '') {
                 // Special handling for dates
                 if (mappedField === 'tanggalLahir' || mappedField === 'tanggalMasuk') {
-                  const dateValue = values[index];
+                  const dateValue = value.trim();
                   // Try to parse different date formats
                   let parsedDate = new Date(dateValue);
                   if (isNaN(parsedDate.getTime())) {
@@ -235,12 +256,21 @@ function parseCSV(buffer: Buffer, tableName?: string): Promise<any[]> {
                   }
                   if (!isNaN(parsedDate.getTime())) {
                     rowData[mappedField] = parsedDate.toISOString().split('T')[0]; // Format as YYYY-MM-DD
+                  } else {
+                    console.warn(`⚠️ Invalid date format for ${mappedField}: ${dateValue}`);
                   }
                 } else {
-                  rowData[mappedField] = values[index];
+                  rowData[mappedField] = value.trim();
                 }
               }
             });
+            
+            // Debug log for first processed row
+            if (i === headerRowIndex + 1) {
+              console.log(`✅ Sample mapped data:`, rowData);
+              console.log(`📊 Mapped ${Object.keys(rowData).length} fields out of ${headers.length} headers`);
+            }
+            
             if (Object.keys(rowData).length > 0) {
               results.push(rowData);
             }
