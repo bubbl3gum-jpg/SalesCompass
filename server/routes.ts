@@ -1238,6 +1238,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { discountId } = req.params;
       const validatedData = insertDiscountTypeSchema.partial().parse(req.body);
       const discount = await storage.updateDiscountType(parseInt(discountId), validatedData);
+      
+      // Clear cache after updating discount
+      cache.del(CACHE_KEYS.DISCOUNTS);
+      
       res.json(discount);
     } catch (error) {
       console.error('Discount update error:', error);
@@ -1253,6 +1257,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { discountId } = req.params;
       await storage.deleteDiscountType(parseInt(discountId));
+      
+      // Clear cache after deleting discount
+      cache.del(CACHE_KEYS.DISCOUNTS);
+      
       res.json({ success: true });
     } catch (error) {
       console.error('Discount deletion error:', error);
