@@ -66,7 +66,7 @@ export const discountTypes = pgTable("discount_types", {
   discountId: integer("discount_id").primaryKey().generatedByDefaultAsIdentity(),
   discountName: varchar("discount_name", { length: 255 }),
   discountType: varchar("discount_type", { length: 100 }),
-  discountAmount: decimal("discount_amount", { precision: 12, scale: 2 }),
+  discountAmount: decimal("discount_amount", { precision: 12, scale: 2 }).notNull(),
   startFrom: date("start_from"),
   endAt: date("end_at"),
 });
@@ -299,7 +299,9 @@ export type Position = typeof positions.$inferSelect;
 // Schemas for validation
 export const insertReferenceSheetSchema = createInsertSchema(referenceSheet);
 export const insertStoreSchema = createInsertSchema(stores);
-export const insertDiscountTypeSchema = createInsertSchema(discountTypes).omit({ discountId: true });
+export const insertDiscountTypeSchema = createInsertSchema(discountTypes).omit({ discountId: true }).extend({
+  discountAmount: z.coerce.number().min(0, "Discount amount must be positive")
+});
 export const insertPricelistSchema = createInsertSchema(pricelist).omit({ pricelistId: true });
 export const insertOpeningStockSchema = createInsertSchema(openingStock).omit({ itemId: true });
 export const insertLaporanPenjualanSchema = createInsertSchema(laporanPenjualan).omit({ penjualanId: true });

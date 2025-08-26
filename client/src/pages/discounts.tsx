@@ -35,7 +35,7 @@ const discountFormSchema = z.object({
   discountType: z.enum(["percentage", "amount"], {
     required_error: "Please select a discount type",
   }),
-  discountAmount: z.string().min(1, "Discount amount is required"),
+  discountAmount: z.coerce.number().min(0.01, "Discount amount must be greater than 0"),
   startFrom: z.string().min(1, "Start date is required"),
   endAt: z.string().min(1, "End date is required"),
 });
@@ -54,7 +54,7 @@ export default function Discounts() {
     defaultValues: {
       discountName: "",
       discountType: "percentage" as const,
-      discountAmount: "",
+      discountAmount: 0,
       startFrom: "",
       endAt: "",
     },
@@ -107,11 +107,7 @@ export default function Discounts() {
   });
 
   const onSubmit = (data: DiscountFormData) => {
-    const submitData = {
-      ...data,
-      discountAmount: parseFloat(data.discountAmount),
-    };
-    createDiscountMutation.mutate(submitData);
+    createDiscountMutation.mutate(data);
   };
 
   const getDiscountStatus = (discount: any) => {
@@ -238,7 +234,7 @@ export default function Discounts() {
                               {discount.discountName}
                             </p>
                             <p className="text-sm text-orange-600 dark:text-orange-400 font-semibold">
-                              {parseFloat(discount.discountAmount || '0')}% OFF
+                              {discount.discountType === 'percentage' ? `${parseFloat(discount.discountAmount || '0')}% OFF` : `Rp${parseFloat(discount.discountAmount || '0').toLocaleString('id-ID')} OFF`}
                             </p>
                             <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                               {discount.startFrom} to {discount.endAt}
@@ -327,7 +323,7 @@ export default function Discounts() {
                       </FormControl>
                       <SelectContent>
                         <SelectItem value="percentage">Percentage (%)</SelectItem>
-                        <SelectItem value="amount">Fixed Amount ($)</SelectItem>
+                        <SelectItem value="amount">Fixed Amount (Rp)</SelectItem>
                       </SelectContent>
                     </Select>
                     <FormMessage />
@@ -341,14 +337,14 @@ export default function Discounts() {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>
-                      {form.watch("discountType") === "percentage" ? "Discount Percentage (%)" : "Discount Amount ($)"}
+                      {form.watch("discountType") === "percentage" ? "Discount Percentage (%)" : "Discount Amount (Rp)"}
                     </FormLabel>
                     <FormControl>
                       <Input 
                         type="number" 
                         min="0" 
                         max={form.watch("discountType") === "percentage" ? "100" : undefined}
-                        placeholder={form.watch("discountType") === "percentage" ? "10" : "5.00"} 
+                        placeholder={form.watch("discountType") === "percentage" ? "10" : "50000"} 
                         step={form.watch("discountType") === "percentage" ? "1" : "0.01"}
                         {...field} 
                         data-testid="input-discount-amount" 
