@@ -51,7 +51,12 @@ function Router() {
             <Route path="/" component={Dashboard} />
             <Route path="/sales-entry" component={SalesEntry} />
             <Route path="/settlements" component={Settlements} />
-            <Route path="/stock-dashboard" component={StockDashboard} />
+            <Route path="/stock-dashboard">
+              {() => {
+                window.location.href = "/#stock-overview";
+                return null;
+              }}
+            </Route>
             <Route path="/stock-opname" component={StockOpname} />
             <Route path="/stores-overview" component={StoresOverview} />
             <Route path="/transfers" component={Transfers} />

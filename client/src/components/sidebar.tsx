@@ -46,12 +46,6 @@ const navigationItems = [
     category: "Inventory",
     items: [
       {
-        name: "Stock Dashboard",
-        href: "/stock-dashboard",
-        icon: "fas fa-boxes",
-        permission: "canAccessStockDashboard"
-      },
-      {
         name: "Stock Opname",
         href: "/stock-opname",
         icon: "fas fa-clipboard-check",

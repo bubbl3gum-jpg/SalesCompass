@@ -1,0 +1,176 @@
+Consolidate Home, Add Quick Actions, and Real-Time Import Progress
+
+Role: You are a senior full-stack product engineer (UX + backend). Your mission is to make the Home page the single command center: add grouped “Quick” functions, move stock insights here (delete the separate Stock Dashboard page), and implement a clear real-time progress bar for imports.
+
+Assume (edit if needed):
+Frontend: {{React/Next.js + Tailwind}} · Backend: {{FastAPI}} · DB: {{MySQL}} · Auth/RBAC: {{existing}}
+If any detail is missing, choose sensible defaults and proceed.
+
+Business Goals (must all be true)
+
+Home becomes the only landing for operations: quick actions together, analytics clearer, stock overview visible.
+
+Separate Stock Dashboard page is removed; navigation updated; old routes redirect to Home.
+
+Import workflow shows a real-time progress bar with clear states and ETA; UI never blocks.
+
+p95 latency for normal API calls stays ≤ 300 ms even during imports.
+
+Deliverables
+
+Home Page Redesign (UI + code)
+
+Sections (top → bottom):
+
+Store Overview (compact): Store selector, Date, KPIs (On-hand, Inbound, Sold Today, Low-Stock Alerts).
+
+Quick Actions (grouped together in a single card grid):
+
+Quick Transfer
+
+Quick Settlement
+
+Quick Pricelist Search
+
+Quick Stock Search
+
+Quick Sale
+
+Analytics (clear & glanceable):
+
+Sales Today (mini chart) · 7-Day Trend · Stock Movements · Settlement vs Sales (status: OK/WARN/FAIL)
+
+Imports Widget (live): Most recent imports with status + progress bar.
+
+Layout guidance:
+
+2-column grid on desktop (xl: 3-column where helpful), single column on mobile.
+
+Keep all Quick Actions adjacent inside one “Quick Actions” block (card grid).
+
+Use consistent card heights, clear iconography, concise labels.
+
+Micro-copy (suggested):
+
+Buttons: “New Transfer”, “Record Settlement”, “Find Price”, “Find Stock”, “Quick Sale”
+
+KPI labels: “On-hand”, “Inbound”, “Sold Today”, “Low-Stock”
+
+Remove Stock Dashboard Page
+
+Delete route (e.g., /stock-dashboard), 301/302 redirect to /home#stock-overview.
+
+Move any unique widgets/data from Stock Dashboard into Store Overview + Analytics on Home.
+
+Update navbar/side menu, breadcrumbs, and deep links.
+
+Real-Time Import Progress (Backend + Frontend)
+
+API/Job pattern (non-blocking):
+
+POST /imports → returns {task_id} in < 1s (no heavy work inline).
+
+GET /imports/{task_id} → JSON status (queued|parsing|validating|loading|finalizing|done|failed), {rows_total, rows_ok, rows_bad, throughput_rps, pct, eta_seconds}.
+
+SSE or WebSocket endpoint: /imports/{task_id}/events emitting progress at least 1×/sec.
+
+Worker pipeline:
+
+Stream parse (CSV/Excel→CSV) → validate to staging → bulk load (MySQL LOAD DATA [LOCAL] INFILE or batched multi-row inserts) → finalize (upsert/swap).
+
+Idempotency key per upload; safe retries; partial failures written to error CSV download.
+
+UI:
+
+Global progress bar with percent, rows/sec, ETA, and current phase.
+
+Row error counter with link: “Download error report”.
+
+Progress visible in the Home “Imports” widget and in a detail drawer/modal.
+
+Analytics Clarity
+
+Simplify to 3–4 high-signal charts (sparklines ok). Ensure axis labels and tooltips.
+
+Colors and legends consistent; WARN/FAIL statuses clearly highlighted.
+
+Acceptance Tests & Artifacts
+
+Before/after screenshots of Home.
+
+Lighthouse (or equivalent) JSON and bundle sizes.
+
+k6/Locust script for a 100k-row import; show non-import APIs p95 ≤ 300 ms during the run.
+
+Redirect test confirming /stock-dashboard now lands on Home.
+
+Detailed Requirements
+Quick Actions (all in one grouped block)
+
+Quick Transfer (modal/drawer): From Store, To Store, SKU/Serial, Qty, Notes → Validate → Submit → Success toast + link to transfer detail.
+
+Quick Settlement (modal): Date, Store, Payment method breakdown, Notes → Show reconciliation status after save.
+
+Quick Pricelist Search (inline card): Search by SKU/Serial; show effective price, source, discount if any.
+
+Quick Stock Search (inline card): Search by SKU/Serial; show store, qty, status (in_stock/sold/transferred).
+
+Quick Sale (modal): Store, Serial/SKU, payment method, discount; minimal path to record a sale.
+
+All forms: keyboard-first, server-side validation fallback, optimistic UI where safe.
+
+Imports Progress (tech specifics)
+
+Backend:
+
+FastAPI endpoints listed above; SSE preferred for simplicity (text/event-stream), fallback to polling.
+
+Worker (Celery/Dramatiq/RQ/Arq) does heavy work; emit progress events every N rows.
+
+MySQL: enable local_infile=1, ensure secure_file_priv path documented; use LOAD DATA where possible, else 1–5k row batches with prepared statements.
+
+Frontend:
+
+Subscribe to SSE; update a determinate progress bar and text: “Parsing…”, “Loading…”, etc.
+
+Show rows_ok/rows_total, rows_bad, throughput_rps, and ETA.
+
+Never block UI; allow navigating away while a sticky status bar shows global import state.
+
+Performance & UX
+
+Home route JS budget ≤ 200 KB gzipped after code-splitting; lazy-load heavy charts.
+
+All quick actions respond (acknowledge) in < 200 ms with loading states.
+
+Navigation: keyboard accessible, ARIA roles set; dark-mode safe.
+
+Output Format (what you must return)
+
+Summary of changes with screenshots/wireframes,
+
+Code diffs/patches (frontend, backend, worker, SQL migrations),
+
+API contracts (OpenAPI snippets) and event schema for SSE,
+
+Redirects/nav changes list,
+
+Test scripts (k6/Locust) + results,
+
+Runbook (operate imports, troubleshoot, rollbacks).
+
+Acceptance Checklist (tick all)
+
+ Home shows Store Overview, Quick Actions (grouped), clear Analytics, and Imports widget.
+
+ /stock-dashboard removed and redirected to Home; no orphaned links.
+
+ Import request returns {task_id} in < 1s; real-time progress visible with phase, %, rows/sec, ETA.
+
+ Error CSV downloadable; idempotent retries don’t duplicate rows.
+
+ Non-import APIs maintain p95 ≤ 300 ms during a 100k-row import.
+
+ Bundle size and Lighthouse numbers included; charts readable and consistent.
+
+Begin now. If any variable is missing, assume reasonable defaults and continue.
