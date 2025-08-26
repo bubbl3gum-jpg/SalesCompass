@@ -5,6 +5,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/components/theme-provider";
+import { BackgroundImportTracker } from "@/components/BackgroundImportTracker";
 import { useAuth } from "@/hooks/useAuth";
 import { SidebarProvider } from "@/hooks/useSidebar";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -79,6 +80,7 @@ function App() {
           <TooltipProvider>
             <Toaster />
             <Router />
+            <BackgroundImportTracker />
           </TooltipProvider>
         </SidebarProvider>
       </ThemeProvider>
