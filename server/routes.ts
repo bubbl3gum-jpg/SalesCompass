@@ -137,170 +137,31 @@ const upload = multer({
   }
 });
 
+import { parseCSVContent } from './parseCSV';
+
 // Helper function to parse CSV data for different table types
 function parseCSV(buffer: Buffer, tableName?: string): Promise<any[]> {
   return new Promise((resolve, reject) => {
-    const results: any[] = [];
-    const csvContent = buffer.toString();
-    const lines = csvContent.split('\n');
-    
-    // Staff-specific parsing with proper field mapping
-    if (tableName === 'staff') {
+    try {
+      const csvContent = buffer.toString('utf-8');
       
-      // Look for staff data headers
-      let headerRowIndex = -1;
-      let headers: string[] = [];
-      
-      for (let i = 0; i < Math.min(5, lines.length); i++) {
-        const line = lines[i].trim();
-        
-        // Look for common staff headers (more flexible)
-        if (line.toLowerCase().includes('nik') || 
-            line.toLowerCase().includes('email') ||
-            line.toLowerCase().includes('full name') ||
-            line.toLowerCase().includes('password') ||
-            line.toLowerCase().includes('city') ||
-            line.toLowerCase().includes('address')) {
-          headerRowIndex = i;
-          headers = line.split(',').map(h => h.trim().replace(/"/g, ''));
-          break;
-        }
+      // Use enhanced CSV parsing for staff, fallback for others
+      if (tableName === 'staff') {
+        const results = parseCSVContent(csvContent, tableName);
+        resolve(results);
+      } else {
+        // Fallback parsing for other table types
+        const results: any[] = [];
+        const stream = Readable.from(csvContent);
+        stream
+          .pipe(csv.default())
+          .on('data', (data: any) => results.push(data))
+          .on('end', () => resolve(results))
+          .on('error', reject);
       }
-      
-      if (headerRowIndex === -1) {
-        // If no header row found, assume first row is headers
-        headerRowIndex = 0;
-        headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
-      }
-      
-      
-      // Define mapping from CSV headers to database fields (case-insensitive and flexible)
-      const getFieldMapping = (header: string): string | null => {
-        const cleanHeader = header.toLowerCase().trim().replace(/[\s_-]+/g, ' ');
-        
-        const mappings: { [key: string]: string } = {
-          'nik': 'nik',
-          'email': 'email', 
-          'password': 'password',
-          'full name': 'namaLengkap',
-          'nama lengkap': 'namaLengkap',
-          'city': 'kota',
-          'kota': 'kota',
-          'address': 'alamat',
-          'alamat': 'alamat',
-          'phone number': 'noHp',
-          'phone': 'noHp',
-          'no hp': 'noHp',
-          'place of birth': 'tempatLahir',
-          'tempat lahir': 'tempatLahir',
-          'date of birth': 'tanggalLahir',
-          'tanggal lahir': 'tanggalLahir',
-          'date joined': 'tanggalMasuk',
-          'tanggal masuk': 'tanggalMasuk',
-          'position': 'jabatan',
-          'jabatan': 'jabatan'
-        };
-        
-        return mappings[cleanHeader] || null;
-      };
-      
-      
-      // Process data rows
-      for (let i = headerRowIndex + 1; i < lines.length; i++) {
-        const line = lines[i].trim();
-        if (line && !line.match(/^,*$/)) {
-          const values = line.split(',').map(v => v.trim().replace(/"/g, ''));
-          if (values[0]) { // Only process rows with data in first column
-            const rowData: any = {};
-            
-            
-            headers.forEach((header, index) => {
-              const mappedField = getFieldMapping(header);
-              const value = values[index];
-              
-              
-              if (mappedField && value && value.trim() !== '') {
-                // Special handling for dates
-                if (mappedField === 'tanggalLahir' || mappedField === 'tanggalMasuk') {
-                  const dateValue = value.trim();
-                  // Try to parse different date formats
-                  let parsedDate = new Date(dateValue);
-                  if (isNaN(parsedDate.getTime())) {
-                    // Try DD/MM/YYYY format
-                    const parts = dateValue.split('/');
-                    if (parts.length === 3) {
-                      parsedDate = new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]));
-                    }
-                  }
-                  if (!isNaN(parsedDate.getTime())) {
-                    rowData[mappedField] = parsedDate.toISOString().split('T')[0]; // Format as YYYY-MM-DD
-                  } else {
-                    // Invalid date format, skip this field
-                  }
-                } else {
-                  rowData[mappedField] = value.trim();
-                }
-              }
-            });
-            
-            
-            if (Object.keys(rowData).length > 0) {
-              results.push(rowData);
-            }
-          }
-        }
-      }
-      
-      resolve(results);
-      return;
+    } catch (error) {
+      reject(error);
     }
-    
-    // Store data parsing (existing logic)
-    let headerRowIndex = -1;
-    let headers: string[] = [];
-    
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i].trim();
-      if (line.toLowerCase().includes('kode gudang') || 
-          line.toLowerCase().includes('kode_gudang') ||
-          line.toLowerCase().includes('kodegudang')) {
-        headerRowIndex = i;
-        // Parse the header row and only take first 3 columns
-        headers = line.split(',').slice(0, 3).map(h => h.trim().replace(/"/g, ''));
-        break;
-      }
-    }
-    
-    if (headerRowIndex === -1) {
-      // Fallback to old behavior if no proper header found
-      const stream = Readable.from(csvContent);
-      stream
-        .pipe(csv.default())
-        .on('data', (data: any) => results.push(data))
-        .on('end', () => resolve(results))
-        .on('error', reject);
-      return;
-    }
-    
-    
-    // Process data rows starting after the header
-    for (let i = headerRowIndex + 1; i < lines.length; i++) {
-      const line = lines[i].trim();
-      if (line && !line.match(/^,*$/)) { // Skip empty lines
-        const values = line.split(',').slice(0, 3).map(v => v.trim().replace(/"/g, ''));
-        if (values[0]) { // Only include rows with a value in first column
-          const rowData: any = {};
-          headers.forEach((header, index) => {
-            if (header && values[index]) {
-              rowData[header] = values[index];
-            }
-          });
-          results.push(rowData);
-        }
-      }
-    }
-    
-    resolve(results);
   });
 }
 
@@ -331,7 +192,6 @@ function parseExcel(buffer: Buffer): any[] {
     return XLSX.utils.sheet_to_json(worksheet);
   }
   
-  console.log(`📍 Found Excel headers at row ${headerRowIndex + 1}:`, headers);
   
   // Process data rows
   const results: any[] = [];
@@ -637,7 +497,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Store the authenticated staff in session
       (req.session as any).authenticatedStaff = {
-        employeeId: staff.employeeId,
+        nik: staff.nik,
         email: staff.email,
         namaLengkap: staff.namaLengkap,
         jabatan: staff.jabatan
@@ -646,7 +506,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ 
         message: "Staff authentication successful", 
         staff: {
-          employeeId: staff.employeeId,
+          nik: staff.nik,
           email: staff.email,
           namaLengkap: staff.namaLengkap,
           jabatan: staff.jabatan
@@ -874,7 +734,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { valid, invalid, errors } = validateImportData(parsedData, tableName, schema);
       
       // Log validation results  
-      console.log(`Validation: ${valid.length} valid, ${invalid.length} invalid records`);
       
       // Insert valid records with special handling for line items
       let successCount = 0;
@@ -1380,11 +1239,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put('/api/staff/:employeeId', isAuthenticated, checkRole(['System Administrator']), async (req, res) => {
+  app.put('/api/staff/:nik', isAuthenticated, checkRole(['System Administrator']), async (req, res) => {
     try {
-      const { employeeId } = req.params;
+      const { nik } = req.params;
       const validatedData = insertStaffSchema.partial().parse(req.body);
-      const staff = await storage.updateStaff(parseInt(employeeId), validatedData);
+      const staff = await storage.updateStaff(nik, validatedData);
       res.json(staff);
     } catch (error) {
       console.error('Staff update error:', error);
@@ -1396,10 +1255,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete('/api/staff/:employeeId', isAuthenticated, checkRole(['System Administrator']), async (req, res) => {
+  app.delete('/api/staff/:nik', isAuthenticated, checkRole(['System Administrator']), async (req, res) => {
     try {
-      const { employeeId } = req.params;
-      await storage.deleteStaff(parseInt(employeeId));
+      const { nik } = req.params;
+      await storage.deleteStaff(nik);
       res.json({ success: true });
     } catch (error) {
       console.error('Staff deletion error:', error);
