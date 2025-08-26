@@ -17,8 +17,10 @@ import { ImportModal } from "@/components/import-modal";
 import { apiRequest } from "@/lib/queryClient";
 import { Sidebar } from "@/components/sidebar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Edit3, Trash2, Plus, Upload } from "lucide-react";
+import { Edit3, Trash2, Plus, Upload, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { ImportProgress } from "@/components/ImportProgress";
+import { SearchInput } from "@/components/SearchInput";
 
 interface TableConfig {
   name: string;
@@ -184,6 +186,11 @@ export default function AdminSettings() {
   // Data Selection State
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
   const [selectAll, setSelectAll] = useState(false);
+  
+  // Search and Import Progress State
+  const [searchQueries, setSearchQueries] = useState<Record<string, string>>({});
+  const [currentImportId, setCurrentImportId] = useState<string | null>(null);
+  const [isImporting, setIsImporting] = useState(false);
 
   // Selection handlers
   const handleSelectAll = (checked: boolean, data: any[], config: TableConfig) => {
@@ -403,7 +410,22 @@ export default function AdminSettings() {
   };
 
   const renderTableContent = (config: TableConfig) => {
-    const { data, isLoading, error } = useTableData(config.endpoint);
+    const { data: rawData, isLoading, error } = useTableData(config.endpoint);
+    
+    // Filter data based on search query
+    const searchQuery = searchQueries[config.name] || '';
+    const data = rawData ? rawData.filter((item: any) => {
+      if (!searchQuery) return true;
+      
+      // Search across all text fields
+      return config.fields.some(field => {
+        const value = item[field.key];
+        if (typeof value === 'string') {
+          return value.toLowerCase().includes(searchQuery.toLowerCase());
+        }
+        return false;
+      });
+    }) : [];
 
     if (error && isUnauthorizedError(error)) {
       toast({
@@ -460,6 +482,33 @@ export default function AdminSettings() {
               Add New
             </Button>
           </div>
+        </div>
+
+        {/* Search and Import Progress */}
+        <div className="space-y-4 mb-6">
+          <SearchInput
+            placeholder={`Search ${config.displayName.toLowerCase()}...`}
+            onSearch={(query) => {
+              setSearchQueries(prev => ({ ...prev, [config.name]: query }));
+            }}
+            className="max-w-md"
+            data-testid={`search-${config.name}`}
+          />
+          
+          {currentImportId && isImporting && (
+            <ImportProgress
+              importId={currentImportId}
+              onComplete={() => {
+                setIsImporting(false);
+                setCurrentImportId(null);
+                queryClient.invalidateQueries({ queryKey: [config.endpoint] });
+                toast({
+                  title: "Import Complete",
+                  description: `${config.displayName} data imported successfully!`,
+                });
+              }}
+            />
+          )}
         </div>
 
         <Card className="bg-white/10 dark:bg-black/10 backdrop-blur-xl border-white/20 dark:border-gray-800/50">

@@ -52,7 +52,7 @@ import {
   type InsertPosition,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, sql, desc, sum } from "drizzle-orm";
+import { eq, and, sql, desc, sum, or, ilike } from "drizzle-orm";
 
 export interface IStorage {
   // User operations (mandatory for Replit Auth)
@@ -62,14 +62,17 @@ export interface IStorage {
   // Reference Sheet operations
   getReferenceSheets(): Promise<ReferenceSheet[]>;
   createReferenceSheet(data: InsertReferenceSheet): Promise<ReferenceSheet>;
-  updateReferenceSheet(refId: number, data: Partial<InsertReferenceSheet>): Promise<ReferenceSheet>;
-  deleteReferenceSheet(refId: number): Promise<void>;
+  updateReferenceSheet(kodeItem: string, data: Partial<InsertReferenceSheet>): Promise<ReferenceSheet>;
+  deleteReferenceSheet(kodeItem: string): Promise<void>;
   getReferenceSheetByKodeItem(kodeItem: string): Promise<ReferenceSheet | undefined>;
+  bulkInsertReferenceSheet(data: InsertReferenceSheet[]): Promise<void>;
+  searchReferenceSheet(query: string): Promise<ReferenceSheet[]>;
 
   // Store operations
   getStores(): Promise<Store[]>;
   createStore(data: InsertStore): Promise<Store>;
   getStoreByKode(kodeGudang: string): Promise<Store | undefined>;
+  searchStores(query: string): Promise<Store[]>;
 
   // Discount operations
   getDiscountTypes(): Promise<DiscountType[]>;
@@ -120,8 +123,10 @@ export interface IStorage {
   // Staff operations
   getStaff(): Promise<Staff[]>;
   createStaff(data: InsertStaff): Promise<Staff>;
-  updateStaff(employeeId: number, data: Partial<InsertStaff>): Promise<Staff>;
-  deleteStaff(employeeId: number): Promise<void>;
+  updateStaff(nik: string, data: Partial<InsertStaff>): Promise<Staff>;
+  deleteStaff(nik: string): Promise<void>;
+  bulkInsertStaff(data: InsertStaff[]): Promise<void>;
+  searchStaff(query: string): Promise<Staff[]>;
   getStaffByEmail(email: string): Promise<Staff | undefined>;
 
   // Position operations
@@ -169,16 +174,52 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
-  async updateReferenceSheet(refId: number, data: Partial<InsertReferenceSheet>): Promise<ReferenceSheet> {
+  async updateReferenceSheet(kodeItem: string, data: Partial<InsertReferenceSheet>): Promise<ReferenceSheet> {
     const [result] = await db.update(referenceSheet)
       .set(data)
-      .where(eq(referenceSheet.refId, refId))
+      .where(eq(referenceSheet.kodeItem, kodeItem))
       .returning();
     return result;
   }
 
-  async deleteReferenceSheet(refId: number): Promise<void> {
-    await db.delete(referenceSheet).where(eq(referenceSheet.refId, refId));
+  async deleteReferenceSheet(kodeItem: string): Promise<void> {
+    await db.delete(referenceSheet).where(eq(referenceSheet.kodeItem, kodeItem));
+  }
+
+  // Optimized bulk insert for reference sheet
+  async bulkInsertReferenceSheet(data: InsertReferenceSheet[]): Promise<void> {
+    const batchSize = 50; // Process in smaller chunks to avoid memory issues
+    for (let i = 0; i < data.length; i += batchSize) {
+      const batch = data.slice(i, i + batchSize);
+      await db.insert(referenceSheet).values(batch).onConflictDoUpdate({
+        target: referenceSheet.kodeItem,
+        set: {
+          namaItem: sql.raw('excluded.nama_item'),
+          kelompok: sql.raw('excluded.kelompok'),
+          family: sql.raw('excluded.family'),
+          originalCode: sql.raw('excluded.original_code'),
+          color: sql.raw('excluded.color'),
+          kodeMaterial: sql.raw('excluded.kode_material'),
+          deskripsiMaterial: sql.raw('excluded.deskripsi_material'),
+          kodeMotif: sql.raw('excluded.kode_motif'),
+          deskripsiMotif: sql.raw('excluded.deskripsi_motif'),
+        }
+      });
+    }
+  }
+
+  // Search functionality for reference sheet
+  async searchReferenceSheet(query: string): Promise<ReferenceSheet[]> {
+    return await db.select().from(referenceSheet)
+      .where(
+        or(
+          ilike(referenceSheet.kodeItem, `%${query}%`),
+          ilike(referenceSheet.namaItem, `%${query}%`),
+          ilike(referenceSheet.kelompok, `%${query}%`),
+          ilike(referenceSheet.family, `%${query}%`)
+        )
+      )
+      .limit(100);
   }
 
   async getReferenceSheetByKodeItem(kodeItem: string): Promise<ReferenceSheet | undefined> {
@@ -409,6 +450,55 @@ export class DatabaseStorage implements IStorage {
 
   async deleteStaff(nik: string): Promise<void> {
     await db.delete(staff).where(eq(staff.nik, nik));
+  }
+
+  // Bulk operations for better performance
+  async bulkInsertStaff(data: InsertStaff[]): Promise<void> {
+    const batchSize = 25; // Process in smaller chunks
+    for (let i = 0; i < data.length; i += batchSize) {
+      const batch = data.slice(i, i + batchSize);
+      await db.insert(staff).values(batch).onConflictDoUpdate({
+        target: staff.nik,
+        set: {
+          email: sql.raw('excluded.email'),
+          password: sql.raw('excluded.password'),
+          namaLengkap: sql.raw('excluded.nama_lengkap'),
+          kota: sql.raw('excluded.kota'),
+          alamat: sql.raw('excluded.alamat'),
+          noHp: sql.raw('excluded.no_hp'),
+          tempatLahir: sql.raw('excluded.tempat_lahir'),
+          tanggalLahir: sql.raw('excluded.tanggal_lahir'),
+          tanggalMasuk: sql.raw('excluded.tanggal_masuk'),
+          jabatan: sql.raw('excluded.jabatan'),
+        }
+      });
+    }
+  }
+
+  // Search functionality
+  async searchStaff(query: string): Promise<Staff[]> {
+    return await db.select().from(staff)
+      .where(
+        or(
+          ilike(staff.nik, `%${query}%`),
+          ilike(staff.namaLengkap, `%${query}%`),
+          ilike(staff.email, `%${query}%`),
+          ilike(staff.jabatan, `%${query}%`)
+        )
+      )
+      .limit(100);
+  }
+
+  async searchStores(query: string): Promise<Store[]> {
+    return await db.select().from(stores)
+      .where(
+        or(
+          ilike(stores.kodeGudang, `%${query}%`),
+          ilike(stores.namaGudang, `%${query}%`),
+          ilike(stores.alamat, `%${query}%`)
+        )
+      )
+      .limit(100);
   }
 
   async getStaffByNik(nik: string): Promise<Staff | undefined> {

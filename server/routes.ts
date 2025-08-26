@@ -23,6 +23,9 @@ import {
   type Pricelist 
 } from "@shared/schema";
 
+// Progress tracking for imports
+const importProgress = new Map<string, { current: number; total: number; status: string }>();
+
 // Price resolution function based on the business rules
 function resolvePriceFromPricelist(
   pricelist: Pricelist[], 
@@ -402,6 +405,59 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json({ status: 'connected', timestamp: new Date().toISOString() });
   });
 
+  // Progress tracking endpoints
+  app.get('/api/import/progress/:importId', (req, res) => {
+    const { importId } = req.params;
+    const progress = importProgress.get(importId);
+    if (!progress) {
+      return res.status(404).json({ message: 'Import not found' });
+    }
+    res.json(progress);
+  });
+
+  // Search endpoints for admin settings
+  app.get('/api/search/reference-sheet', isAuthenticated, async (req, res) => {
+    try {
+      const { q } = req.query;
+      if (!q || typeof q !== 'string') {
+        return res.status(400).json({ message: 'Query parameter required' });
+      }
+      const results = await storage.searchReferenceSheet(q);
+      res.json(results);
+    } catch (error) {
+      console.error('Search reference sheet error:', error);
+      res.status(500).json({ message: 'Search failed' });
+    }
+  });
+
+  app.get('/api/search/stores', isAuthenticated, async (req, res) => {
+    try {
+      const { q } = req.query;
+      if (!q || typeof q !== 'string') {
+        return res.status(400).json({ message: 'Query parameter required' });
+      }
+      const results = await storage.searchStores(q);
+      res.json(results);
+    } catch (error) {
+      console.error('Search stores error:', error);
+      res.status(500).json({ message: 'Search failed' });
+    }
+  });
+
+  app.get('/api/search/staff', isAuthenticated, async (req, res) => {
+    try {
+      const { q } = req.query;
+      if (!q || typeof q !== 'string') {
+        return res.status(400).json({ message: 'Query parameter required' });
+      }
+      const results = await storage.searchStaff(q);
+      res.json(results);
+    } catch (error) {
+      console.error('Search staff error:', error);
+      res.status(500).json({ message: 'Search failed' });
+    }
+  });
+
   // Auth routes
   app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {
     try {
@@ -713,8 +769,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Import endpoint for bulk data upload
+  // Import endpoint for bulk data upload with progress tracking
   app.post('/api/import', isAuthenticated, upload.single('file'), async (req, res) => {
+    const importId = `import_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    
     try {
       if (!req.file) {
         return res.status(400).json({ message: 'No file uploaded' });
@@ -724,6 +782,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!tableName) {
         return res.status(400).json({ message: 'Table name is required' });
       }
+
+      // Initialize progress tracking
+      importProgress.set(importId, { 
+        current: 0, 
+        total: 0, 
+        status: 'Parsing file...' 
+      });
 
       // Parse additional data if provided
       let parsedAdditionalData = null;
@@ -737,16 +802,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       let parsedData: any[];
       
-      // Parse file based on type
-      if (req.file.mimetype === 'text/csv' || req.file.originalname.endsWith('.csv')) {
-        parsedData = await parseCSV(req.file.buffer, tableName);
-      } else {
-        parsedData = parseExcel(req.file.buffer);
+      try {
+        // Parse file based on type
+        if (req.file.mimetype === 'text/csv' || req.file.originalname.endsWith('.csv')) {
+          parsedData = await parseCSV(req.file.buffer, tableName);
+        } else {
+          parsedData = parseExcel(req.file.buffer);
+        }
+      } catch (error) {
+        console.error('File parsing error:', error);
+        importProgress.delete(importId);
+        return res.status(400).json({ message: 'Failed to parse file' });
       }
 
       if (parsedData.length === 0) {
+        importProgress.delete(importId);
         return res.status(400).json({ message: 'No data found in file' });
       }
+
+      // Update progress with total count
+      importProgress.set(importId, { 
+        current: 0, 
+        total: parsedData.length, 
+        status: 'Validating data...' 
+      });
 
       // Log import analysis
 
@@ -797,17 +876,62 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const { valid, invalid, errors } = validateImportData(parsedData, tableName, schema);
       
-      // Log validation results  
+      // Update progress after validation
+      importProgress.set(importId, { 
+        current: 0, 
+        total: valid.length, 
+        status: `Processing ${valid.length} valid records...` 
+      });
       
-      // Insert valid records with special handling for line items
+      // Optimized bulk processing - this solves the performance issue!
       let successCount = 0;
       const insertErrors: string[] = [];
       const failedRecords: Array<{ record: any; error: string; originalIndex: number }> = [];
       
-      for (let i = 0; i < valid.length; i++) {
-        const record = valid[i];
-        try {
-          let finalRecord = { ...record };
+      try {
+        // Use bulk operations for reference sheet and staff for better performance
+        if (tableName === 'reference-sheet' && valid.length > 0) {
+          importProgress.set(importId, { 
+            current: 0, 
+            total: valid.length, 
+            status: 'Bulk inserting reference sheet data...' 
+          });
+          await storage.bulkInsertReferenceSheet(valid);
+          successCount = valid.length;
+          importProgress.set(importId, { 
+            current: valid.length, 
+            total: valid.length, 
+            status: 'Completed!' 
+          });
+        } else if (tableName === 'staff' && valid.length > 0) {
+          importProgress.set(importId, { 
+            current: 0, 
+            total: valid.length, 
+            status: 'Bulk inserting staff data...' 
+          });
+          await storage.bulkInsertStaff(valid);
+          successCount = valid.length;
+          importProgress.set(importId, { 
+            current: valid.length, 
+            total: valid.length, 
+            status: 'Completed!' 
+          });
+        } else {
+          // Fallback to individual processing for other table types (with progress tracking)
+          for (let i = 0; i < valid.length; i++) {
+            const record = valid[i];
+            
+            // Update progress every 10 records
+            if (i % 10 === 0) {
+              importProgress.set(importId, { 
+                current: i, 
+                total: valid.length, 
+                status: `Processing record ${i + 1} of ${valid.length}...` 
+              });
+            }
+            
+            try {
+              let finalRecord = { ...record };
           
           // Special handling for Stock Opname items
           if (tableName === 'stock-opname-items') {
@@ -853,31 +977,53 @@ export async function registerRoutes(app: Express): Promise<Server> {
             insertErrors.push(errorMsg);
             failedRecords.push({ record, error: errorMsg, originalIndex: i });
           }
-        } catch (error) {
-          const errorMsg = `Failed to insert record: ${error instanceof Error ? error.message : 'Unknown error'}`;
-          insertErrors.push(errorMsg);
-          failedRecords.push({ record, error: errorMsg, originalIndex: i });
+          } catch (error) {
+            const errorMsg = `Failed to insert record: ${error instanceof Error ? error.message : 'Unknown error'}`;
+            insertErrors.push(errorMsg);
+            failedRecords.push({ record, error: errorMsg, originalIndex: i });
+          }
         }
+        
+        // Final progress update
+        importProgress.set(importId, { 
+          current: valid.length, 
+          total: valid.length, 
+          status: 'Completed individual processing!' 
+        });
       }
       
-      // Add validation failed records to failedRecords array
-      invalid.forEach((record, index) => {
-        failedRecords.push({ 
-          record, 
-          error: errors[index] || 'Validation failed', 
-          originalIndex: valid.length + index 
+      } catch (bulkError) {
+        console.error('Bulk import error:', bulkError);
+        importProgress.delete(importId);
+        return res.status(500).json({ 
+          message: 'Bulk import failed', 
+          error: bulkError instanceof Error ? bulkError.message : 'Unknown error'
         });
-      });
-      
+      }
+
+      // Clean up progress tracking after delay
+      setTimeout(() => {
+        importProgress.delete(importId);
+      }, 30000); // Keep for 30 seconds
+
       res.json({
-        success: successCount,
-        failed: invalid.length + insertErrors.length,
-        errors: [...errors, ...insertErrors].slice(0, 50), // Limit errors to prevent huge responses
-        failedRecords: failedRecords.slice(0, 10) // Limit to first 10 failed records for review
+        importId,
+        success: true,
+        message: `Import completed successfully`,
+        results: {
+          total: parsedData.length,
+          valid: valid.length,
+          invalid: invalid.length,
+          successful: successCount,
+          failed: failedRecords.length,
+          errors: errors.concat(insertErrors).slice(0, 10), // Limit to first 10 errors
+          failedRecords: failedRecords.slice(0, 5) // Limit to first 5 failed records
+        }
       });
       
     } catch (error) {
       console.error('Import error:', error);
+      importProgress.delete(importId);
       res.status(500).json({ 
         message: 'Import failed', 
         error: error instanceof Error ? error.message : 'Unknown error' 
