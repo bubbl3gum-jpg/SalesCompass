@@ -190,16 +190,17 @@ export const positions = pgTable("positions", {
 
 export const staff = pgTable("staff", {
   employeeId: integer("employee_id").primaryKey().generatedByDefaultAsIdentity(),
-  email: varchar("email", { length: 255 }).unique(),
-  password: varchar("password", { length: 255 }),
-  namaLengkap: varchar("nama_lengkap", { length: 255 }),
-  kota: varchar("kota", { length: 100 }),
-  alamat: varchar("alamat", { length: 255 }),
-  noHp: varchar("no_hp", { length: 20 }),
-  tempatLahir: varchar("tempat_lahir", { length: 100 }),
-  tanggalLahir: date("tanggal_lahir"),
-  tanggalMasuk: date("tanggal_masuk"),
-  jabatan: varchar("jabatan", { length: 100 }),
+  nik: varchar("nik", { length: 50 }).unique().notNull(),
+  email: varchar("email", { length: 255 }).unique().notNull(),
+  password: varchar("password", { length: 255 }).notNull(),
+  namaLengkap: varchar("nama_lengkap", { length: 255 }).notNull(),
+  kota: varchar("kota", { length: 100 }).notNull(),
+  alamat: varchar("alamat", { length: 255 }).notNull(),
+  noHp: varchar("no_hp", { length: 20 }).notNull(),
+  tempatLahir: varchar("tempat_lahir", { length: 100 }).notNull(),
+  tanggalLahir: date("tanggal_lahir").notNull(),
+  tanggalMasuk: date("tanggal_masuk").notNull(),
+  jabatan: varchar("jabatan", { length: 100 }).notNull(),
 });
 
 // Transfer Orders
