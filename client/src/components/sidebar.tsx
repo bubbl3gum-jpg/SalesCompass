@@ -20,9 +20,9 @@ import {
 
 const navigationItems = [
   {
-    name: "Dashboard",
+    name: "Home",
     href: "/",
-    icon: "fas fa-tachometer-alt",
+    icon: "fas fa-home",
     permission: "canAccessDashboard"
   },
   {

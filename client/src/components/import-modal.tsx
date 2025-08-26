@@ -41,6 +41,10 @@ export function ImportModal({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [jobId, setJobId] = useState<string | null>(null);
+  const [progressStage, setProgressStage] = useState<string>('');
+  const [throughputRps, setThroughputRps] = useState<number | null>(null);
+  const [eta, setEta] = useState<number | null>(null);
   const [importResults, setImportResults] = useState<{
     success: number;
     failed: number;
@@ -56,6 +60,7 @@ export function ImportModal({
   } | null>(null);
   const [editingRecord, setEditingRecord] = useState<any>(null);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [eventSource, setEventSource] = useState<EventSource | null>(null);
 
   const importMutation = useMutation({
     mutationFn: async (file: File) => {
@@ -82,56 +87,82 @@ export function ImportModal({
 
       const result = await response.json();
       
-      // If we get an importId, start progress tracking
-      if (result.importId) {
-        const pollProgress = async () => {
+      // The new API returns a job ID immediately for background processing
+      if (result.jobId) {
+        setJobId(result.jobId);
+        
+        // Start real-time progress tracking via Server-Sent Events
+        const sseUrl = `/api/import/progress/${result.jobId}/stream`;
+        const sse = new EventSource(sseUrl);
+        setEventSource(sse);
+        
+        sse.onmessage = (event) => {
           try {
-            const progressResponse = await apiRequest('GET', `/api/import/progress/${result.importId}`);
-            const progressData = await progressResponse.json();
+            const data = JSON.parse(event.data);
             
-            if (progressData.current !== undefined && progressData.total !== undefined) {
-              const percentage = progressData.total > 0 ? Math.round((progressData.current / progressData.total) * 100) : 0;
+            // Update progress percentage
+            if (data.progress && data.progress.total > 0) {
+              const percentage = Math.round((data.progress.current / data.progress.total) * 100);
               setUploadProgress(percentage);
+              setProgressStage(data.progress.stage || data.message);
+              
+              // Show throughput and ETA if available
+              if (data.progress.throughputRps) {
+                setThroughputRps(data.progress.throughputRps);
+              }
+              if (data.progress.eta) {
+                setEta(data.progress.eta);
+              }
             }
             
-            // Continue polling if not completed
-            if (progressData.status && !progressData.status.includes('Completed') && !progressData.status.includes('Failed')) {
-              setTimeout(pollProgress, 1000);
+            // Handle completion
+            if (data.status === 'completed' && data.result) {
+              setImportResults(data.result);
+              sse.close();
+              setEventSource(null);
+            }
+            
+            // Handle failure
+            if (data.status === 'failed') {
+              setImportResults({
+                success: 0,
+                failed: 0,
+                errors: [data.error || 'Import failed']
+              });
+              sse.close();
+              setEventSource(null);
             }
           } catch (error) {
-            console.error('Progress polling error:', error);
+            console.error('SSE parsing error:', error);
           }
         };
         
-        // Start polling immediately
-        setTimeout(pollProgress, 500);
+        sse.onerror = (error) => {
+          console.error('SSE connection error:', error);
+          sse.close();
+          setEventSource(null);
+        };
       }
 
       return result;
     },
     onSuccess: (data) => {
-      setImportResults(data);
-      queryClient.invalidateQueries({ queryKey: [queryKey] });
-      
-      if (data.success > 0 || (data.summary && data.summary.totalRecords > 0)) {
-        const totalRecords = data.summary ? data.summary.totalRecords : data.success;
-        const failedCount = data.failed || 0;
-        
+      // Job submitted successfully - real-time updates will come via SSE
+      if (data.jobId) {
         toast({
-          title: "Import Completed Successfully",
-          description: `Processed ${totalRecords} records${failedCount > 0 ? `, ${failedCount} failed` : ''}`,
-          variant: failedCount > 0 ? "destructive" : "default",
+          title: "Import Started",
+          description: `Job submitted successfully. Processing in background with ID: ${data.jobId.substring(0, 8)}...`,
+          variant: "default",
         });
-      }
-      
-      if (data.failed === 0 && data.success > 0) {
-        // Auto-close after 5 seconds for successful imports, giving users time to see results
-        setTimeout(() => {
-          handleClose();
-        }, 5000);
       }
     },
     onError: (error) => {
+      // Close SSE connection if it exists
+      if (eventSource) {
+        eventSource.close();
+        setEventSource(null);
+      }
+      
       if (isUnauthorizedError(error as Error)) {
         toast({
           title: "Unauthorized",
@@ -146,7 +177,7 @@ export function ImportModal({
       
       toast({
         title: "Import Failed",
-        description: (error as Error).message || "Failed to import data",
+        description: (error as Error).message || "Failed to start import job",
         variant: "destructive",
       });
       setImportResults({
@@ -206,9 +237,19 @@ export function ImportModal({
   };
 
   const handleClose = () => {
+    // Close SSE connection if active
+    if (eventSource) {
+      eventSource.close();
+      setEventSource(null);
+    }
+    
     setSelectedFile(null);
     setImportResults(null);
     setUploadProgress(0);
+    setJobId(null);
+    setProgressStage('');
+    setThroughputRps(null);
+    setEta(null);
     setEditingRecord(null);
     setEditingIndex(null);
     if (fileInputRef.current) {
@@ -349,59 +390,100 @@ export function ImportModal({
             </div>
           )}
 
-          {/* Upload Progress */}
-          {importMutation.isPending && (
-            <div className="space-y-2">
+          {/* Enhanced Real-time Progress */}
+          {(importMutation.isPending || jobId) && (
+            <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <Label>Processing...</Label>
-                <span className="text-sm text-gray-500">{uploadProgress}%</span>
+                <Label className="flex items-center space-x-2">
+                  <div className="animate-pulse w-2 h-2 bg-blue-500 rounded-full"></div>
+                  <span>Processing...</span>
+                </Label>
+                <span className="text-sm text-gray-500 font-mono">{uploadProgress}%</span>
               </div>
-              <Progress value={uploadProgress} className="h-2" />
+              <Progress value={uploadProgress} className="h-3" />
+              
+              {/* Progress Stage */}
+              {progressStage && (
+                <div className="text-xs text-gray-600 flex items-center justify-between">
+                  <span>{progressStage}</span>
+                  {jobId && (
+                    <span className="font-mono text-blue-600">Job: {jobId.substring(0, 8)}...</span>
+                  )}
+                </div>
+              )}
+              
+              {/* Performance Metrics */}
+              <div className="flex justify-between text-xs text-gray-500">
+                {throughputRps && (
+                  <span>⚡ {Math.round(throughputRps).toLocaleString()} rows/sec</span>
+                )}
+                {eta && (
+                  <span>⏱️ ETA: {Math.round(eta)}s</span>
+                )}
+              </div>
             </div>
           )}
 
-          {/* Import Results */}
+          {/* Enhanced Import Results */}
           {importResults && (
             <div className="space-y-4">
+              {/* Success Banner */}
+              {importResults.success > 0 && (
+                <div className="bg-green-50 border-l-4 border-green-400 p-4 rounded-lg">
+                  <div className="flex items-center">
+                    <div className="flex-shrink-0">
+                      <svg className="h-5 w-5 text-green-400" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                      </svg>
+                    </div>
+                    <div className="ml-3">
+                      <p className="text-sm font-medium text-green-800">
+                        Import completed successfully! {importResults.success.toLocaleString()} records processed.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
               {/* Enhanced Summary for Bulk Operations */}
               {importResults.summary ? (
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                  <Card className="bg-blue-50 border-blue-200">
+                  <Card className="bg-blue-50 border-blue-200 hover:bg-blue-100 transition-colors">
                     <CardContent className="p-3 text-center">
-                      <div className="text-xl font-bold text-blue-600">{importResults.summary.totalRecords}</div>
+                      <div className="text-xl font-bold text-blue-600">{importResults.summary.totalRecords.toLocaleString()}</div>
                       <div className="text-xs text-blue-700">Total Processed</div>
                     </CardContent>
                   </Card>
-                  <Card className="bg-green-50 border-green-200">
+                  <Card className="bg-green-50 border-green-200 hover:bg-green-100 transition-colors">
                     <CardContent className="p-3 text-center">
-                      <div className="text-xl font-bold text-green-600">{importResults.summary.newRecords}</div>
+                      <div className="text-xl font-bold text-green-600">{importResults.summary.newRecords.toLocaleString()}</div>
                       <div className="text-xs text-green-700">New Records</div>
                     </CardContent>
                   </Card>
-                  <Card className="bg-amber-50 border-amber-200">
+                  <Card className="bg-amber-50 border-amber-200 hover:bg-amber-100 transition-colors">
                     <CardContent className="p-3 text-center">
-                      <div className="text-xl font-bold text-amber-600">{importResults.summary.updatedRecords}</div>
+                      <div className="text-xl font-bold text-amber-600">{importResults.summary.updatedRecords.toLocaleString()}</div>
                       <div className="text-xs text-amber-700">Updated Records</div>
                     </CardContent>
                   </Card>
-                  <Card className="bg-purple-50 border-purple-200">
+                  <Card className="bg-purple-50 border-purple-200 hover:bg-purple-100 transition-colors">
                     <CardContent className="p-3 text-center">
-                      <div className="text-xl font-bold text-purple-600">{importResults.summary.duplicatesRemoved}</div>
+                      <div className="text-xl font-bold text-purple-600">{importResults.summary.duplicatesRemoved.toLocaleString()}</div>
                       <div className="text-xs text-purple-700">Duplicates Removed</div>
                     </CardContent>
                   </Card>
                 </div>
               ) : (
                 <div className="grid grid-cols-2 gap-4">
-                  <Card className="bg-green-50 border-green-200">
+                  <Card className="bg-green-50 border-green-200 hover:bg-green-100 transition-colors">
                     <CardContent className="p-4 text-center">
-                      <div className="text-2xl font-bold text-green-600">{importResults.success}</div>
+                      <div className="text-2xl font-bold text-green-600">{importResults.success.toLocaleString()}</div>
                       <div className="text-sm text-green-700">Successfully Imported</div>
                     </CardContent>
                   </Card>
-                  <Card className="bg-red-50 border-red-200">
+                  <Card className="bg-red-50 border-red-200 hover:bg-red-100 transition-colors">
                     <CardContent className="p-4 text-center">
-                      <div className="text-2xl font-bold text-red-600">{importResults.failed}</div>
+                      <div className="text-2xl font-bold text-red-600">{importResults.failed.toLocaleString()}</div>
                       <div className="text-sm text-red-700">Failed</div>
                     </CardContent>
                   </Card>
@@ -529,20 +611,70 @@ export function ImportModal({
               disabled={importMutation.isPending}
               data-testid="button-cancel-import"
             >
-              {importResults ? 'Close' : 'Cancel'}
+              {importResults ? 'Close' : jobId ? 'Close (Running in Background)' : 'Cancel'}
             </Button>
             {selectedFile && !importResults && (
               <Button
                 onClick={handleImport}
-                disabled={importMutation.isPending}
+                disabled={importMutation.isPending || !!jobId}
                 data-testid="button-start-import"
+                className="bg-blue-600 hover:bg-blue-700"
               >
-                {importMutation.isPending ? 'Importing...' : 'Import Data'}
+                {importMutation.isPending ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                    Starting Import...
+                  </>
+                ) : jobId ? (
+                  <>
+                    <div className="animate-pulse w-2 h-2 bg-white rounded-full mr-2"></div>
+                    Processing...
+                  </>
+                ) : (
+                  'Import Data'
+                )}
               </Button>
             )}
             {importResults && importResults.failed === 0 && (
-              <Button onClick={handleClose} data-testid="button-finish-import">
-                Finish
+              <Button 
+                onClick={() => {
+                  queryClient.invalidateQueries({ queryKey: [queryKey] });
+                  toast({
+                    title: "Data Refreshed",
+                    description: "The table has been updated with the imported data.",
+                  });
+                  handleClose();
+                }} 
+                data-testid="button-finish-import"
+                className="bg-green-600 hover:bg-green-700"
+              >
+                Finish & Refresh Data
+              </Button>
+            )}
+            
+            {/* Cancel Job Button */}
+            {jobId && !importResults && (
+              <Button 
+                variant="destructive"
+                onClick={async () => {
+                  try {
+                    await fetch(`/api/import/${jobId}`, { method: 'DELETE' });
+                    toast({
+                      title: "Import Cancelled",
+                      description: "The import job has been cancelled.",
+                    });
+                    handleClose();
+                  } catch (error) {
+                    toast({
+                      title: "Cancel Failed",
+                      description: "Failed to cancel the import job.",
+                      variant: "destructive",
+                    });
+                  }
+                }}
+                data-testid="button-cancel-job"
+              >
+                Cancel Import
               </Button>
             )}
           </div>

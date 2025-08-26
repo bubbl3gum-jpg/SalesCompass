@@ -6,9 +6,14 @@ import { useToast } from "@/hooks/use-toast";
 import { isUnauthorizedError } from "@/lib/authUtils";
 import { Sidebar } from "@/components/sidebar";
 import { SalesEntryModal } from "@/components/sales-entry-modal";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Check, ChevronsUpDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export default function Dashboard() {
@@ -17,6 +22,8 @@ export default function Dashboard() {
   const { isExpanded } = useSidebar();
   const [selectedStore, setSelectedStore] = useState<string>('');
   const [showSalesModal, setShowSalesModal] = useState(false);
+  const [searchTerm, setSearchTerm] = useState<string>('');
+  const [storeDropdownOpen, setStoreDropdownOpen] = useState(false);
 
   // Redirect to home if not authenticated
   useEffect(() => {
@@ -39,9 +46,9 @@ export default function Dashboard() {
     retry: false,
   });
 
-  // Get dashboard metrics
-  const { data: metrics, isLoading: metricsLoading, error: metricsError } = useQuery({
-    queryKey: ["/api/dashboard/metrics", selectedStore],
+  // Get stock data for the main home dashboard
+  const { data: stockData, isLoading: stockLoading, error: stockError } = useQuery({
+    queryKey: ["/api/stock/onhand", selectedStore],
     enabled: !!selectedStore,
     retry: false,
   });
@@ -53,8 +60,15 @@ export default function Dashboard() {
     retry: false,
   });
 
+  // Get dashboard metrics for additional insights
+  const { data: metrics, isLoading: metricsLoading } = useQuery({
+    queryKey: ["/api/dashboard/metrics", selectedStore],
+    enabled: !!selectedStore,
+    retry: false,
+  });
+
   useEffect(() => {
-    if (metricsError && isUnauthorizedError(metricsError as Error)) {
+    if (stockError && isUnauthorizedError(stockError as Error)) {
       toast({
         title: "Unauthorized",
         description: "You are logged out. Logging in again...",
@@ -65,14 +79,28 @@ export default function Dashboard() {
       }, 500);
       return;
     }
-  }, [metricsError, toast]);
+  }, [stockError, toast]);
 
   // Set default store when stores load
   useEffect(() => {
-    if (stores && stores.length > 0 && !selectedStore) {
+    if (stores && Array.isArray(stores) && stores.length > 0 && !selectedStore) {
       setSelectedStore(stores[0].kodeGudang);
     }
   }, [stores, selectedStore]);
+
+  const isLoadingData = stockLoading || salesLoading || metricsLoading;
+
+  // Filter stock data based on search
+  const filteredStock = stockData?.filter((item: any) => 
+    item.kodeItem.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (item.serialNumber && item.serialNumber.toLowerCase().includes(searchTerm.toLowerCase()))
+  ) || [];
+
+  const getStockStatus = (qty: number) => {
+    if (qty === 0) return { status: 'Out of Stock', color: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300' };
+    if (qty < 10) return { status: 'Low Stock', color: 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300' };
+    return { status: 'In Stock', color: 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300' };
+  };
 
   if (isLoading) {
     return (
@@ -92,130 +120,144 @@ export default function Dashboard() {
         <header className="bg-white/10 dark:bg-black/10 backdrop-blur-xl border-b border-white/20 dark:border-gray-800/50 px-6 py-4">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-3xl font-bold text-gray-900 dark:text-white">Dashboard Overview</h2>
+              <h2 className="text-3xl font-bold text-gray-900 dark:text-white">Home Overview</h2>
               <p className="text-gray-600 dark:text-gray-400 mt-1">Monitor your sales and inventory in real-time</p>
             </div>
             <div className="flex items-center space-x-4">
               {/* Store Selection */}
-              {stores && (
-                <select 
-                  className="px-4 py-2 bg-white/20 dark:bg-black/20 backdrop-blur-xl border border-white/20 dark:border-gray-800/50 rounded-xl text-gray-900 dark:text-white"
-                  value={selectedStore}
-                  onChange={(e) => setSelectedStore(e.target.value)}
-                  data-testid="select-store"
-                >
-                  {stores.map((store: any) => (
-                    <option key={store.kodeGudang} value={store.kodeGudang}>
-                      {store.namaGudang}
-                    </option>
-                  ))}
-                </select>
+              {stores && Array.isArray(stores) && (
+                <Popover open={storeDropdownOpen} onOpenChange={setStoreDropdownOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={storeDropdownOpen}
+                      className="w-64 justify-between bg-white/20 dark:bg-black/20 backdrop-blur-xl border border-white/20 dark:border-gray-800/50 text-gray-900 dark:text-white"
+                      data-testid="select-store"
+                    >
+                      {selectedStore
+                        ? stores.find((store: any) => store.kodeGudang === selectedStore)?.namaGudang || "Select store..."
+                        : "Select store..."}
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-64 p-0 bg-white/90 dark:bg-black/90 backdrop-blur-xl border-white/20 dark:border-gray-800/50">
+                    <Command>
+                      <CommandInput 
+                        placeholder="Search stores..." 
+                        className="h-9 border-0 focus:ring-0"
+                      />
+                      <CommandList>
+                        <CommandEmpty>No store found.</CommandEmpty>
+                        <CommandGroup>
+                          {stores.map((store: any) => (
+                            <CommandItem
+                              key={store.kodeGudang}
+                              value={`${store.kodeGudang} ${store.namaGudang}`}
+                              onSelect={() => {
+                                setSelectedStore(store.kodeGudang);
+                                setStoreDropdownOpen(false);
+                              }}
+                              className="cursor-pointer"
+                            >
+                              <Check
+                                className={cn(
+                                  "mr-2 h-4 w-4",
+                                  selectedStore === store.kodeGudang ? "opacity-100" : "opacity-0"
+                                )}
+                              />
+                              <div className="flex flex-col">
+                                <span className="font-medium">{store.namaGudang}</span>
+                                <span className="text-sm text-gray-500 dark:text-gray-400">
+                                  {store.kodeGudang}
+                                </span>
+                              </div>
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
               )}
               
-              {/* Theme Toggle */}
-              <button 
-                className="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300 transition-colors"
-                data-testid="button-theme-toggle"
+              {/* Quick Action Button */}
+              <Button 
+                onClick={() => setShowSalesModal(true)}
+                className="bg-blue-600 hover:bg-blue-700 text-white"
+                data-testid="button-quick-sale"
               >
-                <i className="fas fa-sun dark:hidden"></i>
-                <i className="fas fa-moon hidden dark:inline"></i>
-              </button>
+                <i className="fas fa-plus mr-2"></i>
+                Quick Sale
+              </Button>
             </div>
           </div>
         </header>
 
-        {/* Dashboard Content */}
-        <main className="p-6 space-y-6">
-          {/* Key Metrics Cards */}
-          {selectedStore && (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-              {/* Today's Sales */}
-              <Card className="bg-white/20 dark:bg-black/20 backdrop-blur-xl border border-white/20 dark:border-gray-800/50 hover:bg-white/30 dark:hover:bg-black/30 transition-all duration-300">
+        {/* Content */}
+        <main className="p-6">
+          {/* Stock Overview Cards */}
+          {selectedStore && stockData && Array.isArray(stockData) && (
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+              <Card className="bg-white/20 dark:bg-black/20 backdrop-blur-xl border border-white/20 dark:border-gray-800/50">
                 <CardContent className="p-6">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Today's Sales</p>
-                      {metricsLoading ? (
-                        <Skeleton className="w-24 h-8 mt-1" />
-                      ) : (
-                        <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1" data-testid="text-todays-sales">
-                          Rp {metrics?.todaySales ? parseFloat(metrics.todaySales).toLocaleString() : '0'}
-                        </p>
-                      )}
-                      <p className="text-sm text-emerald-600 dark:text-emerald-400 mt-1">
-                        <i className="fas fa-chart-line"></i> {metrics?.salesCount || 0} transactions
+                      <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Items</p>
+                      <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1" data-testid="text-total-items">
+                        {stockData.length.toLocaleString()}
                       </p>
                     </div>
-                    <div className="w-12 h-12 bg-gradient-to-r from-emerald-500 to-green-600 rounded-xl flex items-center justify-center">
-                      <i className="fas fa-money-bill-wave text-white"></i>
+                    <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-blue-600 rounded-xl flex items-center justify-center">
+                      <i className="fas fa-boxes text-white"></i>
                     </div>
                   </div>
                 </CardContent>
               </Card>
 
-              {/* Pending Settlements */}
-              <Card className="bg-white/20 dark:bg-black/20 backdrop-blur-xl border border-white/20 dark:border-gray-800/50 hover:bg-white/30 dark:hover:bg-black/30 transition-all duration-300">
+              <Card className="bg-white/20 dark:bg-black/20 backdrop-blur-xl border border-white/20 dark:border-gray-800/50">
                 <CardContent className="p-6">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Pending Settlements</p>
-                      {metricsLoading ? (
-                        <Skeleton className="w-8 h-8 mt-1" />
-                      ) : (
-                        <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1" data-testid="text-pending-settlements">
-                          {metrics?.pendingSettlements || 0}
-                        </p>
-                      )}
-                      <p className="text-sm text-orange-600 dark:text-orange-400 mt-1">
-                        <i className="fas fa-clock"></i> Requires attention
+                      <p className="text-sm font-medium text-gray-600 dark:text-gray-400">In Stock</p>
+                      <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1" data-testid="text-in-stock">
+                        {stockData.filter((item: any) => item.qty >= 10).length.toLocaleString()}
                       </p>
                     </div>
-                    <div className="w-12 h-12 bg-gradient-to-r from-orange-500 to-red-600 rounded-xl flex items-center justify-center">
+                    <div className="w-12 h-12 bg-gradient-to-r from-emerald-500 to-green-600 rounded-xl flex items-center justify-center">
+                      <i className="fas fa-check-circle text-white"></i>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-white/20 dark:bg-black/20 backdrop-blur-xl border border-white/20 dark:border-gray-800/50">
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Low Stock</p>
+                      <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1" data-testid="text-low-stock">
+                        {stockData.filter((item: any) => item.qty > 0 && item.qty < 10).length.toLocaleString()}
+                      </p>
+                    </div>
+                    <div className="w-12 h-12 bg-gradient-to-r from-orange-500 to-orange-600 rounded-xl flex items-center justify-center">
                       <i className="fas fa-exclamation-triangle text-white"></i>
                     </div>
                   </div>
                 </CardContent>
               </Card>
 
-              {/* Low Stock Items */}
-              <Card className="bg-white/20 dark:bg-black/20 backdrop-blur-xl border border-white/20 dark:border-gray-800/50 hover:bg-white/30 dark:hover:bg-black/30 transition-all duration-300">
+              <Card className="bg-white/20 dark:bg-black/20 backdrop-blur-xl border border-white/20 dark:border-gray-800/50">
                 <CardContent className="p-6">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Low Stock Items</p>
-                      {metricsLoading ? (
-                        <Skeleton className="w-8 h-8 mt-1" />
-                      ) : (
-                        <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1" data-testid="text-low-stock">
-                          {metrics?.lowStockItems || 0}
-                        </p>
-                      )}
-                      <p className="text-sm text-red-600 dark:text-red-400 mt-1">
-                        <i className="fas fa-arrow-down"></i> Needs restocking
+                      <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Out of Stock</p>
+                      <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1" data-testid="text-out-of-stock">
+                        {stockData.filter((item: any) => item.qty === 0).length.toLocaleString()}
                       </p>
                     </div>
-                    <div className="w-12 h-12 bg-gradient-to-r from-red-500 to-pink-600 rounded-xl flex items-center justify-center">
-                      <i className="fas fa-box-open text-white"></i>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Active Transfers */}
-              <Card className="bg-white/20 dark:bg-black/20 backdrop-blur-xl border border-white/20 dark:border-gray-800/50 hover:bg-white/30 dark:hover:bg-black/30 transition-all duration-300">
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Active Transfers</p>
-                      <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1" data-testid="text-active-transfers">
-                        {metrics?.activeTransfers || 0}
-                      </p>
-                      <p className="text-sm text-blue-600 dark:text-blue-400 mt-1">
-                        <i className="fas fa-truck"></i> In transit
-                      </p>
-                    </div>
-                    <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
-                      <i className="fas fa-exchange-alt text-white"></i>
+                    <div className="w-12 h-12 bg-gradient-to-r from-red-500 to-red-600 rounded-xl flex items-center justify-center">
+                      <i className="fas fa-times-circle text-white"></i>
                     </div>
                   </div>
                 </CardContent>
@@ -223,143 +265,147 @@ export default function Dashboard() {
             </div>
           )}
 
-          {/* Quick Actions & Recent Activity */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Quick Actions */}
-            <Card className="bg-white/20 dark:bg-black/20 backdrop-blur-xl border border-white/20 dark:border-gray-800/50">
-              <CardContent className="p-6">
-                <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">Quick Actions</h3>
-                <div className="space-y-3">
-                  <Button 
-                    className="w-full flex items-center justify-between p-4 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white rounded-xl transition-all duration-300 transform hover:scale-105"
-                    onClick={() => setShowSalesModal(true)}
-                    data-testid="button-new-sale"
-                  >
-                    <div className="flex items-center">
-                      <i className="fas fa-plus-circle mr-3"></i>
-                      <span className="font-medium">New Sale</span>
+          {/* Sales Metrics */}
+          {selectedStore && metrics && (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+              <Card className="bg-white/20 dark:bg-black/20 backdrop-blur-xl border border-white/20 dark:border-gray-800/50">
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Today's Sales</p>
+                      <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1" data-testid="text-today-sales">
+                        Rp {metrics.todaySales?.toLocaleString() || '0'}
+                      </p>
                     </div>
-                    <i className="fas fa-arrow-right"></i>
-                  </Button>
-                  
-                  <Button 
-                    className="w-full flex items-center justify-between p-4 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white rounded-xl transition-all duration-300 transform hover:scale-105"
-                    onClick={() => window.location.href = '/settlements'}
-                    data-testid="button-create-settlement"
-                  >
-                    <div className="flex items-center">
-                      <i className="fas fa-calculator mr-3"></i>
-                      <span className="font-medium">Create Settlement</span>
+                    <div className="w-12 h-12 bg-gradient-to-r from-purple-500 to-purple-600 rounded-xl flex items-center justify-center">
+                      <i className="fas fa-chart-line text-white"></i>
                     </div>
-                    <i className="fas fa-arrow-right"></i>
-                  </Button>
-                  
-                  <Button 
-                    className="w-full flex items-center justify-between p-4 bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white rounded-xl transition-all duration-300 transform hover:scale-105"
-                    onClick={() => window.location.href = '/transfers'}
-                    data-testid="button-transfer-stock"
-                  >
-                    <div className="flex items-center">
-                      <i className="fas fa-shipping-fast mr-3"></i>
-                      <span className="font-medium">Transfer Stock</span>
-                    </div>
-                    <i className="fas fa-arrow-right"></i>
-                  </Button>
-                  
-                  <Button 
-                    className="w-full flex items-center justify-between p-4 bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white rounded-xl transition-all duration-300 transform hover:scale-105"
-                    onClick={() => window.location.href = '/stock-dashboard'}
-                    data-testid="button-view-reports"
-                  >
-                    <div className="flex items-center">
-                      <i className="fas fa-chart-pie mr-3"></i>
-                      <span className="font-medium">View Reports</span>
-                    </div>
-                    <i className="fas fa-arrow-right"></i>
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
+                  </div>
+                </CardContent>
+              </Card>
 
-            {/* Recent Sales Activity */}
-            <Card className="lg:col-span-2 bg-white/20 dark:bg-black/20 backdrop-blur-xl border border-white/20 dark:border-gray-800/50">
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-xl font-semibold text-gray-900 dark:text-white">Recent Sales</h3>
-                  <Button 
-                    variant="ghost" 
-                    className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 text-sm font-medium"
-                    onClick={() => window.location.href = '/sales-entry'}
-                    data-testid="button-view-all-sales"
-                  >
-                    View All <i className="fas fa-arrow-right ml-1"></i>
-                  </Button>
-                </div>
-                
-                <div className="space-y-3">
-                  {salesLoading ? (
-                    Array.from({ length: 3 }).map((_, i) => (
-                      <div key={i} className="flex items-center justify-between p-4">
-                        <div className="flex items-center">
-                          <Skeleton className="w-10 h-10 rounded-lg" />
-                          <div className="ml-3 space-y-1">
-                            <Skeleton className="w-32 h-4" />
-                            <Skeleton className="w-24 h-3" />
-                          </div>
-                        </div>
-                        <div className="text-right space-y-1">
-                          <Skeleton className="w-16 h-4" />
-                          <Skeleton className="w-12 h-3" />
-                        </div>
-                      </div>
-                    ))
-                  ) : recentSales && recentSales.length > 0 ? (
-                    recentSales.slice(0, 3).map((sale: any) => (
-                      <div 
-                        key={sale.penjualanId} 
-                        className="flex items-center justify-between p-4 bg-white/10 dark:bg-black/10 rounded-xl hover:bg-white/20 dark:hover:bg-black/20 transition-colors"
-                        data-testid={`card-sale-${sale.penjualanId}`}
-                      >
-                        <div className="flex items-center">
-                          <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
-                            <i className="fas fa-receipt text-white text-sm"></i>
-                          </div>
-                          <div className="ml-3">
-                            <p className="text-sm font-medium text-gray-900 dark:text-white">
-                              {sale.kodeItem} - {sale.serialNumber || 'No Serial'}
-                            </p>
-                            <p className="text-xs text-gray-500 dark:text-gray-400">
-                              {sale.kodeGudang} • {sale.tanggal}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-sm font-semibold text-gray-900 dark:text-white">
-                            Rp {parseFloat(sale.finalPrice || '0').toLocaleString()}
-                          </p>
-                          <p className="text-xs text-gray-500 dark:text-gray-400">
-                            {sale.paymentMethod || 'Cash'}
-                          </p>
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="text-center py-8">
-                      <p className="text-gray-500 dark:text-gray-400">No recent sales available</p>
+              <Card className="bg-white/20 dark:bg-black/20 backdrop-blur-xl border border-white/20 dark:border-gray-800/50">
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Transactions</p>
+                      <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1" data-testid="text-transactions">
+                        {metrics.salesCount?.toLocaleString() || '0'}
+                      </p>
                     </div>
-                  )}
+                    <div className="w-12 h-12 bg-gradient-to-r from-indigo-500 to-indigo-600 rounded-xl flex items-center justify-center">
+                      <i className="fas fa-receipt text-white"></i>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-white/20 dark:bg-black/20 backdrop-blur-xl border border-white/20 dark:border-gray-800/50">
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Pending Settlements</p>
+                      <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1" data-testid="text-pending-settlements">
+                        {metrics.pendingSettlements?.toLocaleString() || '0'}
+                      </p>
+                    </div>
+                    <div className="w-12 h-12 bg-gradient-to-r from-amber-500 to-amber-600 rounded-xl flex items-center justify-center">
+                      <i className="fas fa-clock text-white"></i>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+
+          {/* Quick Stock Search */}
+          {selectedStore && (
+            <Card className="bg-white/20 dark:bg-black/20 backdrop-blur-xl border border-white/20 dark:border-gray-800/50 mb-6">
+              <CardHeader>
+                <CardTitle>Quick Stock Search</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex space-x-4">
+                  <Input
+                    placeholder="Search by item code or serial number..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="flex-1"
+                    data-testid="input-stock-search"
+                  />
+                  <Button
+                    variant="outline"
+                    onClick={() => setSearchTerm('')}
+                    data-testid="button-clear-search"
+                  >
+                    Clear
+                  </Button>
                 </div>
               </CardContent>
             </Card>
-          </div>
+          )}
+
+          {/* Stock Results */}
+          {selectedStore && searchTerm && filteredStock.length > 0 && (
+            <Card className="bg-white/20 dark:bg-black/20 backdrop-blur-xl border border-white/20 dark:border-gray-800/50 mb-6">
+              <CardHeader>
+                <CardTitle>Search Results ({filteredStock.length} items)</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2 max-h-64 overflow-y-auto">
+                  {filteredStock.slice(0, 10).map((item: any, index: number) => {
+                    const status = getStockStatus(item.qty);
+                    return (
+                      <div key={index} className="flex items-center justify-between p-3 bg-white/10 dark:bg-black/10 rounded-lg">
+                        <div className="flex-1">
+                          <p className="font-medium text-gray-900 dark:text-white">{item.kodeItem}</p>
+                          {item.serialNumber && (
+                            <p className="text-sm text-gray-600 dark:text-gray-400">SN: {item.serialNumber}</p>
+                          )}
+                        </div>
+                        <div className="flex items-center space-x-3">
+                          <span className="font-bold text-gray-900 dark:text-white">{item.qty}</span>
+                          <Badge className={status.color}>{status.status}</Badge>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Loading State */}
+          {selectedStore && isLoadingData && (
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+              {[...Array(4)].map((_, i) => (
+                <Card key={i} className="bg-white/20 dark:bg-black/20 backdrop-blur-xl border border-white/20 dark:border-gray-800/50">
+                  <CardContent className="p-6">
+                    <Skeleton className="h-4 w-20 mb-2" />
+                    <Skeleton className="h-8 w-16" />
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+
+          {/* Empty State */}
+          {!selectedStore && (
+            <div className="text-center py-12">
+              <div className="w-16 h-16 bg-gray-200 dark:bg-gray-700 rounded-full flex items-center justify-center mx-auto mb-4">
+                <i className="fas fa-store text-gray-500 text-2xl"></i>
+              </div>
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Select a Store</h3>
+              <p className="text-gray-600 dark:text-gray-400">Choose a store from the dropdown to view inventory and sales data.</p>
+            </div>
+          )}
         </main>
       </div>
 
       {/* Sales Entry Modal */}
-      <SalesEntryModal
-        isOpen={showSalesModal}
-        onClose={() => setShowSalesModal(false)}
-        selectedStore={selectedStore}
+      <SalesEntryModal 
+        isOpen={showSalesModal} 
+        onClose={() => setShowSalesModal(false)} 
       />
     </div>
   );
