@@ -49,6 +49,7 @@ export default function Transfers() {
   const [showImportModal, setShowImportModal] = useState(false);
   const [selectedTransferId, setSelectedTransferId] = useState<number | null>(null);
   const [toStoreOpen, setToStoreOpen] = useState(false);
+  const [fromStoreOpen, setFromStoreOpen] = useState(false);
 
   const form = useForm<TransferFormData>({
     resolver: zodResolver(transferFormSchema),
@@ -282,20 +283,61 @@ export default function Transfers() {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel className="text-gray-700 dark:text-gray-300">From Store</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
-                      <FormControl>
-                        <SelectTrigger data-testid="select-from-store">
-                          <SelectValue placeholder="Select source store" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {stores?.map((store: any) => (
-                          <SelectItem key={store.kodeGudang} value={store.kodeGudang}>
-                            {store.namaGudang}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <Popover open={fromStoreOpen} onOpenChange={setFromStoreOpen}>
+                      <PopoverTrigger asChild>
+                        <FormControl>
+                          <Button
+                            variant="outline"
+                            role="combobox"
+                            aria-expanded={fromStoreOpen}
+                            className="w-full justify-between text-left font-normal bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700"
+                            data-testid="select-from-store"
+                          >
+                            {field.value
+                              ? stores?.find((store: any) => store.kodeGudang === field.value)?.namaGudang
+                              : "Select source store"}
+                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                          </Button>
+                        </FormControl>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-full p-0" align="start">
+                        <Command>
+                          <CommandInput 
+                            placeholder="Search stores..." 
+                            className="h-9 border-0 focus:ring-0"
+                          />
+                          <CommandList>
+                            <CommandEmpty>No store found.</CommandEmpty>
+                            <CommandGroup>
+                              {stores?.map((store: any) => (
+                                <CommandItem
+                                  key={store.kodeGudang}
+                                  value={`${store.kodeGudang} ${store.namaGudang}`}
+                                  onSelect={() => {
+                                    field.onChange(store.kodeGudang);
+                                    setFromStoreOpen(false);
+                                  }}
+                                  className="cursor-pointer"
+                                >
+                                  <Check
+                                    className={cn(
+                                      "mr-2 h-4 w-4",
+                                      field.value === store.kodeGudang ? "opacity-100" : "opacity-0"
+                                    )}
+                                  />
+                                  <div className="flex flex-col">
+                                    <span className="font-medium">{store.namaGudang}</span>
+                                    <span className="text-sm text-gray-500 dark:text-gray-400">
+                                      {store.kodeGudang}
+                                    </span>
+                                  </div>
+                                </CommandItem>
+                              ))}
+                            </CommandGroup>
+                          </CommandList>
+                        </Command>
+                      </PopoverContent>
+                    </Popover>
                     <FormMessage />
                   </FormItem>
                 )}

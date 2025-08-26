@@ -206,6 +206,7 @@ export const staff = pgTable("staff", {
 // Transfer Orders
 export const transferOrders = pgTable("transfer_order", {
   toId: integer("to_id").primaryKey().generatedByDefaultAsIdentity(),
+  toNumber: varchar("to_number", { length: 50 }), // Original TO number from Excel
   dariGudang: varchar("dari_gudang", { length: 50 }).references(() => stores.kodeGudang),
   keGudang: varchar("ke_gudang", { length: 50 }).references(() => stores.kodeGudang),
   tanggal: date("tanggal"),
