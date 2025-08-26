@@ -260,8 +260,32 @@ function validateImportData(data: any[], tableName: string, schema: any): { vali
             'jenis gudang': 'jenisGudang'
           },
           'staff': {
-            'firstname': 'firstName',
-            'lastname': 'lastName'
+            'nama_lengkap': 'namaLengkap',
+            'namalengkap': 'namaLengkap',
+            'nama lengkap': 'namaLengkap',
+            'full name': 'namaLengkap',
+            'fullname': 'namaLengkap',
+            'tanggal_lahir': 'tanggalLahir',
+            'tanggallahir': 'tanggalLahir',
+            'tanggal lahir': 'tanggalLahir',
+            'date of birth': 'tanggalLahir',
+            'dateofbirth': 'tanggalLahir',
+            'tanggal_masuk': 'tanggalMasuk',
+            'tanggalmasuk': 'tanggalMasuk',
+            'tanggal masuk': 'tanggalMasuk',
+            'date joined': 'tanggalMasuk',
+            'datejoined': 'tanggalMasuk',
+            'tempat_lahir': 'tempatLahir',
+            'tempatlahir': 'tempatLahir',
+            'tempat lahir': 'tempatLahir',
+            'place of birth': 'tempatLahir',
+            'placeofbirth': 'tempatLahir',
+            'no_hp': 'noHp',
+            'nohp': 'noHp',
+            'no hp': 'noHp',
+            'phone number': 'noHp',
+            'phone': 'noHp',
+            'phonenumber': 'noHp'
           },
           'stock-opname': {
             'kodegudang': 'kodeGudang'
