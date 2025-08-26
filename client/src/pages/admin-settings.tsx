@@ -13,6 +13,16 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { isUnauthorizedError } from "@/lib/authUtils";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { ImportModal } from "@/components/import-modal";
 import { apiRequest } from "@/lib/queryClient";
 import { Sidebar } from "@/components/sidebar";
@@ -30,7 +40,7 @@ interface TableConfig {
   fields: {
     key: string;
     label: string;
-    type: 'text' | 'number' | 'date' | 'select' | 'checkbox';
+    type: 'text' | 'number' | 'date' | 'select' | 'checkbox' | 'email' | 'password' | 'tel';
     required?: boolean;
     options?: { value: string; label: string }[];
   }[];
@@ -176,6 +186,8 @@ export default function AdminSettings() {
   const [searchQueries, setSearchQueries] = useState<Record<string, string>>({});
   const [currentImportId, setCurrentImportId] = useState<string | null>(null);
   const [isImporting, setIsImporting] = useState(false);
+  const [deletingItem, setDeletingItem] = useState<{endpoint: string, id: string, name?: string} | null>(null);
+  const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
 
   // Selection handlers
   const handleSelectAll = (checked: boolean, data: any[], config: TableConfig) => {
@@ -200,7 +212,7 @@ export default function AdminSettings() {
     setSelectedItems(newSelected);
   };
 
-  const handleBulkDelete = async (config: TableConfig) => {
+  const handleBulkDelete = (config: TableConfig) => {
     if (selectedItems.size === 0) {
       toast({
         title: "No Selection",
@@ -209,6 +221,12 @@ export default function AdminSettings() {
       });
       return;
     }
+    setShowBulkDeleteConfirm(true);
+  };
+
+  const confirmBulkDelete = async () => {
+    const config = getCurrentConfig();
+    if (!config) return;
 
     try {
       for (const itemId of Array.from(selectedItems)) {
@@ -218,6 +236,7 @@ export default function AdminSettings() {
       queryClient.invalidateQueries({ queryKey: [config.endpoint] });
       setSelectedItems(new Set());
       setSelectAll(false);
+      setShowBulkDeleteConfirm(false);
       
       toast({
         title: "Success",
@@ -373,8 +392,15 @@ export default function AdminSettings() {
     },
   });
 
-  const handleDelete = (endpoint: string, id: string) => {
-    deleteMutation.mutate({ endpoint, id });
+  const handleDelete = (endpoint: string, id: string, itemName?: string) => {
+    setDeletingItem({ endpoint, id, name: itemName });
+  };
+
+  const confirmDelete = () => {
+    if (deletingItem) {
+      deleteMutation.mutate({ endpoint: deletingItem.endpoint, id: deletingItem.id });
+      setDeletingItem(null);
+    }
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -570,7 +596,7 @@ export default function AdminSettings() {
                                   <Button
                                     variant="ghost"
                                     size="sm"
-                                    onClick={() => handleDelete(config.endpoint, item[config.keyField])}
+                                    onClick={() => handleDelete(config.endpoint, item[config.keyField], item[config.displayField || config.keyField])}
                                     data-testid={`button-delete-${item[config.keyField]}`}
                                   >
                                     <Trash2 className="h-4 w-4 text-red-500" />
@@ -679,7 +705,7 @@ export default function AdminSettings() {
                     <Checkbox
                       id={field.key}
                       checked={formData[field.key] === 'true' || formData[field.key] === true}
-                      onCheckedChange={(checked) => setFormData({ ...formData, [field.key]: checked })}
+                      onCheckedChange={(checked) => setFormData({ ...formData, [field.key]: checked ? 'true' : 'false' })}
                       data-testid={`checkbox-${field.key}`}
                     />
                     <label htmlFor={field.key} className="text-sm text-gray-600 dark:text-gray-400">
@@ -738,6 +764,63 @@ export default function AdminSettings() {
         acceptedFormats=".csv,.xlsx,.xls"
         sampleData={getCurrentConfig()?.fields.map(f => f.label) || []}
       />
+
+      {/* Bulk Delete Confirmation Dialog */}
+      <AlertDialog open={showBulkDeleteConfirm} onOpenChange={setShowBulkDeleteConfirm}>
+        <AlertDialogContent className="bg-white/90 dark:bg-gray-900/90 backdrop-blur-xl border border-white/20 dark:border-gray-800/50">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-gray-900 dark:text-white">Delete Selected Items</AlertDialogTitle>
+            <AlertDialogDescription className="text-gray-600 dark:text-gray-300">
+              Are you sure you want to delete {selectedItems.size} selected {selectedItems.size === 1 ? 'item' : 'items'}? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel 
+              onClick={() => setShowBulkDeleteConfirm(false)}
+              className="border-gray-300 dark:border-gray-600"
+              data-testid="button-cancel-bulk-delete"
+            >
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={confirmBulkDelete}
+              className="bg-red-600 hover:bg-red-700 text-white"
+              data-testid="button-confirm-bulk-delete"
+            >
+              Delete {selectedItems.size} {selectedItems.size === 1 ? 'Item' : 'Items'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Individual Delete Confirmation Dialog */}
+      <AlertDialog open={!!deletingItem} onOpenChange={(open) => !open && setDeletingItem(null)}>
+        <AlertDialogContent className="bg-white/90 dark:bg-gray-900/90 backdrop-blur-xl border border-white/20 dark:border-gray-800/50">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-gray-900 dark:text-white">Delete Item</AlertDialogTitle>
+            <AlertDialogDescription className="text-gray-600 dark:text-gray-300">
+              Are you sure you want to delete {deletingItem?.name ? `"${deletingItem.name}"` : 'this item'}? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel 
+              onClick={() => setDeletingItem(null)}
+              className="border-gray-300 dark:border-gray-600"
+              data-testid="button-cancel-delete-item"
+            >
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={confirmDelete}
+              disabled={deleteMutation.isPending}
+              className="bg-red-600 hover:bg-red-700 text-white"
+              data-testid="button-confirm-delete-item"
+            >
+              {deleteMutation.isPending ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

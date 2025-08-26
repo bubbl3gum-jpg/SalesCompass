@@ -22,6 +22,16 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Form,
   FormControl,
   FormField,
@@ -48,6 +58,8 @@ export default function Discounts() {
   const [showDiscountModal, setShowDiscountModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
   const [searchTerm, setSearchTerm] = useState<string>('');
+  const [editingDiscount, setEditingDiscount] = useState<any>(null);
+  const [deletingDiscount, setDeletingDiscount] = useState<any>(null);
 
   const form = useForm<DiscountFormData>({
     resolver: zodResolver(discountFormSchema),
@@ -112,8 +124,106 @@ export default function Discounts() {
     },
   });
 
+  // Update discount mutation
+  const updateDiscountMutation = useMutation({
+    mutationFn: async ({ discountId, data }: { discountId: number, data: any }) => {
+      const response = await apiRequest('PUT', `/api/discounts/${discountId}`, data);
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Success",
+        description: "Discount updated successfully",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/discounts"] });
+      queryClient.refetchQueries({ queryKey: ["/api/discounts"] });
+      form.reset();
+      setEditingDiscount(null);
+      setShowDiscountModal(false);
+    },
+    onError: (error) => {
+      if (isUnauthorizedError(error as Error)) {
+        toast({
+          title: "Unauthorized",
+          description: "You are logged out. Logging in again...",
+          variant: "destructive",
+        });
+        setTimeout(() => {
+          window.location.href = "/api/login";
+        }, 500);
+        return;
+      }
+      toast({
+        title: "Error",
+        description: "Failed to update discount",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Delete discount mutation
+  const deleteDiscountMutation = useMutation({
+    mutationFn: async (discountId: number) => {
+      const response = await apiRequest('DELETE', `/api/discounts/${discountId}`);
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Success",
+        description: "Discount deleted successfully",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/discounts"] });
+      queryClient.refetchQueries({ queryKey: ["/api/discounts"] });
+      setDeletingDiscount(null);
+    },
+    onError: (error) => {
+      if (isUnauthorizedError(error as Error)) {
+        toast({
+          title: "Unauthorized",
+          description: "You are logged out. Logging in again...",
+          variant: "destructive",
+        });
+        setTimeout(() => {
+          window.location.href = "/api/login";
+        }, 500);
+        return;
+      }
+      toast({
+        title: "Error",
+        description: "Failed to delete discount",
+        variant: "destructive",
+      });
+    },
+  });
+
   const onSubmit = (data: DiscountFormData) => {
-    createDiscountMutation.mutate(data);
+    if (editingDiscount) {
+      updateDiscountMutation.mutate({ discountId: editingDiscount.discountId, data });
+    } else {
+      createDiscountMutation.mutate(data);
+    }
+  };
+
+  const handleEditDiscount = (discount: any) => {
+    setEditingDiscount(discount);
+    form.reset({
+      discountName: discount.discountName || "",
+      discountType: discount.discountType || "percentage",
+      discountAmount: parseFloat(discount.discountAmount || "0"),
+      startFrom: discount.startFrom || "",
+      endAt: discount.endAt || "",
+    });
+    setShowDiscountModal(true);
+  };
+
+  const handleDeleteDiscount = (discount: any) => {
+    setDeletingDiscount(discount);
+  };
+
+  const confirmDeleteDiscount = () => {
+    if (deletingDiscount) {
+      deleteDiscountMutation.mutate(deletingDiscount.discountId);
+    }
   };
 
   const getDiscountStatus = (discount: any) => {
@@ -255,10 +365,20 @@ export default function Discounts() {
                           <Button
                             variant="ghost"
                             size="sm"
+                            onClick={() => handleEditDiscount(discount)}
                             className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
                             data-testid={`button-edit-discount-${discount.discountId}`}
                           >
                             Edit
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleDeleteDiscount(discount)}
+                            className="text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300"
+                            data-testid={`button-delete-discount-${discount.discountId}`}
+                          >
+                            Delete
                           </Button>
                         </div>
                       </div>
@@ -295,7 +415,7 @@ export default function Discounts() {
         <DialogContent className="max-w-md bg-white/90 dark:bg-gray-900/90 backdrop-blur-xl border border-white/20 dark:border-gray-800/50">
           <DialogHeader>
             <DialogTitle className="text-2xl font-bold text-gray-900 dark:text-white">
-              Create New Discount
+              {editingDiscount ? 'Edit Discount' : 'Create New Discount'}
             </DialogTitle>
           </DialogHeader>
 
@@ -393,7 +513,11 @@ export default function Discounts() {
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => setShowDiscountModal(false)}
+                  onClick={() => {
+                    setShowDiscountModal(false);
+                    setEditingDiscount(null);
+                    form.reset();
+                  }}
                   data-testid="button-cancel-discount"
                 >
                   Cancel
@@ -401,10 +525,13 @@ export default function Discounts() {
                 <Button
                   type="submit"
                   className="bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700"
-                  disabled={createDiscountMutation.isPending}
+                  disabled={createDiscountMutation.isPending || updateDiscountMutation.isPending}
                   data-testid="button-save-discount"
                 >
-                  {createDiscountMutation.isPending ? "Creating..." : "Create Discount"}
+                  {editingDiscount ? 
+                    (updateDiscountMutation.isPending ? "Updating..." : "Update Discount") :
+                    (createDiscountMutation.isPending ? "Creating..." : "Create Discount")
+                  }
                 </Button>
               </div>
             </form>
@@ -427,6 +554,35 @@ export default function Discounts() {
           'endAt (YYYY-MM-DD)'
         ]}
       />
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={!!deletingDiscount} onOpenChange={(open) => !open && setDeletingDiscount(null)}>
+        <AlertDialogContent className="bg-white/90 dark:bg-gray-900/90 backdrop-blur-xl border border-white/20 dark:border-gray-800/50">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-gray-900 dark:text-white">Delete Discount</AlertDialogTitle>
+            <AlertDialogDescription className="text-gray-600 dark:text-gray-300">
+              Are you sure you want to delete the discount "{deletingDiscount?.discountName}"? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel 
+              onClick={() => setDeletingDiscount(null)}
+              className="border-gray-300 dark:border-gray-600"
+              data-testid="button-cancel-delete"
+            >
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={confirmDeleteDiscount}
+              disabled={deleteDiscountMutation.isPending}
+              className="bg-red-600 hover:bg-red-700 text-white"
+              data-testid="button-confirm-delete"
+            >
+              {deleteDiscountMutation.isPending ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
