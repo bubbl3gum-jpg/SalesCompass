@@ -3,6 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./replitAuth";
 import { z } from "zod";
+import { withCache, CACHE_KEYS, CACHE_TTL, invalidateCache, invalidateCachePattern } from "./cache";
 import multer from "multer";
 import * as XLSX from "xlsx";
 import * as csv from "csv-parser";
@@ -474,7 +475,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/user/permissions', isAuthenticated, async (req: any, res) => {
     try {
       const userEmail = req.user.claims.email;
-      const permissions = await storage.getUserPermissions(userEmail);
+      const cacheKey = `${CACHE_KEYS.USER_PERMISSIONS}_${userEmail}`;
+      
+      const permissions = await withCache(
+        cacheKey,
+        CACHE_TTL.USER_PERMISSIONS,
+        () => storage.getUserPermissions(userEmail)
+      );
+      
       res.json(permissions);
     } catch (error) {
       console.error("Error fetching user permissions:", error);
@@ -1264,7 +1272,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Master data endpoints
   app.get('/api/stores', isAuthenticated, async (req, res) => {
     try {
-      const stores = await storage.getStores();
+      const stores = await withCache(
+        CACHE_KEYS.STORES,
+        CACHE_TTL.STORES,
+        () => storage.getStores()
+      );
       res.json(stores);
     } catch (error) {
       console.error('Get stores error:', error);
@@ -1340,7 +1352,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get('/api/discounts', isAuthenticated, async (req, res) => {
     try {
-      const discounts = await storage.getDiscountTypes();
+      const discounts = await withCache(
+        CACHE_KEYS.DISCOUNTS,
+        CACHE_TTL.DISCOUNTS,
+        () => storage.getDiscountTypes()
+      );
       res.json(discounts);
     } catch (error) {
       res.status(500).json({ message: 'Failed to get discounts' });

@@ -1,0 +1,151 @@
+Make the Web App Fast and Smooth (No Lag)
+
+Role: You are a senior performance engineer + full-stack dev. Your job is to make this web app feel instant and robust under real traffic.
+
+Goals (Success = all true):
+
+p95 API latency ≤ 200–400 ms (per endpoint), error rate < 0.5%.
+
+Web Vitals: LCP ≤ 2.5 s, INP ≤ 200 ms, CLS ≤ 0.1 on a mid-range device, real 4G.
+
+JS shipped ≤ 150–200 KB gzipped per route (after code-splitting).
+
+Cold start or first request stall eliminated or < 500 ms.
+
+Static assets served via CDN with Brotli/gzip, long-lived cache headers.
+
+Zero “long tasks” > 200 ms on main thread during interaction.
+
+What you’ll receive (assume defaults if missing):
+
+Stack: {{frontend_stack}} + {{backend_stack}} + {{db}} (if known: FastAPI + MySQL).
+
+Key pages/routes: {{list_endpoints_or_pages}}.
+
+Traffic target: {{rps}} RPS, {{concurrency}} concurrent users.
+
+Your deliverables:
+
+Perf plan: Top 5 risks + fixes with effort/impact.
+
+Code changes: Commit-ready diffs for front-end, back-end, and infra config.
+
+DB plan: SQL EXPLAIN + new indexes/queries; migration scripts if needed.
+
+Observability: Add OpenTelemetry/APM traces, RED/USE dashboards, alerts.
+
+Validation: Lighthouse/Pagespeed JSON, k6/Locust script + summary, before/after metrics.
+
+Runbook: “Perf checklist” for future PRs.
+
+Constraints & Principles
+
+Prefer measurable fixes over speculative tweaks.
+
+No new paid infra unless stated; optimize first.
+
+Keep changes backwards-compatible. Feature behavior must not change.
+
+Add timeouts, retries, circuit breakers for all external calls.
+
+Paginate and stream large responses; avoid O(n) loops per request.
+
+Frontend Requirements
+
+Turn on code-splitting, tree-shaking; remove unused deps/3P tags.
+
+Convert images to AVIF/WebP, responsive srcset, include width/height.
+
+Inline critical CSS; defer non-critical CSS/JS; preload LCP resource.
+
+Avoid main-thread long tasks: split heavy work via Web Workers or server.
+
+Set caching: immutable hashed assets (Cache-Control: public, max-age=31536000, immutable).
+
+Fonts: subset, display=swap, limit to 1–2 families.
+
+Record and fix LCP element delays (image size, render blocking).
+
+Backend/API Requirements
+
+Ensure connection pooling; no per-request engine creation.
+
+Async where appropriate; avoid blocking I/O on async workers.
+
+Set sane timeouts (connect/read) and global request timeout.
+
+Enable compression (Brotli/gzip) for JSON/text; JSON streaming when large.
+
+Batch queries; remove N+1; return minimal payloads; E-Tags/If-None-Match for cacheable GETs.
+
+Add rate limits and backpressure to protect p95 latency.
+
+If FastAPI + MySQL (apply if relevant):
+
+Use async SQLAlchemy + asyncmy/aiomysql or run multiple sync workers behind a process manager.
+
+Pool sizing ≈ workers × 2–4; reuse engine/session; disable autocommit.
+
+Add indexes for frequent filters/joins (dates, foreign keys, serial_number).
+
+Replace SELECT * with column lists; add LIMIT; use EXPLAIN and fix full scans/sorts.
+
+Profile endpoints; cache hot lookups in Redis with explicit TTL.
+
+Infra/Network
+
+Serve static via CDN; enable HTTP/2 or HTTP/3.
+
+Keep servers close to users; validate TTFB by region.
+
+Turn on keep-alive; tune thread/worker counts to CPU.
+
+Add health checks, warm-up, and pre-JIT (if applicable) to avoid cold starts.
+
+Third-Party Hygiene
+
+Load tags deferred; self-host where possible.
+
+Wrap remote calls with circuit breakers; fail fast with graceful fallbacks.
+
+Remove low-value analytics/SDKs.
+
+Observability & Tests (must provide artifacts)
+
+Tracing: p50/p95 per route with breakdown (app, DB, external).
+
+Logging: structured logs with request IDs; log slow queries > 100 ms.
+
+Metrics: RED (Rate, Errors, Duration) for APIs; Web Vitals via RUM.
+
+Load test: k6/Locust script hitting critical paths: ramp to {{target_rps}}, hold 10 min; report latency SLO pass/fail.
+
+Lighthouse: desktop + mobile; attach JSON before/after.
+
+Acceptance Checklist (tick all)
+
+ p95 API latency ≤ target on {{target_env}}.
+
+ LCP/INP/CLS meet goals on mid-range mobile over throttled 4G.
+
+ JS budget respected per route; images optimized.
+
+ Top 5 slow queries fixed; EXPLAIN shows indexed plans.
+
+ CDN hit ratio ≥ 85% for static; compression verified.
+
+ Dashboards + alerts deployed; runbook delivered.
+
+Output Format
+
+Provide:
+
+Summary (bullet points of changes + measured wins),
+
+Diffs/patches (ready to apply),
+
+Commands to run audits/tests,
+
+Screenshots/JSON for Lighthouse/APM,
+
+Follow-ups (next 3 high-ROI items).

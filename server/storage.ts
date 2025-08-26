@@ -694,11 +694,30 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getUserPermissions(userEmail: string): Promise<Position | null> {
-    // Get staff record by email
-    const staffMember = await this.getStaffByEmail(userEmail);
+    // Optimized single query with JOIN to avoid N+1 problem
+    const result = await db
+      .select({
+        positionId: positions.positionId,
+        positionName: positions.positionName,
+        description: positions.description,
+        canAccessDashboard: positions.canAccessDashboard,
+        canAccessSalesEntry: positions.canAccessSalesEntry,
+        canAccessSettlements: positions.canAccessSettlements,
+        canAccessStockDashboard: positions.canAccessStockDashboard,
+        canAccessStockOpname: positions.canAccessStockOpname,
+        canAccessTransfers: positions.canAccessTransfers,
+        canAccessPriceLists: positions.canAccessPriceLists,
+        canAccessDiscounts: positions.canAccessDiscounts,
+        canAccessAdminSettings: positions.canAccessAdminSettings,
+        staffJabatan: staff.jabatan,
+      })
+      .from(staff)
+      .leftJoin(positions, eq(staff.jabatan, positions.positionName))
+      .where(eq(staff.email, userEmail))
+      .limit(1);
     
-    if (!staffMember || !staffMember.jabatan) {
-      // Default permissions for users without staff record or position
+    if (result.length === 0) {
+      // Default permissions for users without staff record
       return {
         positionId: 0,
         positionName: 'User',
@@ -715,14 +734,13 @@ export class DatabaseStorage implements IStorage {
       };
     }
     
-    // Get position by jabatan (position name)
-    const position = await this.getPositionByName(staffMember.jabatan);
+    const user = result[0];
     
-    if (!position) {
+    if (!user.positionId || !user.staffJabatan) {
       // Default permissions if position not found
       return {
         positionId: 0,
-        positionName: staffMember.jabatan,
+        positionName: user.staffJabatan || 'User',
         description: 'Unknown position',
         canAccessDashboard: true,
         canAccessSalesEntry: false,
@@ -736,7 +754,20 @@ export class DatabaseStorage implements IStorage {
       };
     }
     
-    return position;
+    return {
+      positionId: user.positionId,
+      positionName: user.positionName,
+      description: user.description,
+      canAccessDashboard: user.canAccessDashboard,
+      canAccessSalesEntry: user.canAccessSalesEntry,
+      canAccessSettlements: user.canAccessSettlements,
+      canAccessStockDashboard: user.canAccessStockDashboard,
+      canAccessStockOpname: user.canAccessStockOpname,
+      canAccessTransfers: user.canAccessTransfers,
+      canAccessPriceLists: user.canAccessPriceLists,
+      canAccessDiscounts: user.canAccessDiscounts,
+      canAccessAdminSettings: user.canAccessAdminSettings,
+    };
   }
   
   // Transfer order item list operations

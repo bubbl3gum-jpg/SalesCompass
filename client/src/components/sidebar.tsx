@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
 import { useSidebar } from "@/hooks/useSidebar";
@@ -130,13 +130,13 @@ export function Sidebar() {
     return userPermissions[permission] === true;
   };
 
-  const handleLogout = () => {
+  const handleLogout = useCallback(() => {
     window.location.href = '/api/logout';
-  };
+  }, []);
 
-  const handleChangeUser = () => {
+  const handleChangeUser = useCallback(() => {
     window.location.href = '/api/logout';
-  };
+  }, []);
 
   // Store logout mutation
   const storeLogoutMutation = useMutation({
@@ -160,9 +160,9 @@ export function Sidebar() {
     },
   });
 
-  const handleStoreLogout = () => {
+  const handleStoreLogout = useCallback(() => {
     storeLogoutMutation.mutate();
-  };
+  }, [storeLogoutMutation]);
 
   const currentStore = currentStoreData?.store;
   const canSwitchStores = currentStoreData?.canSwitchStores ?? false;
