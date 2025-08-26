@@ -65,6 +65,7 @@ const tableConfigs: TableConfig[] = [
       { key: 'kodeGudang', label: 'Store Code', type: 'text', required: true },
       { key: 'namaGudang', label: 'Store Name', type: 'text', required: true },
       { key: 'jenisGudang', label: 'Store Type', type: 'text' },
+      { key: 'storePassword', label: 'Store Password', type: 'password', required: true },
     ]
   },
   {
