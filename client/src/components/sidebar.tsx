@@ -127,7 +127,7 @@ export function Sidebar() {
 
   const hasPermission = (permission: string) => {
     if (!userPermissions) return false;
-    return userPermissions[permission] === true;
+    return (userPermissions as any)[permission] === true;
   };
 
   const handleLogout = useCallback(() => {
@@ -164,9 +164,9 @@ export function Sidebar() {
     storeLogoutMutation.mutate();
   }, [storeLogoutMutation]);
 
-  const currentStore = currentStoreData?.store;
-  const canSwitchStores = currentStoreData?.canSwitchStores ?? false;
-  const storeLoginType = currentStoreData?.loginType;
+  const currentStore = (currentStoreData as any)?.store;
+  const canSwitchStores = (currentStoreData as any)?.canSwitchStores ?? false;
+  const storeLoginType = (currentStoreData as any)?.loginType;
 
   return (
     <div className={cn(
@@ -204,7 +204,7 @@ export function Sidebar() {
           {navigationItems.map((item, index) => {
             // Handle direct navigation items
             if ('href' in item) {
-              if (!hasPermission(item.permission)) return null;
+              if (!hasPermission(item.permission || '')) return null;
               
               return (
                 <Button
@@ -217,8 +217,8 @@ export function Sidebar() {
                       ? "text-blue-600 bg-blue-50/50 dark:bg-blue-900/30 dark:text-blue-300"
                       : "text-gray-700 dark:text-gray-300 hover:bg-white/10 dark:hover:bg-white/5"
                   )}
-                  onClick={() => setLocation(item.href)}
-                  data-testid={`nav-${item.name.toLowerCase().replace(' ', '-')}`}
+                  onClick={() => setLocation(item.href || '')}
+                  data-testid={`nav-${(item.name || '').toLowerCase().replace(' ', '-')}`}
                   title={!isExpanded ? item.name : undefined}
                 >
                   <i className={cn(item.icon, "w-5 h-5", isExpanded ? "mr-3" : "")}></i>
@@ -244,7 +244,7 @@ export function Sidebar() {
                   <div className="border-t border-gray-300 dark:border-gray-600 my-2"></div>
                 )}
                 {item.items?.map((subItem, subIndex) => {
-                  if (!hasPermission(subItem.permission)) return null;
+                  if (!hasPermission(subItem.permission || '')) return null;
                   
                   return (
                     <Button
@@ -257,7 +257,7 @@ export function Sidebar() {
                           ? "text-blue-600 bg-blue-50/50 dark:bg-blue-900/30 dark:text-blue-300"
                           : "text-gray-700 dark:text-gray-300 hover:bg-white/10 dark:hover:bg-white/5"
                       )}
-                      onClick={() => setLocation(subItem.href)}
+                      onClick={() => setLocation(subItem.href || '')}
                       data-testid={`nav-${subItem.name.toLowerCase().replace(' ', '-')}`}
                       title={!isExpanded ? subItem.name : undefined}
                     >
@@ -265,7 +265,7 @@ export function Sidebar() {
                       {isExpanded && <span>{subItem.name}</span>}
                       {!isExpanded && (
                         <div className="absolute left-full ml-2 px-2 py-1 bg-gray-900 dark:bg-gray-700 text-white text-xs rounded-md opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50">
-                          {subItem.name}
+                          {subItem.name || ''}
                         </div>
                       )}
                     </Button>
@@ -312,20 +312,20 @@ export function Sidebar() {
           )}>
             <div className="w-8 h-8 bg-gradient-to-r from-emerald-400 to-blue-500 rounded-full flex items-center justify-center">
               <span className="text-white text-sm font-medium">
-                {user?.firstName?.charAt(0) || user?.email?.charAt(0) || 'U'}
+                {(user as any)?.firstName?.charAt(0) || (user as any)?.email?.charAt(0) || 'U'}
               </span>
             </div>
             {isExpanded ? (
               <>
                 <div className="ml-3 flex-1 min-w-0">
                   <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
-                    {user?.firstName && user?.lastName 
-                      ? `${user.firstName} ${user.lastName}`
-                      : user?.email?.split('@')[0] || 'User'
+                    {(user as any)?.firstName && (user as any)?.lastName 
+                      ? `${(user as any).firstName} ${(user as any).lastName}`
+                      : (user as any)?.email?.split('@')[0] || 'User'
                     }
                   </p>
                   <p className="text-xs text-gray-500 dark:text-gray-400">
-                    {userPermissions?.positionName || 'User'}
+                    {(userPermissions as any)?.positionName || 'User'}
                   </p>
                 </div>
                 <DropdownMenu>
@@ -437,9 +437,9 @@ export function Sidebar() {
                   </DropdownMenuContent>
                 </DropdownMenu>
                 <div className="absolute left-full ml-2 px-2 py-1 bg-gray-900 dark:bg-gray-700 text-white text-xs rounded-md opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50">
-                  {user?.firstName && user?.lastName 
-                    ? `${user.firstName} ${user.lastName}`
-                    : user?.email?.split('@')[0] || 'User'
+                  {(user as any)?.firstName && (user as any)?.lastName 
+                    ? `${(user as any).firstName} ${(user as any).lastName}`
+                    : (user as any)?.email?.split('@')[0] || 'User'
                   }
                 </div>
               </>
@@ -451,7 +451,7 @@ export function Sidebar() {
         <StoreAuthModal
           open={storeAuthModalOpen}
           onOpenChange={setStoreAuthModalOpen}
-          stores={stores}
+          stores={(stores || []) as any}
           canSwitchStores={canSwitchStores}
           currentStore={currentStore}
           onSuccess={(store) => {

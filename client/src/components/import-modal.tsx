@@ -113,18 +113,22 @@ export function ImportModal({
       setImportResults(data);
       queryClient.invalidateQueries({ queryKey: [queryKey] });
       
-      if (data.success > 0) {
+      if (data.success > 0 || (data.summary && data.summary.totalRecords > 0)) {
+        const totalRecords = data.summary ? data.summary.totalRecords : data.success;
+        const failedCount = data.failed || 0;
+        
         toast({
-          title: "Import Completed",
-          description: `Successfully imported ${data.success} records${data.failed > 0 ? `, ${data.failed} failed` : ''}`,
-          variant: data.failed > 0 ? "destructive" : "default",
+          title: "Import Completed Successfully",
+          description: `Processed ${totalRecords} records${failedCount > 0 ? `, ${failedCount} failed` : ''}`,
+          variant: failedCount > 0 ? "destructive" : "default",
         });
       }
       
-      if (data.failed === 0) {
+      if (data.failed === 0 && data.success > 0) {
+        // Auto-close after 5 seconds for successful imports, giving users time to see results
         setTimeout(() => {
           handleClose();
-        }, 2000);
+        }, 5000);
       }
     },
     onError: (error) => {
