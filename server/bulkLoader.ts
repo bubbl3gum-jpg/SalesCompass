@@ -22,7 +22,8 @@ export class BulkLoader {
     jobId: string,
     tableName: string,
     rows: ParsedRow[],
-    onProgress?: (loaded: number, total: number) => void
+    onProgress?: (loaded: number, total: number) => void,
+    additionalData?: any
   ): Promise<BulkLoadResult> {
     const startTime = Date.now();
     const stagingTable = getStagingTableName(tableName);
@@ -34,7 +35,7 @@ export class BulkLoader {
 
     try {
       // Prepare CSV file for LOAD DATA INFILE
-      const tempFile = await this.createTempCSVFile(jobId, tableName, rows);
+      const tempFile = await this.createTempCSVFile(jobId, tableName, rows, additionalData);
       
       // Build LOAD DATA INFILE query
       const loadQuery = `
@@ -73,7 +74,7 @@ export class BulkLoader {
       console.error('Bulk load error:', error);
       
       // Fallback to batched inserts if LOAD DATA INFILE fails
-      return await this.batchedInsert(jobId, tableName, rows, onProgress);
+      return await this.batchedInsert(jobId, tableName, rows, onProgress, additionalData);
     }
   }
 
@@ -82,7 +83,8 @@ export class BulkLoader {
     jobId: string,
     tableName: string,
     rows: ParsedRow[],
-    onProgress?: (loaded: number, total: number) => void
+    onProgress?: (loaded: number, total: number) => void,
+    additionalData?: any
   ): Promise<BulkLoadResult> {
     const startTime = Date.now();
     const stagingTable = getStagingTableName(tableName);
@@ -106,7 +108,7 @@ export class BulkLoader {
         const batchValues: any[] = [];
         
         batch.forEach(row => {
-          const values = this.mapRowToStagingColumns(row, jobId, tableName);
+          const values = this.mapRowToStagingColumns(row, jobId, tableName, additionalData);
           batchValues.push(...values);
         });
 
@@ -154,7 +156,8 @@ export class BulkLoader {
   private async createTempCSVFile(
     jobId: string,
     tableName: string,
-    rows: ParsedRow[]
+    rows: ParsedRow[],
+    additionalData?: any
   ): Promise<string> {
     const tempFile = join(this.tempDir, `import_${jobId}_${randomUUID()}.csv`);
     const columns = getStagingColumns(tableName);
@@ -163,7 +166,7 @@ export class BulkLoader {
     let csvContent = columns.join(',') + '\n';
     
     rows.forEach(row => {
-      const values = this.mapRowToStagingColumns(row, jobId, tableName);
+      const values = this.mapRowToStagingColumns(row, jobId, tableName, additionalData);
       const csvRow = values.map(val => 
         val === null || val === undefined ? '' : `"${String(val).replace(/"/g, '""')}"`
       ).join(',');
@@ -176,7 +179,7 @@ export class BulkLoader {
   }
 
   // Map parsed row to staging table columns
-  private mapRowToStagingColumns(row: ParsedRow, jobId: string, tableName: string): any[] {
+  private mapRowToStagingColumns(row: ParsedRow, jobId: string, tableName: string, additionalData?: any): any[] {
     const columns = getStagingColumns(tableName);
     const values: any[] = [];
 
@@ -185,6 +188,9 @@ export class BulkLoader {
         values.push(jobId);
       } else if (column === 'row_number') {
         values.push(row.rowNumber);
+      } else if (column === 'to_id' && additionalData?.toId) {
+        // Map toId from additionalData for transfer-items
+        values.push(additionalData.toId);
       } else {
         // Map from parsed data using column name without underscores
         const dataKey = column.replace(/_/g, '');

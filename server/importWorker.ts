@@ -41,7 +41,8 @@ export class ImportWorker {
         parsedRows,
         (loaded, total) => {
           jobQueue.updateProgress(job.id, loaded, total, 'Loading to staging...', bulkResult?.throughputRps);
-        }
+        },
+        job.additionalData
       );
 
       jobQueue.updateProgress(job.id, parsedRows.length, parsedRows.length, 'Validating data...');
