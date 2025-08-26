@@ -137,14 +137,122 @@ const upload = multer({
   }
 });
 
-// Helper function to parse CSV data
-function parseCSV(buffer: Buffer): Promise<any[]> {
+// Helper function to parse CSV data for different table types
+function parseCSV(buffer: Buffer, tableName?: string): Promise<any[]> {
   return new Promise((resolve, reject) => {
     const results: any[] = [];
     const csvContent = buffer.toString();
     const lines = csvContent.split('\n');
     
-    // Find the header row that contains "Kode Gudang" or similar data headers
+    // Staff-specific parsing with proper field mapping
+    if (tableName === 'staff') {
+      // Look for staff data headers
+      let headerRowIndex = -1;
+      let headers: string[] = [];
+      
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        // Look for common staff headers
+        if (line.toLowerCase().includes('nik') || 
+            line.toLowerCase().includes('email') ||
+            line.toLowerCase().includes('full name') ||
+            line.toLowerCase().includes('password')) {
+          headerRowIndex = i;
+          headers = line.split(',').map(h => h.trim().replace(/"/g, ''));
+          break;
+        }
+      }
+      
+      if (headerRowIndex === -1) {
+        // If no header row found, assume first row is headers
+        headerRowIndex = 0;
+        headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
+      }
+      
+      console.log(`📍 Found staff headers at row ${headerRowIndex + 1}:`, headers);
+      
+      // Define mapping from CSV headers to database fields
+      const fieldMapping: { [key: string]: string } = {
+        'NIK': 'nik',
+        'nik': 'nik',
+        'Email': 'email',
+        'email': 'email',
+        'Password': 'password',
+        'password': 'password',
+        'Full Name': 'namaLengkap',
+        'full name': 'namaLengkap',
+        'nama lengkap': 'namaLengkap',
+        'namalengkap': 'namaLengkap',
+        'City': 'kota',
+        'city': 'kota',
+        'kota': 'kota',
+        'Address': 'alamat',
+        'address': 'alamat',
+        'alamat': 'alamat',
+        'Phone Number': 'noHp',
+        'phone number': 'noHp',
+        'phone': 'noHp',
+        'no hp': 'noHp',
+        'nohp': 'noHp',
+        'Place of Birth': 'tempatLahir',
+        'place of birth': 'tempatLahir',
+        'tempat lahir': 'tempatLahir',
+        'tempatlahir': 'tempatLahir',
+        'Date of Birth': 'tanggalLahir',
+        'date of birth': 'tanggalLahir',
+        'tanggal lahir': 'tanggalLahir',
+        'tanggallahir': 'tanggalLahir',
+        'Date Joined': 'tanggalMasuk',
+        'date joined': 'tanggalMasuk',
+        'tanggal masuk': 'tanggalMasuk',
+        'tanggalmasuk': 'tanggalMasuk',
+        'Position': 'jabatan',
+        'position': 'jabatan',
+        'jabatan': 'jabatan'
+      };
+      
+      // Process data rows
+      for (let i = headerRowIndex + 1; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (line && !line.match(/^,*$/)) {
+          const values = line.split(',').map(v => v.trim().replace(/"/g, ''));
+          if (values[0]) { // Only process rows with data in first column
+            const rowData: any = {};
+            headers.forEach((header, index) => {
+              const mappedField = fieldMapping[header.toLowerCase()] || fieldMapping[header];
+              if (mappedField && values[index]) {
+                // Special handling for dates
+                if (mappedField === 'tanggalLahir' || mappedField === 'tanggalMasuk') {
+                  const dateValue = values[index];
+                  // Try to parse different date formats
+                  let parsedDate = new Date(dateValue);
+                  if (isNaN(parsedDate.getTime())) {
+                    // Try DD/MM/YYYY format
+                    const parts = dateValue.split('/');
+                    if (parts.length === 3) {
+                      parsedDate = new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]));
+                    }
+                  }
+                  if (!isNaN(parsedDate.getTime())) {
+                    rowData[mappedField] = parsedDate.toISOString().split('T')[0]; // Format as YYYY-MM-DD
+                  }
+                } else {
+                  rowData[mappedField] = values[index];
+                }
+              }
+            });
+            if (Object.keys(rowData).length > 0) {
+              results.push(rowData);
+            }
+          }
+        }
+      }
+      
+      resolve(results);
+      return;
+    }
+    
+    // Store data parsing (existing logic)
     let headerRowIndex = -1;
     let headers: string[] = [];
     
@@ -705,7 +813,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Parse file based on type
       if (req.file.mimetype === 'text/csv' || req.file.originalname.endsWith('.csv')) {
-        parsedData = await parseCSV(req.file.buffer);
+        parsedData = await parseCSV(req.file.buffer, tableName);
       } else {
         parsedData = parseExcel(req.file.buffer);
       }
