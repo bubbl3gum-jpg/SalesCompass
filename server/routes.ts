@@ -800,7 +800,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Validate table name
-      const validTables = ['reference-sheet', 'staff', 'stores', 'pricelist', 'discounts', 'edc', 'payment-methods', 'positions'];
+      const validTables = ['reference-sheet', 'staff', 'stores', 'pricelist', 'discounts', 'edc', 'payment-methods', 'positions', 'stock-opname-items', 'transfer-items'];
       if (!validTables.includes(tableName)) {
         return res.status(400).json({ message: 'Invalid table name' });
       }
