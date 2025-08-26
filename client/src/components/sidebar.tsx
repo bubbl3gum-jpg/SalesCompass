@@ -162,7 +162,7 @@ export function Sidebar() {
 
   const handleStoreLogout = useCallback(() => {
     storeLogoutMutation.mutate();
-  }, [storeLogoutMutation]);
+  }, []); // storeLogoutMutation.mutate is stable, don't need to include mutation object
 
   const currentStore = (currentStoreData as any)?.store;
   const canSwitchStores = (currentStoreData as any)?.canSwitchStores ?? false;

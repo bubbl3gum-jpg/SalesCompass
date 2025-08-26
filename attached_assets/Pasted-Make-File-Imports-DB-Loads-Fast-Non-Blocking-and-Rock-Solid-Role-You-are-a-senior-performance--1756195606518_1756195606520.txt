@@ -1,0 +1,192 @@
+Make File Imports & DB Loads Fast, Non-Blocking, and Rock-Solid
+
+Role: You are a senior performance engineer. Your mission is to make file uploads, validation, and database loading feel instant to users while safely handling large files.
+
+Hard Targets (must meet all)
+
+User-perceived latency for starting an import: < 1s (request returns a task ID immediately).
+
+Throughput: ≥ 50k rows/min CSV-to-DB on mid-tier VM; scalable with workers.
+
+Reliability: Imports are idempotent; safe to retry; no duplicate rows; partial failures are resumable.
+
+UI smoothness: Progress updates at least 1×/sec; no page hangs.
+
+p95 API latency for non-import endpoints: ≤ 300 ms during heavy imports.
+
+What You Should Assume (fill in if not given)
+
+Stack: {{frontend_stack}} + {{backend_stack}} (e.g., FastAPI) + {{db}} (e.g., MySQL).
+File types: {{csv_or_xlsx}}. Typical batch size: {{rows_per_file}}.
+
+Deliverables (all required)
+
+Architecture change: Decouple imports from request/response via a job queue + worker (e.g., Celery/Dramatiq/RQ/Arq). Provide infra & code diffs.
+
+Staging-table pipeline: Load into staging tables (minimal/no indexes) → validate/transform → upsert/merge into target tables. Include DDL + migration scripts.
+
+Fast loader:
+
+Prefer database bulk primitives (MySQL LOAD DATA [LOCAL] INFILE) or bulk insert APIs.
+
+Fallback: batched inserts (1–5k rows/batch) with prepared statements.
+
+Streamed parsing: Never read the entire file into RAM. Implement streaming/chunk processing for CSV/Excel.
+
+Validation layer: Vectorized/columnar checks; per-row error capture; downloadable error report (CSV).
+
+Observability: Traces for each import step, counters (rows processed/s, error counts), and progress events via SSE/WebSocket. Dashboards + alerts.
+
+Runbook & tests: k6/Locust script for import throughput; sample files (10k/100k/1M rows); before/after metrics; rollback procedure.
+
+Non-Negotiable Design Choices
+
+Request returns fast with {task_id}; UI polls or subscribes to /imports/{id}/status.
+
+Idempotency keys per upload; re-running the same file does not double-insert.
+
+Backpressure: Cap concurrent imports; queue size limits; clear error when at capacity.
+
+Atomic finalization: Stage → validate → single transaction to upsert/rename-swap.
+
+No blocking the main thread: Heavy CPU parsing in workers (or Web Workers if browser-side).
+
+Frontend Requirements
+
+Upload with chunked/resumable approach; show deterministic progress (bytes + rows).
+
+After upload completes, immediately receive {task_id} and show live status: queued → parsing → validated → loading → finalizing → done/failed.
+
+Retry/resume on network blips; don’t re-send already uploaded chunks.
+
+Backend & Worker Requirements
+
+Job system
+
+Choose: Celery (Redis/RabbitMQ), Dramatiq (Redis), RQ (Redis), or Arq (Redis). Provide docker-compose and production configs.
+
+Expose: POST /imports → returns {task_id}; GET /imports/{id} → status, stats, ETA; GET /imports/{id}/errors → CSV of bad rows.
+
+Parsing
+
+CSV: stream via Python csv/pyarrow.csv/polars (preferred). Use explicit dtype map; reject malformed rows to error sink.
+
+Excel: convert to CSV stream server-side (e.g., xlsx2csv) to avoid slow openpyxl row-loops.
+
+Validation/Transform
+
+Do column mapping and type coercion vectorized (polars/pyarrow) or batched; no per-row Python loops.
+
+Enforce business keys/constraints in staging; collect rejects with reasons.
+
+Bulk Load (MySQL specifics)
+
+Fast path: LOAD DATA INFILE (server path) or LOAD DATA LOCAL INFILE (client → server) with local_infile=1.
+
+If duplicates must update, do: stage → INSERT ... ON DUPLICATE KEY UPDATE from staging (don’t rely on REPLACE unless you truly want delete+insert).
+
+Ensure max_allowed_packet and secure_file_priv are configured; provide exact config edits.
+
+For batched inserts, use prepared statements and multi-row VALUES (1–5k rows/batch), commit per batch.
+
+Indexes & Constraints Strategy
+
+Keep staging with no non-essential indexes.
+
+Upsert into target that has the right unique keys (e.g., (serial_number), (item_code, store_id, date)).
+
+If loading into a brand-new large table, create indexes after the load; otherwise upsert into already-indexed target.
+
+Atomic Finalization
+
+Option A (preferred for replacements): write to target_new, build indexes, then RENAME TABLE target TO target_old, target_new TO target (atomic), drop target_old.
+
+Option B (incremental): INSERT ... ON DUPLICATE KEY UPDATE from staging in sized batches.
+
+Throughput Tuning
+
+Batch size auto-tuning based on p95 insert time.
+
+Parallelize by shards/partitions when keys allow (e.g., by store or date).
+
+Cap worker concurrency to keep DB p95 API latency for other endpoints ≤ 300 ms.
+
+Safety
+
+All writes wrapped in transactions; clear retries with exponential backoff.
+
+Use advisory locks/mutex per business key scope to avoid concurrent upserts clashing.
+
+Provide a dry-run/validate-only mode.
+
+FastAPI + MySQL — Explicit Code/Config You Must Provide
+
+Queue wiring: Worker app, broker config, Docker files, and @task function for import pipeline stages.
+
+Endpoints:
+
+POST /imports (accept file/URL), returns {task_id, idempotency_key}.
+
+GET /imports/{id} (status/progress), GET /imports/{id}/errors, DELETE /imports/{id} (cancel if queued/running).
+
+DB layer:
+
+Staging DDL (minimal indexes) + target DDL (unique keys).
+
+SQL for: LOAD DATA [LOCAL] INFILE with proper FIELDS/LINES and CHARACTER SET.
+
+Merge SQL: INSERT ... SELECT ... ON DUPLICATE KEY UPDATE from staging.
+
+Example EXPLAIN plans before/after; add missing indexes.
+
+Config fixes:
+
+MySQL: local_infile=1, max_allowed_packet high, ensure secure_file_priv path documented.
+
+Connection pooling sized to workers; no per-request engine creation.
+
+Parsing:
+
+Example using polars streaming (or pyarrow) with dtype maps and chunk iteration.
+
+Error sink writer (CSV) with row numbers + reasons.
+
+Progress & Telemetry:
+
+Emit progress events every N rows; store rows_total, rows_ok, rows_bad, throughput_rps.
+
+OpenTelemetry spans per stage; logs with task_id, upload_id, and timing.
+
+CLI & tests:
+
+k6/Locust script that uploads 100k rows sample and asserts ≥ 50k rows/min and API p95 ≤ 300 ms during the run.
+
+Fixtures for tiny/medium/large files; a reproducible benchmark command.
+
+Acceptance Checklist (must tick all)
+
+ Import request returns {task_id} in < 1s.
+
+ 100k-row CSV completes end-to-end in ≤ 2 min on a standard VM; progress visible throughout.
+
+ Non-import APIs maintain p95 ≤ 300 ms during imports.
+
+ Idempotent re-submit doesn’t duplicate rows.
+
+ Clear error CSV downloadable; partial failures don’t poison the dataset.
+
+ Docs: setup, env vars, MySQL configs (secure_file_priv, local_infile), and rollback steps.
+
+Output Format
+
+Summary of the new pipeline and measured wins,
+
+Code diffs (backend, worker, SQL migrations),
+
+Config files (docker-compose, env, MySQL settings),
+
+Benchmark results (k6/Locust & APM traces),
+
+Runbook (operate, scale, troubleshoot).
+
+Begin now. If any variable isn’t provided, make a reasonable assumption and proceed.
