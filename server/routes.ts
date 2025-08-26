@@ -4,6 +4,7 @@ import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./replitAuth";
 import { z } from "zod";
 import { withCache, CACHE_KEYS, CACHE_TTL, invalidateCache, invalidateCachePattern } from "./cache";
+import { cache } from "./cache";
 import multer from "multer";
 import * as XLSX from "xlsx";
 import * as csv from "csv-parser";
@@ -1217,7 +1218,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/discounts', isAuthenticated, checkRole(['System Administrator']), async (req, res) => {
     try {
       const validatedData = insertDiscountTypeSchema.parse(req.body);
-      const discount = await storage.createDiscountType(validatedData);
+      // Convert number to string for storage
+      const storageData = {
+        ...validatedData,
+        discountAmount: validatedData.discountAmount.toString()
+      };
+      const discount = await storage.createDiscountType(storageData);
       
       // Clear cache after creating discount
       cache.del(CACHE_KEYS.DISCOUNTS);
@@ -1237,7 +1243,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { discountId } = req.params;
       const validatedData = insertDiscountTypeSchema.partial().parse(req.body);
-      const discount = await storage.updateDiscountType(parseInt(discountId), validatedData);
+      // Convert number to string for storage if discountAmount exists
+      const storageData = {
+        ...validatedData,
+        ...(validatedData.discountAmount !== undefined && {
+          discountAmount: validatedData.discountAmount.toString()
+        })
+      };
+      const discount = await storage.updateDiscountType(parseInt(discountId), storageData);
       
       // Clear cache after updating discount
       cache.del(CACHE_KEYS.DISCOUNTS);

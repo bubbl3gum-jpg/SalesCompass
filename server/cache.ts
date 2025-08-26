@@ -1,7 +1,7 @@
 import NodeCache from 'node-cache';
 
-// Cache configuration
-const cache = new NodeCache({
+// Cache configuration (exported for direct use)
+export const cache = new NodeCache({
   stdTTL: 300, // 5 minutes default TTL
   checkperiod: 60, // Check for expired keys every 60 seconds
   useClones: false, // Don't clone data for better performance
