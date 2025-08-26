@@ -40,17 +40,16 @@ export const users = pgTable("users", {
 
 // Reference Sheet
 export const referenceSheet = pgTable("reference_sheet", {
-  refId: integer("ref_id").primaryKey().generatedByDefaultAsIdentity(),
-  kodeItem: varchar("kode_item", { length: 50 }).unique().notNull(),
+  kodeItem: varchar("kode_item", { length: 50 }).primaryKey().notNull(),
   namaItem: varchar("nama_item", { length: 255 }),
-  kelompok: varchar("kelompok", { length: 50 }),
-  family: varchar("family", { length: 50 }),
-  originalCode: varchar("original_code", { length: 100 }),
-  color: varchar("color", { length: 50 }),
-  kodeMaterial: varchar("kode_material", { length: 50 }),
-  deskripsiMaterial: varchar("deskripsi_material", { length: 255 }),
-  kodeMotif: varchar("kode_motif", { length: 50 }),
-  deskripsiMotif: varchar("deskripsi_motif", { length: 255 }),
+  kelompok: varchar("kelompok", { length: 100 }),
+  family: varchar("family", { length: 100 }),
+  originalCode: varchar("original_code", { length: 150 }),
+  color: varchar("color", { length: 100 }),
+  kodeMaterial: varchar("kode_material", { length: 100 }),
+  deskripsiMaterial: varchar("deskripsi_material", { length: 500 }),
+  kodeMotif: varchar("kode_motif", { length: 100 }),
+  deskripsiMotif: varchar("deskripsi_motif", { length: 500 }),
 });
 
 // Stores
@@ -296,7 +295,7 @@ export type InsertPosition = typeof positions.$inferInsert;
 export type Position = typeof positions.$inferSelect;
 
 // Schemas for validation
-export const insertReferenceSheetSchema = createInsertSchema(referenceSheet).omit({ refId: true });
+export const insertReferenceSheetSchema = createInsertSchema(referenceSheet);
 export const insertStoreSchema = createInsertSchema(stores);
 export const insertDiscountTypeSchema = createInsertSchema(discountTypes).omit({ discountId: true });
 export const insertPricelistSchema = createInsertSchema(pricelist).omit({ pricelistId: true });

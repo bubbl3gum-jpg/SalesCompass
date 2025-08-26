@@ -231,12 +231,52 @@ function validateImportData(data: any[], tableName: string, schema: any): { vali
         // Map common column name variations (check with spaces first, then without)
         const columnMappings: { [key: string]: { [key: string]: string } } = {
           'reference-sheet': {
+            'kode item': 'kodeItem',
             'kodeitem': 'kodeItem',
+            'kode_item': 'kodeItem',
+            'item code': 'kodeItem',
+            'itemcode': 'kodeItem',
+            'nama item': 'namaItem',
             'namaitem': 'namaItem',
-            'deskripsiitem': 'deskripsiItem',
-            'serialnumber': 'serialNumber',
+            'nama_item': 'namaItem',
+            'item name': 'namaItem',
+            'itemname': 'namaItem',
+            'kelompok': 'kelompok',
+            'group': 'kelompok',
+            'kategori': 'kelompok',
+            'category': 'kelompok',
+            'family': 'family',
+            'keluarga': 'family',
+            'original code': 'originalCode',
+            'originalcode': 'originalCode',
+            'original_code': 'originalCode',
+            'kode asli': 'originalCode',
+            'kodeasli': 'originalCode',
+            'color': 'color',
+            'warna': 'color',
+            'colours': 'color',
+            'kode material': 'kodeMaterial',
+            'kodematerial': 'kodeMaterial',
+            'kode_material': 'kodeMaterial',
+            'material code': 'kodeMaterial',
+            'materialcode': 'kodeMaterial',
+            'deskripsi material': 'deskripsiMaterial',
             'deskripsimaterial': 'deskripsiMaterial',
-            'kodemotif': 'kodeMotif'
+            'deskripsi_material': 'deskripsiMaterial',
+            'material description': 'deskripsiMaterial',
+            'materialdescription': 'deskripsiMaterial',
+            'kode motif': 'kodeMotif',
+            'kodemotif': 'kodeMotif',
+            'kode_motif': 'kodeMotif',
+            'motif code': 'kodeMotif',
+            'motifcode': 'kodeMotif',
+            'pattern code': 'kodeMotif',
+            'deskripsi motif': 'deskripsiMotif',
+            'deskripsimotif': 'deskripsiMotif',
+            'deskripsi_motif': 'deskripsiMotif',
+            'motif description': 'deskripsiMotif',
+            'motifdescription': 'deskripsiMotif',
+            'pattern description': 'deskripsiMotif'
           },
           'pricelist': {
             'kodeitem': 'kodeItem',
@@ -571,9 +611,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const dashboardData = [];
 
       for (const store of stores) {
-        // Get metrics for each store
-        const metrics = await storage.getDashboardMetrics(store.kodeGudang);
-        const recentSales = await storage.getRecentSales(store.kodeGudang, 5); // Get last 5 sales
+        // Get metrics for each store (placeholder for now)
+        const metrics = { totalSales: 0, totalItems: 0, totalCustomers: 0 };
+        const recentSales: any[] = []; // Get last 5 sales (placeholder)
 
         dashboardData.push({
           store: {
