@@ -1121,6 +1121,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get transfer order items
+  app.get('/api/transfers/:toId/items', isAuthenticated, async (req, res) => {
+    try {
+      const toId = parseInt(req.params.toId);
+      if (isNaN(toId)) {
+        return res.status(400).json({ message: 'Invalid transfer order ID' });
+      }
+      
+      const items = await storage.getToItemListByTransferOrderId(toId);
+      res.json(items);
+    } catch (error) {
+      console.error('Get transfer items error:', error);
+      res.status(500).json({ message: 'Failed to get transfer items' });
+    }
+  });
+
   // Master data endpoints
   app.get('/api/stores', isAuthenticated, async (req, res) => {
     try {

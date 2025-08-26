@@ -50,6 +50,8 @@ export default function Transfers() {
   const [selectedTransferId, setSelectedTransferId] = useState<number | null>(null);
   const [toStoreOpen, setToStoreOpen] = useState(false);
   const [fromStoreOpen, setFromStoreOpen] = useState(false);
+  const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [selectedTransferForDetails, setSelectedTransferForDetails] = useState<any>(null);
 
   const form = useForm<TransferFormData>({
     resolver: zodResolver(transferFormSchema),
@@ -232,6 +234,10 @@ export default function Transfers() {
                             <Button
                               variant="ghost"
                               size="sm"
+                              onClick={() => {
+                                setSelectedTransferForDetails(transfer);
+                                setShowDetailsModal(true);
+                              }}
                               className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
                               data-testid={`button-view-transfer-${transfer.toId}`}
                             >
@@ -475,6 +481,150 @@ export default function Transfers() {
           'qty (quantity to transfer)'
         ]}
       />
+
+      {/* Transfer Details Modal */}
+      <Dialog open={showDetailsModal} onOpenChange={setShowDetailsModal}>
+        <DialogContent className="max-w-4xl bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700">
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-bold text-gray-900 dark:text-white">
+              Transfer Order Details #{selectedTransferForDetails?.toId}
+            </DialogTitle>
+          </DialogHeader>
+
+          {selectedTransferForDetails && (
+            <TransferDetailsContent 
+              transfer={selectedTransferForDetails} 
+              stores={stores}
+              onClose={() => setShowDetailsModal(false)}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+// Transfer Details Content Component
+function TransferDetailsContent({ transfer, stores, onClose }: { 
+  transfer: any, 
+  stores: any[], 
+  onClose: () => void 
+}) {
+  const { data: transferItems, isLoading: itemsLoading } = useQuery({
+    queryKey: ['/api/transfers', transfer.toId, 'items'],
+    enabled: !!transfer.toId,
+  });
+
+  const fromStore = stores?.find((s: any) => s.kodeGudang === transfer.dariGudang);
+  const toStore = stores?.find((s: any) => s.kodeGudang === transfer.keGudang);
+
+  return (
+    <div className="space-y-6">
+      {/* Transfer Info */}
+      <div className="grid grid-cols-2 gap-6">
+        <div className="space-y-4">
+          <div>
+            <label className="text-sm font-medium text-gray-500 dark:text-gray-400">From Store</label>
+            <p className="text-lg font-semibold text-gray-900 dark:text-white">
+              {fromStore?.namaGudang || transfer.dariGudang}
+            </p>
+            <p className="text-sm text-gray-500">{transfer.dariGudang}</p>
+          </div>
+          <div>
+            <label className="text-sm font-medium text-gray-500 dark:text-gray-400">Transfer Date</label>
+            <p className="text-lg font-semibold text-gray-900 dark:text-white">
+              {transfer.tanggal}
+            </p>
+          </div>
+        </div>
+        
+        <div className="space-y-4">
+          <div>
+            <label className="text-sm font-medium text-gray-500 dark:text-gray-400">To Store</label>
+            <p className="text-lg font-semibold text-gray-900 dark:text-white">
+              {toStore?.namaGudang || transfer.keGudang}
+            </p>
+            <p className="text-sm text-gray-500">{transfer.keGudang}</p>
+          </div>
+          {transfer.toNumber && (
+            <div>
+              <label className="text-sm font-medium text-gray-500 dark:text-gray-400">TO Number</label>
+              <p className="text-lg font-semibold text-gray-900 dark:text-white">
+                {transfer.toNumber}
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Transfer Items */}
+      <div>
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+          Transfer Items {transferItems && `(${transferItems.length} items)`}
+        </h3>
+        
+        {itemsLoading ? (
+          <div className="space-y-3">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="animate-pulse bg-gray-100 dark:bg-gray-800 rounded-lg p-4">
+                <div className="flex justify-between">
+                  <div className="space-y-2">
+                    <Skeleton className="w-32 h-4" />
+                    <Skeleton className="w-48 h-3" />
+                  </div>
+                  <Skeleton className="w-16 h-4" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : transferItems && transferItems.length > 0 ? (
+          <div className="space-y-3 max-h-60 overflow-y-auto">
+            {transferItems.map((item: any, index: number) => (
+              <div 
+                key={item.toItemListId || index} 
+                className="flex justify-between items-center p-4 bg-gray-50 dark:bg-gray-800 rounded-lg"
+              >
+                <div className="flex-1">
+                  <p className="font-medium text-gray-900 dark:text-white">
+                    {item.kodeItem}
+                  </p>
+                  <p className="text-sm text-gray-600 dark:text-gray-300">
+                    {item.namaItem}
+                  </p>
+                  {item.sn && (
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      S/N: {item.sn}
+                    </p>
+                  )}
+                </div>
+                <div className="text-right">
+                  <p className="font-semibold text-gray-900 dark:text-white">
+                    Qty: {item.qty}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+            <i className="fas fa-inbox text-3xl mb-3 opacity-50"></i>
+            <p>No items found for this transfer order.</p>
+            <p className="text-sm">Items will appear here after importing from Excel files.</p>
+          </div>
+        )}
+      </div>
+
+      {/* Import Progress Info */}
+      <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4">
+        <h4 className="font-medium text-blue-800 dark:text-blue-200 mb-2">
+          🔍 How to Check Import Status:
+        </h4>
+        <div className="text-sm text-blue-700 dark:text-blue-300 space-y-1">
+          <p>• <strong>During Import:</strong> Watch for real-time progress in the import dialog</p>
+          <p>• <strong>After Import:</strong> Items will automatically appear in this details view</p>
+          <p>• <strong>Import Failed?</strong> Check the import dialog for error details and retry individual failed records</p>
+        </div>
+      </div>
     </div>
   );
 }
