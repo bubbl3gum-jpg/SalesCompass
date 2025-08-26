@@ -52,7 +52,7 @@ import {
   type InsertPosition,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, sql, desc, sum, or, ilike } from "drizzle-orm";
+import { eq, and, sql, desc, sum, or, ilike, inArray } from "drizzle-orm";
 
 export interface IStorage {
   // User operations (mandatory for Replit Auth)
@@ -65,7 +65,18 @@ export interface IStorage {
   updateReferenceSheet(kodeItem: string, data: Partial<InsertReferenceSheet>): Promise<ReferenceSheet>;
   deleteReferenceSheet(kodeItem: string): Promise<void>;
   getReferenceSheetByKodeItem(kodeItem: string): Promise<ReferenceSheet | undefined>;
-  bulkInsertReferenceSheet(data: InsertReferenceSheet[]): Promise<void>;
+  bulkInsertReferenceSheet(data: InsertReferenceSheet[]): Promise<{ 
+    success: number; 
+    errors: Array<{ row: number; error: string; data: any }>;
+    duplicatesInBatch: Array<{ row: number; kodeItem: string; duplicateRows: number[] }>;
+    summary: {
+      totalRecords: number;
+      newRecords: number;
+      updatedRecords: number;
+      duplicatesRemoved: number;
+      errorRecords: number;
+    }
+  }>;
   searchReferenceSheet(query: string): Promise<ReferenceSheet[]>;
 
   // Store operations
@@ -186,26 +197,171 @@ export class DatabaseStorage implements IStorage {
     await db.delete(referenceSheet).where(eq(referenceSheet.kodeItem, kodeItem));
   }
 
-  // Optimized bulk insert for reference sheet
-  async bulkInsertReferenceSheet(data: InsertReferenceSheet[]): Promise<void> {
-    const batchSize = 50; // Process in smaller chunks to avoid memory issues
-    for (let i = 0; i < data.length; i += batchSize) {
-      const batch = data.slice(i, i + batchSize);
-      await db.insert(referenceSheet).values(batch).onConflictDoUpdate({
-        target: referenceSheet.kodeItem,
-        set: {
-          namaItem: sql.raw('excluded.nama_item'),
-          kelompok: sql.raw('excluded.kelompok'),
-          family: sql.raw('excluded.family'),
-          originalCode: sql.raw('excluded.original_code'),
-          color: sql.raw('excluded.color'),
-          kodeMaterial: sql.raw('excluded.kode_material'),
-          deskripsiMaterial: sql.raw('excluded.deskripsi_material'),
-          kodeMotif: sql.raw('excluded.kode_motif'),
-          deskripsiMotif: sql.raw('excluded.deskripsi_motif'),
-        }
-      });
+  // Enhanced bulk insert with detailed debugging and error handling
+  async bulkInsertReferenceSheet(data: InsertReferenceSheet[]): Promise<{ 
+    success: number; 
+    errors: Array<{ row: number; error: string; data: any }>;
+    duplicatesInBatch: Array<{ row: number; kodeItem: string; duplicateRows: number[] }>;
+    summary: {
+      totalRecords: number;
+      newRecords: number;
+      updatedRecords: number;
+      duplicatesRemoved: number;
+      errorRecords: number;
     }
+  }> {
+    const errors: Array<{ row: number; error: string; data: any }> = [];
+    const duplicatesInBatch: Array<{ row: number; kodeItem: string; duplicateRows: number[] }> = [];
+    let success = 0;
+    let newRecords = 0;
+    let updatedRecords = 0;
+
+    console.log(`\n=== BULK INSERT DEBUG ===`);
+    console.log(`Total records to process: ${data.length}`);
+
+    // Step 1: Remove duplicates within the same batch and track them
+    const uniqueData = [];
+    const seenKeys = new Map<string, number>();
+    
+    for (let i = 0; i < data.length; i++) {
+      const kodeItem = data[i].kodeItem;
+      if (seenKeys.has(kodeItem)) {
+        const originalRow = seenKeys.get(kodeItem)!;
+        let existingDuplicate = duplicatesInBatch.find(d => d.kodeItem === kodeItem);
+        if (existingDuplicate) {
+          existingDuplicate.duplicateRows.push(i + 1);
+        } else {
+          duplicatesInBatch.push({
+            row: originalRow,
+            kodeItem: kodeItem,
+            duplicateRows: [i + 1]
+          });
+        }
+        console.log(`Duplicate found in batch: "${kodeItem}" at rows ${originalRow} and ${i + 1}`);
+      } else {
+        seenKeys.set(kodeItem, i + 1);
+        uniqueData.push(data[i]);
+      }
+    }
+
+    console.log(`After removing duplicates: ${uniqueData.length} unique records`);
+    console.log(`Duplicates in batch: ${duplicatesInBatch.length} sets`);
+
+    // Step 2: Check which records already exist in database
+    const existingRecords = new Set();
+    if (uniqueData.length > 0) {
+      const kodeItems = uniqueData.map(item => item.kodeItem);
+      const existing = await db
+        .select({ kodeItem: referenceSheet.kodeItem })
+        .from(referenceSheet)
+        .where(inArray(referenceSheet.kodeItem, kodeItems));
+      
+      existing.forEach(record => existingRecords.add(record.kodeItem));
+      console.log(`Existing records in database: ${existingRecords.size}`);
+      console.log(`New records to insert: ${uniqueData.length - existingRecords.size}`);
+    }
+
+    // Step 3: Process in smaller batches to avoid timeout
+    const batchSize = 50;
+    for (let i = 0; i < uniqueData.length; i += batchSize) {
+      const batch = uniqueData.slice(i, i + batchSize);
+      console.log(`Processing batch ${Math.floor(i/batchSize) + 1}: records ${i + 1} to ${Math.min(i + batchSize, uniqueData.length)}`);
+      
+      try {
+        const result = await db
+          .insert(referenceSheet)
+          .values(batch)
+          .onConflictDoUpdate({
+            target: referenceSheet.kodeItem,
+            set: {
+              namaItem: sql.raw('excluded.nama_item'),
+              kelompok: sql.raw('excluded.kelompok'),
+              family: sql.raw('excluded.family'),
+              originalCode: sql.raw('excluded.original_code'),
+              color: sql.raw('excluded.color'),
+              kodeMaterial: sql.raw('excluded.kode_material'),
+              deskripsiMaterial: sql.raw('excluded.deskripsi_material'),
+              kodeMotif: sql.raw('excluded.kode_motif'),
+              deskripsiMotif: sql.raw('excluded.deskripsi_motif'),
+            },
+          })
+          .returning({ kodeItem: referenceSheet.kodeItem });
+
+        const batchSuccess = result.length;
+        success += batchSuccess;
+        
+        // Count new vs updated records
+        batch.forEach(item => {
+          if (existingRecords.has(item.kodeItem)) {
+            updatedRecords++;
+          } else {
+            newRecords++;
+          }
+        });
+        
+        console.log(`Batch processed: ${batchSuccess} records successful`);
+      } catch (error) {
+        console.error(`Batch failed, falling back to individual inserts:`, error);
+        
+        // If batch fails, fall back to individual inserts with detailed error reporting
+        for (let j = 0; j < batch.length; j++) {
+          const globalIndex = i + j;
+          try {
+            await db
+              .insert(referenceSheet)
+              .values(batch[j])
+              .onConflictDoUpdate({
+                target: referenceSheet.kodeItem,
+                set: {
+                  namaItem: sql.raw('excluded.nama_item'),
+                  kelompok: sql.raw('excluded.kelompok'),
+                  family: sql.raw('excluded.family'),
+                  originalCode: sql.raw('excluded.original_code'),
+                  color: sql.raw('excluded.color'),
+                  kodeMaterial: sql.raw('excluded.kode_material'),
+                  deskripsiMaterial: sql.raw('excluded.deskripsi_material'),
+                  kodeMotif: sql.raw('excluded.kode_motif'),
+                  deskripsiMotif: sql.raw('excluded.deskripsi_motif'),
+                },
+              });
+            success++;
+            
+            if (existingRecords.has(batch[j].kodeItem)) {
+              updatedRecords++;
+            } else {
+              newRecords++;
+            }
+          } catch (itemError) {
+            const errorMsg = itemError instanceof Error ? itemError.message : String(itemError);
+            console.error(`Row ${globalIndex + 1} failed:`, errorMsg, batch[j]);
+            errors.push({ 
+              row: globalIndex + 1, 
+              error: errorMsg,
+              data: batch[j]
+            });
+          }
+        }
+      }
+    }
+
+    const summary = {
+      totalRecords: data.length,
+      newRecords,
+      updatedRecords,
+      duplicatesRemoved: duplicatesInBatch.reduce((acc, curr) => acc + curr.duplicateRows.length, 0),
+      errorRecords: errors.length
+    };
+
+    console.log(`\n=== IMPORT SUMMARY ===`);
+    console.log(`Total records processed: ${summary.totalRecords}`);
+    console.log(`New records added: ${summary.newRecords}`);
+    console.log(`Existing records updated: ${summary.updatedRecords}`);
+    console.log(`Duplicates in batch removed: ${summary.duplicatesRemoved}`);
+    console.log(`Records with errors: ${summary.errorRecords}`);
+    console.log(`Successfully processed: ${success}`);
+    console.log(`========================\n`);
+
+    return { success, errors, duplicatesInBatch, summary };
   }
 
   // Search functionality for reference sheet
@@ -494,8 +650,7 @@ export class DatabaseStorage implements IStorage {
       .where(
         or(
           ilike(stores.kodeGudang, `%${query}%`),
-          ilike(stores.namaGudang, `%${query}%`),
-          ilike(stores.alamat, `%${query}%`)
+          ilike(stores.namaGudang, `%${query}%`)
         )
       )
       .limit(100);

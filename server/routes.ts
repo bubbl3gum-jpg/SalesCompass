@@ -896,12 +896,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
             total: valid.length, 
             status: 'Bulk inserting reference sheet data...' 
           });
-          await storage.bulkInsertReferenceSheet(valid);
-          successCount = valid.length;
+          
+          const bulkResult = await storage.bulkInsertReferenceSheet(valid);
+          successCount = bulkResult.success;
+          
+          // Add detailed errors to the response
+          bulkResult.errors.forEach(error => {
+            insertErrors.push(`Row ${error.row}: ${error.error}`);
+            failedRecords.push({
+              record: error.data,
+              error: error.error,
+              originalIndex: error.row - 1
+            });
+          });
+          
+          // Log duplicate information
+          if (bulkResult.duplicatesInBatch.length > 0) {
+            console.log('\n=== DUPLICATE ANALYSIS ===');
+            bulkResult.duplicatesInBatch.forEach(dup => {
+              console.log(`Duplicate "${dup.kodeItem}" found at rows: ${dup.row}, ${dup.duplicateRows.join(', ')}`);
+              insertErrors.push(`Duplicate in batch: "${dup.kodeItem}" at rows ${dup.row}, ${dup.duplicateRows.join(', ')}`);
+            });
+          }
+          
           importProgress.set(importId, { 
             current: valid.length, 
             total: valid.length, 
-            status: 'Completed!' 
+            status: `Completed! ${bulkResult.summary.newRecords} new, ${bulkResult.summary.updatedRecords} updated, ${bulkResult.summary.duplicatesRemoved} duplicates removed` 
           });
         } else if (tableName === 'staff' && valid.length > 0) {
           importProgress.set(importId, { 
@@ -1294,7 +1315,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { refId } = req.params;
       const validatedData = insertReferenceSheetSchema.partial().parse(req.body);
-      const referenceSheet = await storage.updateReferenceSheet(parseInt(refId), validatedData);
+      const referenceSheet = await storage.updateReferenceSheet(refId, validatedData);
       res.json(referenceSheet);
     } catch (error) {
       console.error('Reference sheet update error:', error);
@@ -1309,7 +1330,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete('/api/reference-sheets/:refId', isAuthenticated, checkRole(['System Administrator']), async (req, res) => {
     try {
       const { refId } = req.params;
-      await storage.deleteReferenceSheet(parseInt(refId));
+      await storage.deleteReferenceSheet(refId);
       res.json({ success: true });
     } catch (error) {
       console.error('Reference sheet deletion error:', error);
