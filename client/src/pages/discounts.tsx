@@ -67,9 +67,13 @@ export default function Discounts() {
   });
 
   // Filter discounts based on search
-  const filteredDiscounts = Array.isArray(discounts) ? discounts.filter((discount: any) => 
-    discount.discountName?.toLowerCase().includes(searchTerm.toLowerCase())
-  ) : [];
+  const filteredDiscounts = Array.isArray(discounts) ? discounts.filter((discount: any) => {
+    // Only show discounts that have a name
+    if (!discount.discountName) return false;
+    
+    if (!searchTerm) return true;
+    return discount.discountName.toLowerCase().includes(searchTerm.toLowerCase());
+  }) : [];
 
   // Create discount mutation
   const createDiscountMutation = useMutation({
@@ -82,7 +86,9 @@ export default function Discounts() {
         title: "Success",
         description: "Discount created successfully",
       });
+      // Force refresh the discount list
       queryClient.invalidateQueries({ queryKey: ["/api/discounts"] });
+      queryClient.refetchQueries({ queryKey: ["/api/discounts"] });
       form.reset();
       setShowDiscountModal(false);
     },

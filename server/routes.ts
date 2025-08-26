@@ -1218,6 +1218,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const validatedData = insertDiscountTypeSchema.parse(req.body);
       const discount = await storage.createDiscountType(validatedData);
+      
+      // Clear cache after creating discount
+      cache.del(CACHE_KEYS.DISCOUNTS);
+      
       res.json(discount);
     } catch (error) {
       console.error('Discount creation error:', error);
