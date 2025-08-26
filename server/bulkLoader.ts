@@ -265,6 +265,15 @@ export class BulkLoader {
         { condition: 'kode_item IS NULL OR kode_item = ""', message: 'Item code is required' },
         { condition: 'kode_gudang IS NULL OR kode_gudang = ""', message: 'Store code is required' },
         { condition: 'harga_jual IS NULL OR harga_jual <= 0', message: 'Valid selling price is required' }
+      ],
+      'transfer-items': [
+        { condition: 'to_id IS NULL', message: 'Transfer Order ID is required' },
+        { condition: 'kode_item IS NULL OR kode_item = ""', message: 'Item code is required' },
+        { condition: 'qty IS NULL OR qty <= 0', message: 'Valid quantity is required' }
+      ],
+      'stock-opname-items': [
+        { condition: 'so_id IS NULL', message: 'Stock Opname ID is required' },
+        { condition: 'kode_item IS NULL OR kode_item = ""', message: 'Item code is required' }
       ]
     };
 
@@ -297,6 +306,12 @@ export class BulkLoader {
           break;
         case 'pricelist':
           result = await this.upsertPricelist(jobId, stagingTable);
+          break;
+        case 'transfer-items':
+          result = await this.upsertTransferItems(jobId, stagingTable);
+          break;
+        case 'stock-opname-items':
+          result = await this.upsertStockOpnameItems(jobId, stagingTable);
           break;
         default:
           throw new Error(`Unsupported table type: ${tableName}`);
@@ -419,6 +434,78 @@ export class BulkLoader {
       ON DUPLICATE KEY UPDATE
         hargaBeli = VALUES(hargaBeli),
         hargaJual = VALUES(hargaJual)
+    `;
+
+    const [result] = await db.execute(upsertQuery, [jobId]);
+    const affectedRows = (result as any).affectedRows || 0;
+    const changedRows = (result as any).changedRows || 0;
+
+    return {
+      inserted: affectedRows - changedRows,
+      updated: changedRows,
+      errors: 0
+    };
+  }
+
+  private async upsertTransferItems(jobId: string, stagingTable: string): Promise<{
+    inserted: number;
+    updated: number;
+    errors: number;
+  }> {
+    // First, update transfer order with TO number if available
+    const toUpdateQuery = `
+      UPDATE transfer_order 
+      SET toNumber = (
+        SELECT DISTINCT to_number 
+        FROM ${stagingTable} 
+        WHERE job_id = ? AND to_id = transfer_order.toId AND to_number IS NOT NULL 
+        LIMIT 1
+      )
+      WHERE toId IN (
+        SELECT DISTINCT to_id 
+        FROM ${stagingTable} 
+        WHERE job_id = ? AND to_id IS NOT NULL
+      )
+    `;
+    
+    await db.execute(toUpdateQuery, [jobId, jobId]);
+
+    // Then insert/update transfer items
+    const upsertQuery = `
+      INSERT INTO to_itemlist (toId, sn, kodeItem, namaItem, qty)
+      SELECT to_id, sn, kode_item, nama_item, COALESCE(qty, 1)
+      FROM ${stagingTable}
+      WHERE job_id = ? AND to_id IS NOT NULL AND kode_item IS NOT NULL
+      ON DUPLICATE KEY UPDATE
+        namaItem = VALUES(namaItem),
+        qty = VALUES(qty)
+    `;
+
+    const [result] = await db.execute(upsertQuery, [jobId]);
+    const affectedRows = (result as any).affectedRows || 0;
+    const changedRows = (result as any).changedRows || 0;
+
+    return {
+      inserted: affectedRows - changedRows,
+      updated: changedRows,
+      errors: 0
+    };
+  }
+
+  private async upsertStockOpnameItems(jobId: string, stagingTable: string): Promise<{
+    inserted: number;
+    updated: number;
+    errors: number;
+  }> {
+    const upsertQuery = `
+      INSERT INTO so_itemlist (soId, sn, kodeItem, namaItem, qtySystem, qtyActual)
+      SELECT so_id, sn, kode_item, nama_item, COALESCE(qty_system, 0), COALESCE(qty_actual, 0)
+      FROM ${stagingTable}
+      WHERE job_id = ? AND so_id IS NOT NULL AND kode_item IS NOT NULL
+      ON DUPLICATE KEY UPDATE
+        namaItem = VALUES(namaItem),
+        qtySystem = VALUES(qtySystem),
+        qtyActual = VALUES(qtyActual)
     `;
 
     const [result] = await db.execute(upsertQuery, [jobId]);

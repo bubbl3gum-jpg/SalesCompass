@@ -170,6 +170,32 @@ export class StreamingCSVParser {
         'cost price': 'hargaBeli',
         'harga jual': 'hargaJual',
         'selling price': 'hargaJual'
+      },
+      'transfer-items': {
+        's/n': 'sn',
+        'serial': 'sn',
+        'serial number': 'sn',
+        'kode item': 'kodeItem',
+        'item code': 'kodeItem',
+        'nama item': 'namaItem',
+        'item name': 'namaItem',
+        'qty': 'qty',
+        'quantity': 'qty',
+        'qty transfer': 'qty',
+        'satuan': 'unit',
+        'unit': 'unit'
+      },
+      'stock-opname-items': {
+        's/n': 'sn',
+        'serial': 'sn',
+        'kode item': 'kodeItem',
+        'item code': 'kodeItem',
+        'nama item': 'namaItem',
+        'item name': 'namaItem',
+        'qty system': 'qtySystem',
+        'qty actual': 'qtyActual',
+        'system qty': 'qtySystem',
+        'actual qty': 'qtyActual'
       }
     };
 
@@ -202,7 +228,29 @@ export class StreamingExcelParser {
       let headerRow: string[] = [];
       let headerMappings: Record<string, string> = {};
       let headerRowIndex = -1;
+      let toNumber: string | null = null;
       
+      // Extract TO number from early rows (typically row 6 for transfer files)
+      if (tableName === 'transfer-items') {
+        for (let rowNum = range.s.r; rowNum <= Math.min(range.s.r + 10, range.e.r); rowNum++) {
+          const row: any[] = [];
+          for (let colNum = range.s.c; colNum <= range.e.c; colNum++) {
+            const cellAddress = XLSX.utils.encode_cell({ r: rowNum, c: colNum });
+            const cell = worksheet[cellAddress];
+            row.push(cell ? String(cell.v || '').trim() : '');
+          }
+          
+          const rowText = row.join(' ');
+          // Look for TO number pattern like "Untuk Nomor TO|Seq: 2508-091  -01"
+          const toMatch = rowText.match(/(?:Untuk\s+Nomor\s+TO|TO|Seq).*?([A-Z0-9\-\s]{8,20})/i);
+          if (toMatch && toMatch[1]) {
+            toNumber = toMatch[1].trim();
+            console.log(`Extracted TO Number: ${toNumber} from row ${rowNum + 1}`);
+            break;
+          }
+        }
+      }
+
       // Find header row
       for (let rowNum = range.s.r; rowNum <= Math.min(range.s.r + 10, range.e.r); rowNum++) {
         const row: any[] = [];
@@ -244,7 +292,7 @@ export class StreamingExcelParser {
           if (row.every(cell => !cell)) continue;
 
           rowNumber++;
-          const parsedRow = this.processRow(row, headerRow, headerMappings, rowNumber);
+          const parsedRow = this.processRow(row, headerRow, headerMappings, rowNumber, toNumber);
           yield parsedRow;
         }
       }
@@ -258,7 +306,9 @@ export class StreamingExcelParser {
       'reference-sheet': ['kode item', 'nama item', 'item code'],
       'staff': ['nik', 'email', 'nama'],
       'stores': ['kode gudang', 'nama gudang', 'store code'],
-      'pricelist': ['kode item', 'harga', 'price']
+      'pricelist': ['kode item', 'harga', 'price'],
+      'transfer-items': ['s/n', 'kode item', 'nama item', 'qty transfer', 'serial', 'item code'],
+      'stock-opname-items': ['s/n', 'kode item', 'nama item', 'qty system', 'qty actual']
     };
 
     const tableIdentifiers = identifiers[tableName] || [];
@@ -281,7 +331,7 @@ export class StreamingExcelParser {
     return headerMappings;
   }
 
-  private processRow(row: any[], headers: string[], mappings: Record<string, string>, rowNumber: number): ParsedRow {
+  private processRow(row: any[], headers: string[], mappings: Record<string, string>, rowNumber: number, toNumber?: string | null): ParsedRow {
     const errors: string[] = [];
     const data: Record<string, any> = {};
 
@@ -295,6 +345,11 @@ export class StreamingExcelParser {
     const isValid = Object.keys(data).length > 0;
     if (!isValid) {
       errors.push(`Row ${rowNumber}: No valid data found`);
+    }
+
+    // Add TO number to transfer items
+    if (toNumber && data) {
+      data.toNumber = toNumber;
     }
 
     return {

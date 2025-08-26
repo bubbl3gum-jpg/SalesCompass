@@ -84,6 +84,40 @@ export const createStagingTables = async () => {
     
     await db.execute(`CREATE INDEX IF NOT EXISTS idx_staging_pricelist_job_id ON staging_pricelist (job_id)`);
 
+    // Staging table for transfer items
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS staging_transfer_items (
+        job_id VARCHAR(255) NOT NULL,
+        row_number INT NOT NULL,
+        to_id INT,
+        sn VARCHAR(100),
+        kode_item VARCHAR(50),
+        nama_item VARCHAR(255),
+        qty INT DEFAULT 1,
+        to_number VARCHAR(100),
+        import_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    
+    await db.execute(`CREATE INDEX IF NOT EXISTS idx_staging_transfer_items_job_id ON staging_transfer_items (job_id)`);
+
+    // Staging table for stock opname items
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS staging_stock_opname_items (
+        job_id VARCHAR(255) NOT NULL,
+        row_number INT NOT NULL,
+        so_id INT,
+        sn VARCHAR(100),
+        kode_item VARCHAR(50),
+        nama_item VARCHAR(255),
+        qty_system INT DEFAULT 0,
+        qty_actual INT DEFAULT 0,
+        import_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    
+    await db.execute(`CREATE INDEX IF NOT EXISTS idx_staging_stock_opname_items_job_id ON staging_stock_opname_items (job_id)`);
+
     console.log('Staging tables created successfully');
   } catch (error) {
     console.error('Error creating staging tables:', error);
@@ -98,7 +132,9 @@ export const cleanupStagingData = async (jobId: string) => {
       db.execute('DELETE FROM staging_reference_sheet WHERE job_id = ?', [jobId]),
       db.execute('DELETE FROM staging_staff WHERE job_id = ?', [jobId]),
       db.execute('DELETE FROM staging_stores WHERE job_id = ?', [jobId]),
-      db.execute('DELETE FROM staging_pricelist WHERE job_id = ?', [jobId])
+      db.execute('DELETE FROM staging_pricelist WHERE job_id = ?', [jobId]),
+      db.execute('DELETE FROM staging_transfer_items WHERE job_id = ?', [jobId]),
+      db.execute('DELETE FROM staging_stock_opname_items WHERE job_id = ?', [jobId])
     ]);
   } catch (error) {
     console.error('Error cleaning up staging data:', error);
@@ -111,7 +147,9 @@ export const getStagingTableName = (tableName: string): string => {
     'reference-sheet': 'staging_reference_sheet',
     'staff': 'staging_staff',
     'stores': 'staging_stores',
-    'pricelist': 'staging_pricelist'
+    'pricelist': 'staging_pricelist',
+    'transfer-items': 'staging_transfer_items',
+    'stock-opname-items': 'staging_stock_opname_items'
   };
   
   return mappings[tableName] || `staging_${tableName}`;
@@ -135,6 +173,12 @@ export const getStagingColumns = (tableName: string): string[] => {
     ],
     'pricelist': [
       'job_id', 'row_number', 'kode_item', 'kode_gudang', 'harga_beli', 'harga_jual'
+    ],
+    'transfer-items': [
+      'job_id', 'row_number', 'to_id', 'sn', 'kode_item', 'nama_item', 'qty', 'to_number'
+    ],
+    'stock-opname-items': [
+      'job_id', 'row_number', 'so_id', 'sn', 'kode_item', 'nama_item', 'qty_system', 'qty_actual'
     ]
   };
   
