@@ -410,15 +410,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ message: "Invalid store credentials" });
       }
 
-      // Store the authenticated store in session
+      // Store the authenticated store and login type in session
       (req.session as any).authenticatedStore = kodeGudang;
+      (req.session as any).storeLoginType = kodeGudang === 'ALL_STORE' ? 'all_store' : 'single_store';
+      
       res.json({ 
         message: "Store authentication successful", 
         store: {
           kodeGudang: store.kodeGudang,
           namaGudang: store.namaGudang,
           jenisGudang: store.jenisGudang
-        }
+        },
+        loginType: kodeGudang === 'ALL_STORE' ? 'all_store' : 'single_store'
       });
     } catch (error) {
       console.error("Error authenticating store:", error);
@@ -430,15 +433,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/store/current', isAuthenticated, async (req, res) => {
     try {
       const authenticatedStore = (req.session as any).authenticatedStore;
+      const storeLoginType = (req.session as any).storeLoginType || 'single_store';
+      
       if (!authenticatedStore) {
-        return res.json({ store: null });
+        return res.json({ store: null, loginType: null, canSwitchStores: false });
       }
 
       const store = await storage.getStoreByKode(authenticatedStore);
       if (!store) {
         // Clear invalid store from session
         delete (req.session as any).authenticatedStore;
-        return res.json({ store: null });
+        delete (req.session as any).storeLoginType;
+        return res.json({ store: null, loginType: null, canSwitchStores: false });
       }
 
       res.json({ 
@@ -446,7 +452,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           kodeGudang: store.kodeGudang,
           namaGudang: store.namaGudang,
           jenisGudang: store.jenisGudang
-        }
+        },
+        loginType: storeLoginType,
+        canSwitchStores: storeLoginType === 'all_store'
       });
     } catch (error) {
       console.error("Error fetching current store:", error);
@@ -454,10 +462,48 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Store switch route (for All Store users only)
+  app.post('/api/store/switch', isAuthenticated, async (req, res) => {
+    try {
+      const { kodeGudang } = req.body;
+      const storeLoginType = (req.session as any).storeLoginType;
+      
+      // Only allow store switching for all_store users
+      if (storeLoginType !== 'all_store') {
+        return res.status(403).json({ message: "Store switching not allowed for single store users" });
+      }
+      
+      if (!kodeGudang) {
+        return res.status(400).json({ message: "Store code is required" });
+      }
+
+      const store = await storage.getStoreByKode(kodeGudang);
+      if (!store) {
+        return res.status(404).json({ message: "Store not found" });
+      }
+
+      // Update the current store in session
+      (req.session as any).authenticatedStore = kodeGudang;
+      
+      res.json({ 
+        message: "Store switched successfully", 
+        store: {
+          kodeGudang: store.kodeGudang,
+          namaGudang: store.namaGudang,
+          jenisGudang: store.jenisGudang
+        }
+      });
+    } catch (error) {
+      console.error("Error switching store:", error);
+      res.status(500).json({ message: "Failed to switch store" });
+    }
+  });
+
   // Store logout route
   app.post('/api/store/logout', isAuthenticated, async (req, res) => {
     try {
       delete (req.session as any).authenticatedStore;
+      delete (req.session as any).storeLoginType;
       res.json({ message: "Store logout successful" });
     } catch (error) {
       console.error("Error logging out from store:", error);

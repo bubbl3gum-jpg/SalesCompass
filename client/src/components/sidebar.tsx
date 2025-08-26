@@ -165,6 +165,8 @@ export function Sidebar() {
   };
 
   const currentStore = currentStoreData?.store;
+  const canSwitchStores = currentStoreData?.canSwitchStores ?? false;
+  const storeLoginType = currentStoreData?.loginType;
 
   return (
     <div className={cn(
@@ -342,10 +344,14 @@ export function Sidebar() {
                     <DropdownMenuSeparator />
                     <DropdownMenuItem 
                       onClick={() => setStoreAuthModalOpen(true)}
+                      disabled={currentStore && !canSwitchStores}
                       data-testid="menu-change-store"
                     >
                       <Store className="mr-2 h-4 w-4" />
-                      {currentStore ? 'Change Store' : 'Login to Store'}
+                      {currentStore ? 
+                        (canSwitchStores ? 'Change Store' : 'Store Access Restricted') 
+                        : 'Login to Store'
+                      }
                     </DropdownMenuItem>
                     {currentStore && (
                       <DropdownMenuItem 
@@ -394,10 +400,14 @@ export function Sidebar() {
                     <DropdownMenuSeparator />
                     <DropdownMenuItem 
                       onClick={() => setStoreAuthModalOpen(true)}
+                      disabled={currentStore && !canSwitchStores}
                       data-testid="menu-change-store"
                     >
                       <Store className="mr-2 h-4 w-4" />
-                      {currentStore ? 'Change Store' : 'Login to Store'}
+                      {currentStore ? 
+                        (canSwitchStores ? 'Change Store' : 'Store Access Restricted') 
+                        : 'Login to Store'
+                      }
                     </DropdownMenuItem>
                     {currentStore && (
                       <DropdownMenuItem 
@@ -442,10 +452,12 @@ export function Sidebar() {
           open={storeAuthModalOpen}
           onOpenChange={setStoreAuthModalOpen}
           stores={stores}
+          canSwitchStores={canSwitchStores}
+          currentStore={currentStore}
           onSuccess={(store) => {
             // Optional: You can add additional logic here when store auth succeeds
             toast({
-              title: "Store Access Granted",
+              title: canSwitchStores ? "Store Switched" : "Store Access Granted",
               description: `You now have access to ${store.namaGudang}`,
             });
           }}
