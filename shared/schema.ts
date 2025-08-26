@@ -189,8 +189,7 @@ export const positions = pgTable("positions", {
 });
 
 export const staff = pgTable("staff", {
-  employeeId: integer("employee_id").primaryKey().generatedByDefaultAsIdentity(),
-  nik: varchar("nik", { length: 50 }).unique().notNull(),
+  nik: varchar("nik", { length: 50 }).primaryKey().notNull(),
   email: varchar("email", { length: 255 }).unique().notNull(),
   password: varchar("password", { length: 255 }).notNull(),
   namaLengkap: varchar("nama_lengkap", { length: 255 }).notNull(),
@@ -311,5 +310,5 @@ export const insertSoItemListSchema = createInsertSchema(soItemList).omit({ soIt
 export const insertEdcSchema = createInsertSchema(edc).omit({ edcId: true });
 export const insertStoreEdcSchema = createInsertSchema(storeEdc).omit({ storeEdcId: true });
 export const insertEdcSettlementSchema = createInsertSchema(edcSettlement).omit({ edcSettlementId: true });
-export const insertStaffSchema = createInsertSchema(staff).omit({ employeeId: true });
+export const insertStaffSchema = createInsertSchema(staff);
 export const insertPositionSchema = createInsertSchema(positions).omit({ positionId: true });

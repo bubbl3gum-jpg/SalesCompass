@@ -399,16 +399,21 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
-  async updateStaff(employeeId: number, data: Partial<InsertStaff>): Promise<Staff> {
+  async updateStaff(nik: string, data: Partial<InsertStaff>): Promise<Staff> {
     const [result] = await db.update(staff)
       .set(data)
-      .where(eq(staff.employeeId, employeeId))
+      .where(eq(staff.nik, nik))
       .returning();
     return result;
   }
 
-  async deleteStaff(employeeId: number): Promise<void> {
-    await db.delete(staff).where(eq(staff.employeeId, employeeId));
+  async deleteStaff(nik: string): Promise<void> {
+    await db.delete(staff).where(eq(staff.nik, nik));
+  }
+
+  async getStaffByNik(nik: string): Promise<Staff | undefined> {
+    const [result] = await db.select().from(staff).where(eq(staff.nik, nik));
+    return result;
   }
 
   async getStaffByEmail(email: string): Promise<Staff | undefined> {

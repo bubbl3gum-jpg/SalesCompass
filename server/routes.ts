@@ -146,8 +146,6 @@ function parseCSV(buffer: Buffer, tableName?: string): Promise<any[]> {
     
     // Staff-specific parsing with proper field mapping
     if (tableName === 'staff') {
-      console.log(`🔍 CSV Debug - Total lines: ${lines.length}`);
-      console.log(`🔍 First 3 lines:`, lines.slice(0, 3));
       
       // Look for staff data headers
       let headerRowIndex = -1;
@@ -155,7 +153,6 @@ function parseCSV(buffer: Buffer, tableName?: string): Promise<any[]> {
       
       for (let i = 0; i < Math.min(5, lines.length); i++) {
         const line = lines[i].trim();
-        console.log(`🔍 Line ${i}: ${line.substring(0, 100)}...`);
         
         // Look for common staff headers (more flexible)
         if (line.toLowerCase().includes('nik') || 
@@ -166,7 +163,6 @@ function parseCSV(buffer: Buffer, tableName?: string): Promise<any[]> {
             line.toLowerCase().includes('address')) {
           headerRowIndex = i;
           headers = line.split(',').map(h => h.trim().replace(/"/g, ''));
-          console.log(`✅ Headers found at row ${i}:`, headers);
           break;
         }
       }
@@ -175,10 +171,8 @@ function parseCSV(buffer: Buffer, tableName?: string): Promise<any[]> {
         // If no header row found, assume first row is headers
         headerRowIndex = 0;
         headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
-        console.log(`⚠️ No header row detected, using first row:`, headers);
       }
       
-      console.log(`📍 Final headers (${headers.length}):`, headers);
       
       // Define mapping from CSV headers to database fields (case-insensitive and flexible)
       const getFieldMapping = (header: string): string | null => {
@@ -210,14 +204,6 @@ function parseCSV(buffer: Buffer, tableName?: string): Promise<any[]> {
         return mappings[cleanHeader] || null;
       };
       
-      // Show field mappings for debugging
-      console.log(`🗂️ Testing field mappings:`);
-      headers.forEach((header, index) => {
-        const mappedField = getFieldMapping(header);
-        console.log(`  "${header}" → ${mappedField || 'NOT MAPPED'}`);
-      });
-      
-      console.log(`📊 Processing ${lines.length - headerRowIndex - 1} data rows...`);
       
       // Process data rows
       for (let i = headerRowIndex + 1; i < lines.length; i++) {
@@ -227,19 +213,11 @@ function parseCSV(buffer: Buffer, tableName?: string): Promise<any[]> {
           if (values[0]) { // Only process rows with data in first column
             const rowData: any = {};
             
-            // Debug log for first row
-            if (i === headerRowIndex + 1) {
-              console.log(`🔍 Sample row values (${values.length}):`, values.slice(0, 8));
-            }
             
             headers.forEach((header, index) => {
               const mappedField = getFieldMapping(header);
               const value = values[index];
               
-              // Debug for first row
-              if (i === headerRowIndex + 1 && index < 8) {
-                console.log(`  ${header} [${index}] → ${mappedField} = "${value}"`);
-              }
               
               if (mappedField && value && value.trim() !== '') {
                 // Special handling for dates
@@ -257,7 +235,7 @@ function parseCSV(buffer: Buffer, tableName?: string): Promise<any[]> {
                   if (!isNaN(parsedDate.getTime())) {
                     rowData[mappedField] = parsedDate.toISOString().split('T')[0]; // Format as YYYY-MM-DD
                   } else {
-                    console.warn(`⚠️ Invalid date format for ${mappedField}: ${dateValue}`);
+                    // Invalid date format, skip this field
                   }
                 } else {
                   rowData[mappedField] = value.trim();
@@ -265,11 +243,6 @@ function parseCSV(buffer: Buffer, tableName?: string): Promise<any[]> {
               }
             });
             
-            // Debug log for first processed row
-            if (i === headerRowIndex + 1) {
-              console.log(`✅ Sample mapped data:`, rowData);
-              console.log(`📊 Mapped ${Object.keys(rowData).length} fields out of ${headers.length} headers`);
-            }
             
             if (Object.keys(rowData).length > 0) {
               results.push(rowData);
@@ -309,7 +282,6 @@ function parseCSV(buffer: Buffer, tableName?: string): Promise<any[]> {
       return;
     }
     
-    console.log(`📍 Found data headers at row ${headerRowIndex + 1}:`, headers);
     
     // Process data rows starting after the header
     for (let i = headerRowIndex + 1; i < lines.length; i++) {
@@ -853,7 +825,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Log import analysis
-      console.log(`Import Analysis: ${tableName} - ${parsedData.length} rows detected`);
 
       // Validate data based on table type
       let schema;
