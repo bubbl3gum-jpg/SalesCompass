@@ -14,6 +14,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { Check, ChevronsUpDown } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Dialog,
@@ -44,6 +48,7 @@ export default function Transfers() {
   const [showTransferModal, setShowTransferModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
   const [selectedTransferId, setSelectedTransferId] = useState<number | null>(null);
+  const [toStoreOpen, setToStoreOpen] = useState(false);
 
   const form = useForm<TransferFormData>({
     resolver: zodResolver(transferFormSchema),
@@ -302,20 +307,61 @@ export default function Transfers() {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel className="text-gray-700 dark:text-gray-300">To Store</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
-                      <FormControl>
-                        <SelectTrigger data-testid="select-to-store">
-                          <SelectValue placeholder="Select destination store" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {stores?.map((store: any) => (
-                          <SelectItem key={store.kodeGudang} value={store.kodeGudang}>
-                            {store.namaGudang}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <Popover open={toStoreOpen} onOpenChange={setToStoreOpen}>
+                      <PopoverTrigger asChild>
+                        <FormControl>
+                          <Button
+                            variant="outline"
+                            role="combobox"
+                            aria-expanded={toStoreOpen}
+                            className="w-full justify-between text-left font-normal bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700"
+                            data-testid="select-to-store"
+                          >
+                            {field.value
+                              ? stores?.find((store: any) => store.kodeGudang === field.value)?.namaGudang
+                              : "Select destination store"}
+                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                          </Button>
+                        </FormControl>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-full p-0" align="start">
+                        <Command>
+                          <CommandInput 
+                            placeholder="Search stores..." 
+                            className="h-9 border-0 focus:ring-0"
+                          />
+                          <CommandList>
+                            <CommandEmpty>No store found.</CommandEmpty>
+                            <CommandGroup>
+                              {stores?.map((store: any) => (
+                                <CommandItem
+                                  key={store.kodeGudang}
+                                  value={`${store.kodeGudang} ${store.namaGudang}`}
+                                  onSelect={() => {
+                                    field.onChange(store.kodeGudang);
+                                    setToStoreOpen(false);
+                                  }}
+                                  className="cursor-pointer"
+                                >
+                                  <Check
+                                    className={cn(
+                                      "mr-2 h-4 w-4",
+                                      field.value === store.kodeGudang ? "opacity-100" : "opacity-0"
+                                    )}
+                                  />
+                                  <div className="flex flex-col">
+                                    <span className="font-medium">{store.namaGudang}</span>
+                                    <span className="text-sm text-gray-500 dark:text-gray-400">
+                                      {store.kodeGudang}
+                                    </span>
+                                  </div>
+                                </CommandItem>
+                              ))}
+                            </CommandGroup>
+                          </CommandList>
+                        </Command>
+                      </PopoverContent>
+                    </Popover>
                     <FormMessage />
                   </FormItem>
                 )}
