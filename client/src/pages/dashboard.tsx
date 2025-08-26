@@ -46,29 +46,29 @@ export default function Dashboard() {
     retry: false,
   });
 
-  // Get stock data for the main home dashboard
-  const { data: stockData, isLoading: stockLoading, error: stockError } = useQuery({
-    queryKey: ["/api/stock/onhand", selectedStore],
+  // Get dashboard metrics (original functionality)
+  const { data: metrics, isLoading: metricsLoading, error: metricsError } = useQuery({
+    queryKey: ["/api/dashboard/metrics", selectedStore],
     enabled: !!selectedStore,
     retry: false,
   });
 
-  // Get recent sales
+  // Get recent sales (original functionality)
   const { data: recentSales, isLoading: salesLoading } = useQuery({
     queryKey: ["/api/sales", selectedStore],
     enabled: !!selectedStore,
     retry: false,
   });
 
-  // Get dashboard metrics for additional insights
-  const { data: metrics, isLoading: metricsLoading } = useQuery({
-    queryKey: ["/api/dashboard/metrics", selectedStore],
+  // Get stock data for stock dashboard functionality
+  const { data: stockData, isLoading: stockLoading } = useQuery({
+    queryKey: ["/api/stock/onhand", selectedStore],
     enabled: !!selectedStore,
     retry: false,
   });
 
   useEffect(() => {
-    if (stockError && isUnauthorizedError(stockError as Error)) {
+    if (metricsError && isUnauthorizedError(metricsError as Error)) {
       toast({
         title: "Unauthorized",
         description: "You are logged out. Logging in again...",
@@ -79,7 +79,7 @@ export default function Dashboard() {
       }, 500);
       return;
     }
-  }, [stockError, toast]);
+  }, [metricsError, toast]);
 
   // Set default store when stores load
   useEffect(() => {
@@ -88,9 +88,9 @@ export default function Dashboard() {
     }
   }, [stores, selectedStore]);
 
-  const isLoadingData = stockLoading || salesLoading || metricsLoading;
+  const isLoadingData = metricsLoading || salesLoading || stockLoading;
 
-  // Filter stock data based on search
+  // Stock dashboard helper functions
   const filteredStock = stockData?.filter((item: any) => 
     item.kodeItem.toLowerCase().includes(searchTerm.toLowerCase()) ||
     (item.serialNumber && item.serialNumber.toLowerCase().includes(searchTerm.toLowerCase()))
@@ -196,88 +196,19 @@ export default function Dashboard() {
 
         {/* Content */}
         <main className="p-6">
-          {/* Stock Overview Cards */}
-          {selectedStore && stockData && Array.isArray(stockData) && (
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
-              <Card className="bg-white/20 dark:bg-black/20 backdrop-blur-xl border border-white/20 dark:border-gray-800/50">
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Items</p>
-                      <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1" data-testid="text-total-items">
-                        {stockData.length.toLocaleString()}
-                      </p>
-                    </div>
-                    <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-blue-600 rounded-xl flex items-center justify-center">
-                      <i className="fas fa-boxes text-white"></i>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="bg-white/20 dark:bg-black/20 backdrop-blur-xl border border-white/20 dark:border-gray-800/50">
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-gray-600 dark:text-gray-400">In Stock</p>
-                      <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1" data-testid="text-in-stock">
-                        {stockData.filter((item: any) => item.qty >= 10).length.toLocaleString()}
-                      </p>
-                    </div>
-                    <div className="w-12 h-12 bg-gradient-to-r from-emerald-500 to-green-600 rounded-xl flex items-center justify-center">
-                      <i className="fas fa-check-circle text-white"></i>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="bg-white/20 dark:bg-black/20 backdrop-blur-xl border border-white/20 dark:border-gray-800/50">
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Low Stock</p>
-                      <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1" data-testid="text-low-stock">
-                        {stockData.filter((item: any) => item.qty > 0 && item.qty < 10).length.toLocaleString()}
-                      </p>
-                    </div>
-                    <div className="w-12 h-12 bg-gradient-to-r from-orange-500 to-orange-600 rounded-xl flex items-center justify-center">
-                      <i className="fas fa-exclamation-triangle text-white"></i>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="bg-white/20 dark:bg-black/20 backdrop-blur-xl border border-white/20 dark:border-gray-800/50">
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Out of Stock</p>
-                      <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1" data-testid="text-out-of-stock">
-                        {stockData.filter((item: any) => item.qty === 0).length.toLocaleString()}
-                      </p>
-                    </div>
-                    <div className="w-12 h-12 bg-gradient-to-r from-red-500 to-red-600 rounded-xl flex items-center justify-center">
-                      <i className="fas fa-times-circle text-white"></i>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          )}
-
-          {/* Sales Metrics */}
+          {/* Original Dashboard Metrics */}
           {selectedStore && metrics && (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
               <Card className="bg-white/20 dark:bg-black/20 backdrop-blur-xl border border-white/20 dark:border-gray-800/50">
                 <CardContent className="p-6">
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Today's Sales</p>
                       <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1" data-testid="text-today-sales">
-                        Rp {metrics.todaySales?.toLocaleString() || '0'}
+                        Rp {(metrics.todaySales || 0).toLocaleString()}
                       </p>
                     </div>
-                    <div className="w-12 h-12 bg-gradient-to-r from-purple-500 to-purple-600 rounded-xl flex items-center justify-center">
+                    <div className="w-12 h-12 bg-gradient-to-r from-green-500 to-green-600 rounded-xl flex items-center justify-center">
                       <i className="fas fa-chart-line text-white"></i>
                     </div>
                   </div>
@@ -289,11 +220,11 @@ export default function Dashboard() {
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Transactions</p>
-                      <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1" data-testid="text-transactions">
-                        {metrics.salesCount?.toLocaleString() || '0'}
+                      <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1" data-testid="text-sales-count">
+                        {(metrics.salesCount || 0).toLocaleString()}
                       </p>
                     </div>
-                    <div className="w-12 h-12 bg-gradient-to-r from-indigo-500 to-indigo-600 rounded-xl flex items-center justify-center">
+                    <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-blue-600 rounded-xl flex items-center justify-center">
                       <i className="fas fa-receipt text-white"></i>
                     </div>
                   </div>
@@ -306,11 +237,27 @@ export default function Dashboard() {
                     <div>
                       <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Pending Settlements</p>
                       <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1" data-testid="text-pending-settlements">
-                        {metrics.pendingSettlements?.toLocaleString() || '0'}
+                        {(metrics.pendingSettlements || 0).toLocaleString()}
                       </p>
                     </div>
-                    <div className="w-12 h-12 bg-gradient-to-r from-amber-500 to-amber-600 rounded-xl flex items-center justify-center">
-                      <i className="fas fa-clock text-white"></i>
+                    <div className="w-12 h-12 bg-gradient-to-r from-orange-500 to-orange-600 rounded-xl flex items-center justify-center">
+                      <i className="fas fa-file-invoice-dollar text-white"></i>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-white/20 dark:bg-black/20 backdrop-blur-xl border border-white/20 dark:border-gray-800/50">
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Low Stock Items</p>
+                      <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1" data-testid="text-low-stock-items">
+                        {(metrics.lowStockItems || 0).toLocaleString()}
+                      </p>
+                    </div>
+                    <div className="w-12 h-12 bg-gradient-to-r from-red-500 to-red-600 rounded-xl flex items-center justify-center">
+                      <i className="fas fa-exclamation-triangle text-white"></i>
                     </div>
                   </div>
                 </CardContent>
@@ -318,7 +265,110 @@ export default function Dashboard() {
             </div>
           )}
 
-          {/* Quick Stock Search */}
+          {/* Stock Dashboard Section */}
+          {selectedStore && stockData && Array.isArray(stockData) && (
+            <div className="mb-6">
+              <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">Stock Overview</h3>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+                <Card className="bg-white/20 dark:bg-black/20 backdrop-blur-xl border border-white/20 dark:border-gray-800/50">
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Items</p>
+                        <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1" data-testid="text-total-items">
+                          {stockData.length.toLocaleString()}
+                        </p>
+                      </div>
+                      <div className="w-12 h-12 bg-gradient-to-r from-purple-500 to-purple-600 rounded-xl flex items-center justify-center">
+                        <i className="fas fa-boxes text-white"></i>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="bg-white/20 dark:bg-black/20 backdrop-blur-xl border border-white/20 dark:border-gray-800/50">
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-gray-600 dark:text-gray-400">In Stock</p>
+                        <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1" data-testid="text-in-stock">
+                          {stockData.filter((item: any) => item.qty >= 10).length.toLocaleString()}
+                        </p>
+                      </div>
+                      <div className="w-12 h-12 bg-gradient-to-r from-emerald-500 to-green-600 rounded-xl flex items-center justify-center">
+                        <i className="fas fa-check-circle text-white"></i>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="bg-white/20 dark:bg-black/20 backdrop-blur-xl border border-white/20 dark:border-gray-800/50">
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Low Stock</p>
+                        <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1" data-testid="text-low-stock">
+                          {stockData.filter((item: any) => item.qty > 0 && item.qty < 10).length.toLocaleString()}
+                        </p>
+                      </div>
+                      <div className="w-12 h-12 bg-gradient-to-r from-amber-500 to-amber-600 rounded-xl flex items-center justify-center">
+                        <i className="fas fa-exclamation-triangle text-white"></i>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="bg-white/20 dark:bg-black/20 backdrop-blur-xl border border-white/20 dark:border-gray-800/50">
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Out of Stock</p>
+                        <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1" data-testid="text-out-of-stock">
+                          {stockData.filter((item: any) => item.qty === 0).length.toLocaleString()}
+                        </p>
+                      </div>
+                      <div className="w-12 h-12 bg-gradient-to-r from-red-500 to-red-600 rounded-xl flex items-center justify-center">
+                        <i className="fas fa-times-circle text-white"></i>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
+          )}
+
+          {/* Recent Sales Section (Original functionality) */}
+          {selectedStore && recentSales && Array.isArray(recentSales) && recentSales.length > 0 && (
+            <Card className="bg-white/20 dark:bg-black/20 backdrop-blur-xl border border-white/20 dark:border-gray-800/50 mb-6">
+              <CardHeader>
+                <CardTitle>Recent Sales</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3 max-h-64 overflow-y-auto">
+                  {recentSales.slice(0, 10).map((sale: any, index: number) => (
+                    <div key={index} className="flex items-center justify-between p-3 bg-white/10 dark:bg-black/10 rounded-lg">
+                      <div className="flex-1">
+                        <p className="font-medium text-gray-900 dark:text-white">{sale.kodeItem}</p>
+                        <p className="text-sm text-gray-600 dark:text-gray-400">
+                          {new Date(sale.tanggalJual).toLocaleString('id-ID')}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-bold text-gray-900 dark:text-white">
+                          Rp {(sale.totalHarga || 0).toLocaleString()}
+                        </p>
+                        <p className="text-sm text-gray-600 dark:text-gray-400">
+                          Qty: {sale.qty || 0}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Stock Search Section */}
           {selectedStore && (
             <Card className="bg-white/20 dark:bg-black/20 backdrop-blur-xl border border-white/20 dark:border-gray-800/50 mb-6">
               <CardHeader>
@@ -345,7 +395,7 @@ export default function Dashboard() {
             </Card>
           )}
 
-          {/* Stock Results */}
+          {/* Stock Search Results */}
           {selectedStore && searchTerm && filteredStock.length > 0 && (
             <Card className="bg-white/20 dark:bg-black/20 backdrop-blur-xl border border-white/20 dark:border-gray-800/50 mb-6">
               <CardHeader>
@@ -396,7 +446,7 @@ export default function Dashboard() {
                 <i className="fas fa-store text-gray-500 text-2xl"></i>
               </div>
               <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Select a Store</h3>
-              <p className="text-gray-600 dark:text-gray-400">Choose a store from the dropdown to view inventory and sales data.</p>
+              <p className="text-gray-600 dark:text-gray-400">Choose a store from the dropdown to view sales and inventory data.</p>
             </div>
           )}
         </main>
