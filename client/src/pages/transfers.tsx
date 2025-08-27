@@ -8,7 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import { isUnauthorizedError } from "@/lib/authUtils";
 
 import { Sidebar } from "@/components/sidebar";
-import { ImportModal } from "@/components/import-modal";
+import { TransferImportModal } from "@/components/TransferImportModal";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -462,24 +462,18 @@ export default function Transfers() {
         </DialogContent>
       </Dialog>
 
-      {/* Import Modal */}
-      <ImportModal
+      {/* Transfer Import Modal - Production Ready */}
+      <TransferImportModal
         isOpen={showImportModal}
         onClose={() => {
           setShowImportModal(false);
           setSelectedTransferId(null);
         }}
-        title={`Import Items for Transfer Order #${selectedTransferId || ''}`}
-        tableName="transfer-items"
-        queryKey="/api/transfers"
-        endpoint="/api/import"
-        additionalData={{ toId: selectedTransferId }}
-        sampleData={[
-          'sn (serial number, optional)',
-          'kode_item (item code)',
-          'nama_item (item name)',
-          'qty (quantity to transfer)'
-        ]}
+        transferId={selectedTransferId || 0}
+        onImportComplete={() => {
+          // Refresh transfer orders data
+          queryClient.invalidateQueries({ queryKey: ["/api/transfers"] });
+        }}
       />
 
       {/* Transfer Details Modal */}
@@ -560,7 +554,7 @@ function TransferDetailsContent({ transfer, stores, onClose }: {
       {/* Transfer Items */}
       <div>
         <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-          Transfer Items {transferItems && `(${transferItems.length} items)`}
+          Transfer Items {transferItems && Array.isArray(transferItems) && `(${transferItems.length} items)`}
         </h3>
         
         {itemsLoading ? (
@@ -577,7 +571,7 @@ function TransferDetailsContent({ transfer, stores, onClose }: {
               </div>
             ))}
           </div>
-        ) : transferItems && transferItems.length > 0 ? (
+        ) : transferItems && Array.isArray(transferItems) && transferItems.length > 0 ? (
           <div className="space-y-3 max-h-60 overflow-y-auto">
             {transferItems.map((item: any, index: number) => (
               <div 

@@ -883,7 +883,167 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
 
-  // Simple direct import system
+  // Production-ready transfer import system
+  const { transferImportStorage } = await import('./objectStorage');
+  const { transferImportProcessor } = await import('./transferImportProcessor');
+  
+  // Initiate transfer import - returns presigned URL for direct S3 upload
+  app.post('/api/transfer-imports/initiate', isAuthenticated, async (req, res) => {
+    try {
+      const { fileName, contentType, expectedSchema } = req.body;
+      
+      if (!fileName || !contentType) {
+        return res.status(400).json({ message: 'fileName and contentType are required' });
+      }
+
+      if (expectedSchema !== 'transfer-items') {
+        return res.status(400).json({ message: 'Only transfer-items schema is supported' });
+      }
+
+      const result = await transferImportStorage.generatePresignedUploadUrl(fileName, contentType);
+      
+      res.json({
+        uploadId: result.uploadId,
+        presignedUrl: result.presignedUrl,
+        fileKey: result.fileKey,
+        expiresInSeconds: result.expiresInSeconds,
+        idempotencyKey: `idem_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+      });
+
+    } catch (error) {
+      console.error('❌ Transfer import initiate error:', error);
+      res.status(500).json({ 
+        message: 'Failed to initiate import',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  });
+
+  // Complete transfer import - starts background processing
+  app.post('/api/transfer-imports/complete', isAuthenticated, async (req, res) => {
+    try {
+      const { uploadId, fileKey, fileSize, fileSha256, idempotencyKey, toId } = req.body;
+      
+      if (!uploadId || !fileKey || !fileSize || !fileSha256 || !idempotencyKey || !toId) {
+        return res.status(400).json({ 
+          message: 'uploadId, fileKey, fileSize, fileSha256, idempotencyKey, and toId are required' 
+        });
+      }
+
+      // Extract filename from fileKey
+      const fileName = fileKey.split('/').pop() || 'unknown.csv';
+
+      const job = transferImportProcessor.createJob({
+        uploadId,
+        fileKey,
+        fileName,
+        fileSize: parseInt(fileSize),
+        fileSha256,
+        toId: parseInt(toId),
+        idempotencyKey
+      });
+
+      res.json({
+        jobId: uploadId,
+        status: job.status
+      });
+
+    } catch (error) {
+      console.error('❌ Transfer import complete error:', error);
+      res.status(500).json({
+        message: 'Failed to complete import',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  });
+
+  // Get transfer import status
+  app.get('/api/transfer-imports/:uploadId/status', isAuthenticated, (req, res) => {
+    try {
+      const { uploadId } = req.params;
+      const job = transferImportProcessor.getJob(uploadId);
+      
+      if (!job) {
+        return res.status(404).json({ message: 'Import job not found' });
+      }
+
+      res.json({
+        phase: job.progress.phase,
+        rowsTotal: job.progress.rowsTotal,
+        rowsParsed: job.progress.rowsParsed,
+        rowsValid: job.progress.rowsValid,
+        rowsWritten: job.progress.rowsWritten,
+        rowsFailed: job.progress.rowsFailed,
+        duplicatesSkipped: job.progress.duplicatesSkipped,
+        throughputRps: job.progress.throughputRps,
+        etaSeconds: job.progress.etaSeconds,
+        startedAt: job.progress.startedAt,
+        updatedAt: job.progress.updatedAt,
+        status: job.status
+      });
+
+    } catch (error) {
+      console.error('❌ Transfer import status error:', error);
+      res.status(500).json({
+        message: 'Failed to get import status',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  });
+
+  // Server-sent events for real-time progress updates
+  app.get('/api/transfer-imports/:uploadId/events', isAuthenticated, (req, res) => {
+    const { uploadId } = req.params;
+    const job = transferImportProcessor.getJob(uploadId);
+    
+    if (!job) {
+      return res.status(404).json({ message: 'Import job not found' });
+    }
+
+    // Set up SSE
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Headers': 'Cache-Control'
+    });
+
+    // Send initial status
+    res.write(`data: ${JSON.stringify({
+      phase: job.progress.phase,
+      rowsTotal: job.progress.rowsTotal,
+      rowsParsed: job.progress.rowsParsed,
+      rowsValid: job.progress.rowsValid,
+      rowsWritten: job.progress.rowsWritten,
+      rowsFailed: job.progress.rowsFailed,
+      throughputRps: job.progress.throughputRps,
+      etaSeconds: job.progress.etaSeconds,
+      status: job.status
+    })}\n\n`);
+
+    // Subscribe to progress updates
+    transferImportProcessor.subscribeToProgress(uploadId, (progress) => {
+      res.write(`data: ${JSON.stringify({
+        phase: progress.phase,
+        rowsTotal: progress.rowsTotal,
+        rowsParsed: progress.rowsParsed,
+        rowsValid: progress.rowsValid,
+        rowsWritten: progress.rowsWritten,
+        rowsFailed: progress.rowsFailed,
+        throughputRps: progress.throughputRps,
+        etaSeconds: progress.etaSeconds,
+        status: job.status
+      })}\n\n`);
+    });
+
+    // Clean up on client disconnect
+    req.on('close', () => {
+      transferImportProcessor.unsubscribeFromProgress(uploadId);
+    });
+  });
+
+  // Simple direct import system (keep as fallback)
 
   // Retry single failed import record
   app.post('/api/import/retry', isAuthenticated, async (req, res) => {
