@@ -262,8 +262,8 @@ export function TransferImportModal({ isOpen, onClose, transferId, onImportCompl
   }, []);
 
   // Handle modal close
-  const handleClose = () => {
-    if (!isUploading) {
+  const handleClose = (open: boolean) => {
+    if (!open && !isUploading) {
       onClose();
       resetState();
     }
@@ -291,7 +291,12 @@ export function TransferImportModal({ isOpen, onClose, transferId, onImportCompl
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-[600px]" data-testid="dialog-transfer-import">
+      <DialogContent 
+        className="sm:max-w-[600px]" 
+        data-testid="dialog-transfer-import"
+        onPointerDownOutside={(e) => isUploading && e.preventDefault()}
+        onEscapeKeyDown={(e) => isUploading && e.preventDefault()}
+      >
         <DialogHeader>
           <DialogTitle data-testid="text-transfer-import-title">
             Import Transfer Items
