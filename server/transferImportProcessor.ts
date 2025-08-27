@@ -254,12 +254,12 @@ export class TransferImportProcessor {
 
       console.log(`📝 Record ${i + 1}:`, { original: record, mapped: mappedRecord });
 
-      // More lenient validation - require either SN or item code
-      if (mappedRecord.sn || mappedRecord.kodeItem) {
+      // More lenient validation - accept any record with at least one field
+      if (mappedRecord.sn || mappedRecord.kodeItem || mappedRecord.namaItem) {
         validRecords.push(mappedRecord);
-        console.log(`✅ Record ${i + 1} valid`);
+        console.log(`✅ Record ${i + 1} valid:`, mappedRecord);
       } else {
-        console.log(`❌ Record ${i + 1} invalid - missing both SN and item code`);
+        console.log(`❌ Record ${i + 1} invalid - completely empty record:`, mappedRecord);
         job.progress.rowsFailed++;
       }
 
