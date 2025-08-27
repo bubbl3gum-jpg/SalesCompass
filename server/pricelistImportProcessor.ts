@@ -198,8 +198,14 @@ class PricelistImportProcessor extends EventEmitter {
         // Map columns from various aliases
         const mappedRecord = this.mapColumns(record);
         
-        // Validate required fields - only require normal_price
-        if (!mappedRecord.normalPrice || mappedRecord.normalPrice === '0' || mappedRecord.normalPrice === '') {
+        // Debug: Log what we got from mapping
+        console.log(`Row ${rowIndex}: mapped normalPrice = "${mappedRecord.normalPrice}"`);
+        
+        // Validate required fields - only require normal_price to exist and not be empty/zero
+        if (!mappedRecord.normalPrice || 
+            mappedRecord.normalPrice === '' || 
+            mappedRecord.normalPrice === '0' || 
+            mappedRecord.normalPrice === 0) {
           job.errors.push({
             row: rowIndex,
             field: 'normal_price',

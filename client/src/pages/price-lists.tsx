@@ -51,7 +51,7 @@ function formatPrice(price: string | number): string {
 
 const pricelistFormSchema = z.object({
   serialNumber: z.string().optional(),
-  kodeItem: z.string().min(1, "Item code is required"),
+  kodeItem: z.string().optional(),
   kelompok: z.string().optional(),
   family: z.string().optional(),
   kodeMaterial: z.string().optional(),
@@ -66,6 +66,12 @@ type PricelistFormData = z.infer<typeof pricelistFormSchema>;
 export default function PriceLists() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  // Helper function to invalidate and refetch price list data
+  const refreshPricelistData = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ['/api/pricelist'] });
+    queryClient.refetchQueries({ queryKey: ['/api/pricelist'] });
+  }, [queryClient]);
   const [showPriceModal, setShowPriceModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
   const [searchTerm, setSearchTerm] = useState<string>('');
@@ -193,6 +199,15 @@ export default function PriceLists() {
               <p className="text-gray-600 dark:text-gray-400 mt-1">Manage product pricing and price resolution</p>
             </div>
             <div className="flex items-center space-x-4">
+              <Button
+                variant="outline"
+                onClick={refreshPricelistData}
+                className="dark:bg-black/20 backdrop-blur-xl border border-white/20 dark:border-gray-800/50 text-gray-700 dark:text-gray-300"
+                data-testid="button-refresh"
+              >
+                <i className="fas fa-sync-alt mr-2"></i>
+                Refresh
+              </Button>
               <Button
                 variant="outline"
                 onClick={() => setShowImportModal(true)}
@@ -608,7 +623,7 @@ export default function PriceLists() {
         isOpen={showImportModal}
         onClose={() => setShowImportModal(false)}
         onComplete={() => {
-          queryClient.invalidateQueries({ queryKey: ["/api/pricelist"] });
+          refreshPricelistData();
           setShowImportModal(false);
         }}
       />
