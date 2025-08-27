@@ -1,0 +1,233 @@
+the file never actually made it to storage,
+
+the job was queued but no worker is consuming it,
+
+the worker can’t update progress (status row never changes), or
+
+DB write is blocked/failing (locks/constraints), so it loops or dies quietly.
+
+Below is a copy-paste runbook to pinpoint the culprit fast and get rows into your Transfer Order tables.
+
+🔎 10-Minute Triage — Do these in order
+1) Confirm the object exists (S3/MinIO)
+
+If it’s missing or size=0, you’re stuck at “processing” forever.
+
+MinIO (mc):
+
+# set once
+mc alias set local http://127.0.0.1:9000 MINIO_ACCESS_KEY MINIO_SECRET_KEY
+
+# replace the bucket/key from your complete() payload
+mc stat local/your-bucket/imports/2025/08/imp_xxx/yourfile.xlsx
+
+
+AWS CLI:
+
+aws s3 ls s3://your-bucket/imports/2025/08/imp_xxx/yourfile.xlsx --region your-region
+aws s3api head-object --bucket your-bucket --key imports/2025/08/imp_xxx/yourfile.xlsx
+
+
+✅ Expect: a valid ContentLength (>0).
+❌ If 404 or 0 bytes: your client never PUT to the presigned URL (CORS or wrong method). Fix upload first.
+
+2) Is the import job actually queued and picked up?
+Redis queue depth
+# If using RQ
+redis-cli LLEN rq:queue:imports
+redis-cli LRANGE rq:queue:imports 0 10 | head
+
+# If using Celery, check registered/active:
+celery -A app.celery_app inspect registered
+celery -A app.celery_app inspect active
+celery -A app.celery_app inspect reserved
+
+
+✅ Expect: job leaves the queue and shows up as active briefly.
+❌ If it sits in the queue: your worker isn’t running or can’t connect.
+
+Start a Windows-friendly worker
+# Celery on Windows: use solo pool
+celery -A app.celery_app worker -l INFO -Q imports -P solo
+
+# RQ example:
+rq worker imports --url redis://localhost:6379
+
+
+Watch the logs when you re-POST /imports/complete.
+
+3) Can the worker update progress?
+
+Your /status likely reads a DB row (or Redis hash). Run this to see what the backend thinks:
+
+-- Inspect the imports row
+SELECT upload_id, status, phase, rows_total, rows_parsed, rows_written, rows_failed,
+       started_at, updated_at, summary_key, error_excerpt
+FROM imports
+WHERE upload_id = 'imp_xxx';
+
+
+✅ Expect: status and phase change over time (parsing → validating → writing → done).
+❌ If stuck at “processing” with updated_at not moving: the worker isn’t heartbeating or can’t write to this table.
+
+Drop-in progress reporter (make sure something like this is actually called):
+
+def set_progress(db, upload_id, **kw):
+    db.execute(
+        "UPDATE imports SET updated_at=NOW(), " +
+        ", ".join(f"{k}=%s" for k in kw.keys()) +
+        " WHERE upload_id=%s",
+        [*kw.values(), upload_id]
+    )
+    db.commit()
+
+
+Call it after each batch:
+
+set_progress(db, upload_id, phase="parsing", rows_parsed=rows_parsed)
+
+4) Is the DB write blocked/failing?
+
+Typical reasons: foreign-key missing, unique conflict, trigger error, or a long-running lock.
+
+Active transactions / locks:
+
+-- Who’s locking what?
+SELECT trx_id, trx_started, trx_state, trx_query
+FROM information_schema.innodb_trx
+ORDER BY trx_started ASC;
+
+-- Lock waits
+SELECT * FROM information_schema.innodb_lock_waits;
+
+-- FK/constraint errors surface in error log; also check your worker logs.
+
+
+Triggers (you had earlier trigger syntax issues): temporarily disable TO-table triggers to see if progress resumes:
+
+-- For MySQL 8, simulate by renaming trigger or testing in a copy table.
+SHOW TRIGGERS LIKE 'transfer_order%';
+
+✅ Sanity “Hello World” to prove the pipe
+
+If you need to be 100% sure the pipeline flows to Transfer Orders, run a tiny import that bypasses S3 and exercises the same worker function.
+
+CSV (save as to_lines_sample.csv):
+
+from_store,to_store,transfer_no,sku,qty,notes
+G01,G02,TO-0001,SKU-100,2,"sample line 1"
+G01,G02,TO-0001,SKU-200,1,"sample line 2"
+
+
+Direct call (temporary debug endpoint or CLI):
+
+# This reuses your parsing/writing function without presigned upload
+process_transfer_order_csv("/path/to/to_lines_sample.csv", upload_id="imp_debug_local")
+
+
+Verify rows landed:
+
+-- Header/master
+SELECT * FROM transfer_orders WHERE transfer_no='TO-0001';
+
+-- Lines
+SELECT * FROM transfer_order_lines WHERE transfer_no='TO-0001' ORDER BY sku;
+
+
+If this works, your DB mapping is fine and the issue is earlier (upload/queue/progress). If this fails, fix schema/mapping now.
+
+🛠️ Minimal, Safe Writer for Transfer Orders (drop in)
+
+Use upsert to avoid dupes; commit in batches, and heartbeat progress.
+
+BATCH = 5000
+
+UPSERT_HEAD = """
+INSERT INTO transfer_orders (transfer_no, from_store, to_store, created_at)
+VALUES (%s, %s, %s, NOW())
+ON DUPLICATE KEY UPDATE from_store=VALUES(from_store), to_store=VALUES(to_store)
+"""
+
+UPSERT_LINE = """
+INSERT INTO transfer_order_lines (transfer_no, sku, qty, notes)
+VALUES (%s, %s, %s, %s)
+ON DUPLICATE KEY UPDATE qty=VALUES(qty), notes=VALUES(notes)
+"""
+
+def write_batches(db, upload_id, rows):
+    buf_head = set()
+    buf_line = []
+    total_written = 0
+
+    for i, r in enumerate(rows, 1):
+        buf_head.add((r.transfer_no, r.from_store, r.to_store))
+        buf_line.append((r.transfer_no, r.sku, r.qty, r.notes))
+
+        if i % BATCH == 0:
+            _flush(db, buf_head, buf_line)
+            total_written += len(buf_line)
+            set_progress(db, upload_id, phase="writing", rows_written=total_written)
+
+    if buf_line:
+        _flush(db, buf_head, buf_line)
+        total_written += len(buf_line)
+        set_progress(db, upload_id, phase="writing", rows_written=total_written)
+
+def _flush(db, buf_head, buf_line):
+    with db.cursor() as c:
+        if buf_head:
+            c.executemany(UPSERT_HEAD, list(buf_head))
+        if buf_line:
+            c.executemany(UPSERT_LINE, buf_line)
+    db.commit()
+
+
+Ensure indexes: transfer_orders.transfer_no UNIQUE, and (transfer_order_lines.transfer_no, sku) UNIQUE.
+
+🧰 Add a one-shot debug endpoint (delete after)
+
+This returns what you need on one screen: object presence, DB status row, and queue state.
+
+@app.get("/imports/{upload_id}/debug")
+def debug_import(upload_id: str):
+    # 1) DB row
+    imp = db.fetch_one("SELECT * FROM imports WHERE upload_id=%s", [upload_id])
+
+    # 2) S3 head
+    s3_ok, s3_meta = False, None
+    try:
+        s3_meta = s3.head_object(Bucket=imp["bucket"], Key=imp["file_key"])
+        s3_ok = True
+    except Exception as e:
+        s3_meta = {"error": str(e)}
+
+    # 3) Queue (pseudo)
+    q_state = redis.get(f"job:{imp['job_id']}:state") or "unknown"
+
+    return {"imports_row": imp, "s3": {"ok": s3_ok, "meta": s3_meta}, "queue": q_state}
+
+🧯 The 5 most common causes & fixes
+
+Worker not running (or wrong queue name) → Start Celery/RQ with correct queue; on Windows use -P solo.
+
+Presigned upload never happened (UI PUT failed/CORS) → Verify with mc stat/head-object.
+
+Status never updates (no heartbeat) → ensure set_progress() is called each phase/batch and commits.
+
+DB locked / trigger errors → check information_schema.innodb_trx, review triggers, test without triggers.
+
+Header mapping mismatch (e.g., from_store vs source_store) → log first 50 header names and fail fast with a clear error stored in imports.error_excerpt.
+
+✅ What “good” looks like (quick checklist)
+
+/imports/complete returns { job_id, status:"queued" }.
+
+Worker log shows: phase=parsing → validating → writing → done with batch counts.
+
+imports.updated_at changes every few seconds; rows_written increments.
+
+S3 object exists with the exact file_key from complete().
+
+MySQL shows new rows in transfer_orders + transfer_order_lines.
+
+If you run Steps 1–4 and paste the key outputs (object head, queue state, imports row, any lock rows), I’ll zero in on the exact fix. In the meantime, starting the worker with the right queue and confirming the S3 object exists resolves 80–90% of “stuck processing” cases.
