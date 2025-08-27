@@ -888,6 +888,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Production-ready transfer import system
   const { transferImportStorage } = await import('./objectStorage');
   const { transferImportProcessor } = await import('./transferImportProcessor');
+  const { pricelistImportProcessor } = await import('./pricelistImportProcessor');
   
   // Initiate transfer import - returns presigned URL for direct S3 upload
   app.post('/api/transfer-imports/initiate', isAuthenticated, async (req, res) => {
@@ -1587,6 +1588,263 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.error('Discount deletion error:', error);
       res.status(500).json({ message: 'Failed to delete discount' });
     }
+  });
+
+  // Pricelist endpoints
+  app.get('/api/pricelist', isAuthenticated, async (req, res) => {
+    try {
+      const { page = 1, limit = 50, search = '' } = req.query;
+      const pageNum = Math.max(1, parseInt(page as string) || 1);
+      const limitNum = Math.max(1, Math.min(100, parseInt(limit as string) || 50));
+      const searchTerm = search as string;
+
+      // Use cache for pricelist data
+      const allPricelist = await withCache(
+        CACHE_KEYS.PRICELIST || 'pricelist',
+        CACHE_TTL.PRICELIST || 1800, // 30 minutes
+        () => storage.getPricelist()
+      );
+
+      // Apply search filter
+      let filteredPricelist = allPricelist;
+      if (searchTerm) {
+        const searchLower = searchTerm.toLowerCase();
+        filteredPricelist = allPricelist.filter((item: any) => 
+          item.kodeItem?.toLowerCase().includes(searchLower) ||
+          item.sn?.toLowerCase().includes(searchLower) ||
+          item.family?.toLowerCase().includes(searchLower) ||
+          item.kelompok?.toLowerCase().includes(searchLower) ||
+          item.deskripsiMaterial?.toLowerCase().includes(searchLower) ||
+          item.namaMotif?.toLowerCase().includes(searchLower) ||
+          item.kodeMotif?.toLowerCase().includes(searchLower)
+        );
+      }
+
+      // Apply pagination
+      const offset = (pageNum - 1) * limitNum;
+      const paginatedData = filteredPricelist.slice(offset, offset + limitNum);
+
+      res.json({
+        data: paginatedData,
+        pagination: {
+          page: pageNum,
+          limit: limitNum,
+          total: filteredPricelist.length,
+          totalPages: Math.ceil(filteredPricelist.length / limitNum)
+        }
+      });
+    } catch (error) {
+      console.error('Get pricelist error:', error);
+      res.status(500).json({ message: 'Failed to get pricelist' });
+    }
+  });
+
+  app.post('/api/pricelist', isAuthenticated, checkRole(['System Administrator']), async (req, res) => {
+    try {
+      const validatedData = insertPricelistSchema.parse(req.body);
+      const pricelistItem = await storage.createPricelist(validatedData);
+      
+      // Clear cache after creating pricelist item
+      cache.del(CACHE_KEYS.PRICELIST || 'pricelist');
+      
+      res.json(pricelistItem);
+    } catch (error) {
+      console.error('Pricelist creation error:', error);
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ message: 'Validation error', errors: error.errors });
+      } else {
+        res.status(500).json({ message: 'Failed to create pricelist item' });
+      }
+    }
+  });
+
+  app.put('/api/pricelist/:pricelistId', isAuthenticated, checkRole(['System Administrator']), async (req, res) => {
+    try {
+      const { pricelistId } = req.params;
+      const validatedData = insertPricelistSchema.partial().parse(req.body);
+      // Note: Update method would need to be added to storage interface
+      const pricelistItem = await storage.updatePricelist ? 
+        await storage.updatePricelist(parseInt(pricelistId), validatedData) :
+        null;
+      
+      if (!pricelistItem) {
+        return res.status(404).json({ message: 'Pricelist item not found or update not implemented' });
+      }
+      
+      // Clear cache after updating pricelist item
+      cache.del(CACHE_KEYS.PRICELIST || 'pricelist');
+      
+      res.json(pricelistItem);
+    } catch (error) {
+      console.error('Pricelist update error:', error);
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ message: 'Validation error', errors: error.errors });
+      } else {
+        res.status(500).json({ message: 'Failed to update pricelist item' });
+      }
+    }
+  });
+
+  app.delete('/api/pricelist/:pricelistId', isAuthenticated, checkRole(['System Administrator']), async (req, res) => {
+    try {
+      const { pricelistId } = req.params;
+      // Note: Delete method would need to be added to storage interface
+      const success = await storage.deletePricelist ? 
+        await storage.deletePricelist(parseInt(pricelistId)) :
+        false;
+      
+      if (!success) {
+        return res.status(404).json({ message: 'Pricelist item not found or delete not implemented' });
+      }
+      
+      // Clear cache after deleting pricelist item
+      cache.del(CACHE_KEYS.PRICELIST || 'pricelist');
+      
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Pricelist deletion error:', error);
+      res.status(500).json({ message: 'Failed to delete pricelist item' });
+    }
+  });
+
+  // Pricelist import endpoints (following Transfer import pattern)
+  app.post('/api/pricelist-imports/initiate', isAuthenticated, checkRole(['System Administrator']), async (req, res) => {
+    try {
+      const { fileName, contentType, expectedSchema } = req.body;
+      
+      if (!fileName || !contentType) {
+        return res.status(400).json({ message: 'fileName and contentType are required' });
+      }
+
+      if (expectedSchema !== 'pricelist') {
+        return res.status(400).json({ message: 'Only pricelist schema is supported' });
+      }
+
+      const result = await transferImportStorage.generatePresignedUploadUrl(fileName, contentType);
+      
+      res.json({
+        uploadId: result.uploadId,
+        presignedUrl: result.presignedUrl,
+        fileKey: result.fileKey,
+        expiresInSeconds: result.expiresInSeconds,
+        idempotencyKey: `idem_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+      });
+
+    } catch (error) {
+      console.error('❌ Pricelist import initiate error:', error);
+      res.status(500).json({ 
+        message: 'Failed to initiate pricelist import',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  });
+
+  app.post('/api/pricelist-imports/complete', isAuthenticated, checkRole(['System Administrator']), async (req, res) => {
+    try {
+      const { uploadId, fileKey, fileSize, fileSha256, idempotencyKey } = req.body;
+      
+      if (!uploadId || !fileKey || !fileSize || !fileSha256 || !idempotencyKey) {
+        return res.status(400).json({ 
+          message: 'uploadId, fileKey, fileSize, fileSha256, and idempotencyKey are required' 
+        });
+      }
+
+      // Extract filename from fileKey
+      const fileName = fileKey.split('/').pop() || 'unknown.csv';
+
+      // Get the object file from storage
+      const objectFile = transferImportStorage.bucket.file(fileKey.replace('/bucket_name/', ''));
+
+      // Start processing in the background
+      pricelistImportProcessor.startImport(uploadId, fileName, objectFile);
+
+      res.json({
+        jobId: uploadId,
+        status: 'processing'
+      });
+
+    } catch (error) {
+      console.error('❌ Pricelist import complete error:', error);
+      res.status(500).json({
+        message: 'Failed to complete pricelist import',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  });
+
+  app.get('/api/pricelist-imports/:uploadId/status', isAuthenticated, async (req, res) => {
+    try {
+      const { uploadId } = req.params;
+      const job = pricelistImportProcessor.getJob(uploadId);
+      
+      if (!job) {
+        return res.status(404).json({ message: 'Pricelist import job not found' });
+      }
+
+      res.json({
+        status: job.status,
+        progress: job.progress,
+        errors: job.errors,
+        startedAt: job.startedAt,
+        updatedAt: job.updatedAt
+      });
+    } catch (error) {
+      console.error('❌ Get pricelist import status error:', error);
+      res.status(500).json({ message: 'Failed to get import status' });
+    }
+  });
+
+  app.get('/api/pricelist-imports/:uploadId/events', isAuthenticated, (req, res) => {
+    const { uploadId } = req.params;
+    const job = pricelistImportProcessor.getJob(uploadId);
+    
+    if (!job) {
+      return res.status(404).json({ message: 'Pricelist import job not found' });
+    }
+
+    // Set up SSE
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Headers': 'Cache-Control'
+    });
+
+    // Send initial status
+    res.write(`data: ${JSON.stringify({
+      phase: job.progress.phase,
+      rowsParsed: job.progress.rowsParsed,
+      rowsValid: job.progress.rowsValid,
+      rowsWritten: job.progress.rowsWritten,
+      rowsFailed: job.progress.rowsFailed,
+      throughputRps: job.progress.throughputRps,
+      eta: job.progress.eta,
+      status: job.status
+    })}\n\n`);
+
+    // Subscribe to progress updates
+    const progressListener = (jobUploadId: string, updatedJob: any) => {
+      if (jobUploadId === uploadId) {
+        res.write(`data: ${JSON.stringify({
+          phase: updatedJob.progress.phase,
+          rowsParsed: updatedJob.progress.rowsParsed,
+          rowsValid: updatedJob.progress.rowsValid,
+          rowsWritten: updatedJob.progress.rowsWritten,
+          rowsFailed: updatedJob.progress.rowsFailed,
+          throughputRps: updatedJob.progress.throughputRps,
+          eta: updatedJob.progress.eta,
+          status: updatedJob.status
+        })}\n\n`);
+      }
+    };
+
+    pricelistImportProcessor.on('progress', progressListener);
+
+    // Clean up on client disconnect
+    req.on('close', () => {
+      pricelistImportProcessor.removeListener('progress', progressListener);
+    });
   });
 
   app.get('/api/edc', isAuthenticated, async (req, res) => {

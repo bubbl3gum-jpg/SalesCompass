@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -8,12 +8,13 @@ import { useToast } from "@/hooks/use-toast";
 import { isUnauthorizedError } from "@/lib/authUtils";
 
 import { Sidebar } from "@/components/sidebar";
-import { ImportModal } from "@/components/import-modal";
+import { PricelistImportModal } from "@/components/PricelistImportModal";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   Dialog,
   DialogContent,
@@ -28,6 +29,25 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+
+// Helper function to format price
+function formatPrice(price: string | number): string {
+  const numPrice = typeof price === 'string' ? parseFloat(price) : price;
+  if (isNaN(numPrice)) return '-';
+  return new Intl.NumberFormat('id-ID', {
+    style: 'currency',
+    currency: 'IDR',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(numPrice);
+}
 
 const pricelistFormSchema = z.object({
   serialNumber: z.string().optional(),
@@ -49,6 +69,23 @@ export default function PriceLists() {
   const [showPriceModal, setShowPriceModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
   const [searchTerm, setSearchTerm] = useState<string>('');
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState<string>('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
+
+  // Debounce search term to avoid too many API calls
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm);
+    }, 300); // 300ms delay
+
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
+
+  // Reset to first page when search term changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [debouncedSearchTerm]);
 
   const form = useForm<PricelistFormData>({
     resolver: zodResolver(pricelistFormSchema),
@@ -65,9 +102,18 @@ export default function PriceLists() {
     },
   });
 
-  // Get pricelist
-  const { data: pricelist, isLoading: pricelistLoading } = useQuery({
-    queryKey: ["/api/pricelist"],
+  // Get paginated pricelist
+  const { data: pricelistResponse, isLoading: pricelistLoading } = useQuery({
+    queryKey: ["/api/pricelist", currentPage, pageSize, debouncedSearchTerm],
+    queryFn: async () => {
+      const params = new URLSearchParams({
+        page: currentPage.toString(),
+        limit: pageSize.toString(),
+        ...(debouncedSearchTerm && { search: debouncedSearchTerm })
+      });
+      const response = await apiRequest('GET', `/api/pricelist?${params}`);
+      return response.json();
+    },
     retry: false,
   });
 
@@ -77,13 +123,13 @@ export default function PriceLists() {
     retry: false,
   });
 
-  // Filter pricelist based on search
-  const filteredPricelist = pricelist?.filter((item: any) => 
-    item.kodeItem?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    item.serialNumber?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    item.family?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    item.deskripsiMaterial?.toLowerCase().includes(searchTerm.toLowerCase())
-  ) || [];
+  const pricelist = pricelistResponse?.data || [];
+  const pagination = pricelistResponse?.pagination || {
+    page: 1,
+    limit: pageSize,
+    total: 0,
+    totalPages: 1
+  };
 
   // Create pricelist item mutation
   const createPricelistMutation = useMutation({
@@ -199,7 +245,7 @@ export default function PriceLists() {
             <CardHeader>
               <CardTitle className="text-gray-900 dark:text-white">
                 Price List Items
-                {filteredPricelist && <span className="ml-2 text-sm text-gray-500">({filteredPricelist.length} items)</span>}
+                {pagination && <span className="ml-2 text-sm text-gray-500">({pagination.total} total items)</span>}
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -224,67 +270,145 @@ export default function PriceLists() {
                     </div>
                   ))}
                 </div>
-              ) : filteredPricelist.length > 0 ? (
+              ) : pricelist.length > 0 ? (
                 <div className="space-y-4">
-                  {filteredPricelist.map((price: any) => (
-                    <div
-                      key={price.pricelistId}
-                      className="flex items-center justify-between p-4 bg-white/10 dark:bg-black/10 rounded-xl hover:bg-white/20 dark:hover:bg-black/20 transition-colors"
-                      data-testid={`card-price-${price.pricelistId}`}
-                    >
-                      <div className="flex items-center space-x-4">
-                        <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
-                          <i className="fas fa-tag text-white"></i>
-                        </div>
-                        <div>
-                          <p className="font-medium text-gray-900 dark:text-white">
-                            {price.kodeItem}
-                          </p>
-                          {price.serialNumber && (
-                            <p className="text-sm text-blue-600 dark:text-blue-400">
-                              Serial: {price.serialNumber}
-                            </p>
-                          )}
-                          <div className="flex items-center space-x-4 mt-1">
-                            {price.family && (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Item Code</TableHead>
+                        <TableHead>Serial Number</TableHead>
+                        <TableHead>Family</TableHead>
+                        <TableHead>Group</TableHead>
+                        <TableHead>Material</TableHead>
+                        <TableHead>Motif</TableHead>
+                        <TableHead className="text-right">Normal Price</TableHead>
+                        <TableHead className="text-right">Special Price</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {pricelist.map((price: any) => (
+                        <TableRow key={price.pricelistId}>
+                          <TableCell className="font-medium">{price.kodeItem}</TableCell>
+                          <TableCell className="text-blue-600 dark:text-blue-400">
+                            {price.sn || '-'}
+                          </TableCell>
+                          <TableCell>
+                            {price.family ? (
                               <Badge variant="outline" className="text-xs">
                                 {price.family}
                               </Badge>
-                            )}
-                            {price.kelompok && (
+                            ) : '-'}
+                          </TableCell>
+                          <TableCell>
+                            {price.kelompok ? (
                               <Badge variant="outline" className="text-xs">
                                 {price.kelompok}
                               </Badge>
-                            )}
-                          </div>
-                          {price.deskripsiMaterial && (
-                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                              {price.deskripsiMaterial}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="text-right">
-                        <p className="font-semibold text-gray-900 dark:text-white">
-                          {formatPrice(price.normalPrice)}
-                        </p>
-                        {price.sp && (
-                          <p className="text-sm text-emerald-600 dark:text-emerald-400">
-                            SP: {formatPrice(price.sp)}
-                          </p>
-                        )}
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 mt-2"
-                          data-testid={`button-edit-price-${price.pricelistId}`}
-                        >
-                          Edit
-                        </Button>
-                      </div>
+                            ) : '-'}
+                          </TableCell>
+                          <TableCell className="text-sm text-gray-600 dark:text-gray-400">
+                            {price.deskripsiMaterial || '-'}
+                          </TableCell>
+                          <TableCell className="text-sm">
+                            {price.namaMotif || price.kodeMotif || '-'}
+                          </TableCell>
+                          <TableCell className="text-right font-semibold">
+                            {formatPrice(price.normalPrice)}
+                          </TableCell>
+                          <TableCell className="text-right text-emerald-600 dark:text-emerald-400">
+                            {price.sp ? formatPrice(price.sp) : '-'}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
+                              data-testid={`button-edit-price-${price.pricelistId}`}
+                            >
+                              Edit
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                  
+                  {/* Pagination Controls */}
+                  <div className="flex items-center justify-between pt-4">
+                    <div className="flex items-center space-x-2">
+                      <span className="text-sm text-gray-500">Show:</span>
+                      <Select value={pageSize.toString()} onValueChange={(value) => {
+                        setPageSize(parseInt(value));
+                        setCurrentPage(1); // Reset to first page
+                      }}>
+                        <SelectTrigger className="w-20">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="25">25</SelectItem>
+                          <SelectItem value="50">50</SelectItem>
+                          <SelectItem value="100">100</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <span className="text-sm text-gray-500">
+                        per page • Showing {((pagination.page - 1) * pagination.limit) + 1} to{' '}
+                        {Math.min(pagination.page * pagination.limit, pagination.total)} of{' '}
+                        {pagination.total} items
+                      </span>
                     </div>
-                  ))}
+                    
+                    <div className="flex items-center space-x-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                        disabled={currentPage <= 1}
+                        data-testid="button-prev-page"
+                      >
+                        Previous
+                      </Button>
+                      
+                      {/* Page Numbers */}
+                      <div className="flex items-center space-x-1">
+                        {Array.from({ length: Math.min(5, pagination.totalPages) }, (_, i) => {
+                          let pageNum;
+                          if (pagination.totalPages <= 5) {
+                            pageNum = i + 1;
+                          } else {
+                            // Show pages around current page
+                            const start = Math.max(1, currentPage - 2);
+                            pageNum = start + i;
+                          }
+                          
+                          if (pageNum > pagination.totalPages) return null;
+                          
+                          return (
+                            <Button
+                              key={pageNum}
+                              variant={currentPage === pageNum ? "default" : "outline"}
+                              size="sm"
+                              className="w-8 h-8 p-0"
+                              onClick={() => setCurrentPage(pageNum)}
+                              data-testid={`button-page-${pageNum}`}
+                            >
+                              {pageNum}
+                            </Button>
+                          );
+                        })}
+                      </div>
+                      
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setCurrentPage(Math.min(pagination.totalPages, currentPage + 1))}
+                        disabled={currentPage >= pagination.totalPages}
+                        data-testid="button-next-page"
+                      >
+                        Next
+                      </Button>
+                    </div>
+                  </div>
                 </div>
               ) : (
                 <div className="text-center py-12">
@@ -479,24 +603,14 @@ export default function PriceLists() {
         </DialogContent>
       </Dialog>
 
-      {/* Import Modal */}
-      <ImportModal
+      {/* Pricelist Import Modal */}
+      <PricelistImportModal
         isOpen={showImportModal}
         onClose={() => setShowImportModal(false)}
-        title="Import Price List Data"
-        tableName="pricelist"
-        queryKey="/api/pricelist"
-        endpoint="/api/import"
-        sampleData={[
-          'kodeItem',
-          'serialNumber (optional)',
-          'normalPrice',
-          'sp (special price, optional)',
-          'kelompok (optional)',
-          'family (optional)',
-          'deskripsiMaterial (optional)',
-          'kodeMotif (optional)'
-        ]}
+        onComplete={() => {
+          queryClient.invalidateQueries({ queryKey: ["/api/pricelist"] });
+          setShowImportModal(false);
+        }}
       />
     </div>
   );
