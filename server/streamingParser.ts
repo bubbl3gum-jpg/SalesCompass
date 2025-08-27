@@ -26,49 +26,50 @@ export class StreamingCSVParser {
   private processedRows = 0;
 
   async *parseStream(buffer: Buffer, tableName: string, jobId: string): AsyncGenerator<ParsedRow, void, unknown> {
-    const stream = Readable.from(buffer);
-    const parser = csvParse({
-      columns: true,
-      skip_empty_lines: true,
-      skip_lines_with_error: false,
-      relax_column_count: true,
-      trim: true
-    });
+    this.rowNumber = 0;
+    this.processedRows = 0;
+    this.startTime = Date.now();
+    this.lastProgressTime = Date.now();
 
-    let headerMappings: Record<string, string> = {};
+    const csvContent = buffer.toString('utf-8');
+    const headerMappings = this.getColumnMappings(tableName);
 
-    // Set up column mappings based on table type
-    headerMappings = this.getColumnMappings(tableName);
+    try {
+      // Parse CSV synchronously to avoid stream hanging issues
+      const records = await new Promise<any[]>((resolve, reject) => {
+        csvParse(csvContent, {
+          columns: true,
+          skip_empty_lines: true,
+          skip_lines_with_error: false,
+          relax_column_count: true,
+          trim: true
+        }, (err, output) => {
+          if (err) reject(err);
+          else resolve(output);
+        });
+      });
 
-    const self = this; // Capture context for transform function
+      console.log(`📊 CSV parsed successfully: ${records.length} records`);
 
-    const transformStream = new Transform({
-      objectMode: true,
-      transform(chunk: any, encoding: string, callback: (error?: Error | null, data?: any) => void) {
-        try {
-          self.rowNumber++;
-          const row = self.processRow(chunk, headerMappings, self.rowNumber);
-          self.processedRows++;
-          
-          // Calculate throughput every 1000 rows
-          if (self.processedRows % 1000 === 0) {
-            const now = Date.now();
-            const timeDiff = (now - self.lastProgressTime) / 1000;
-            const throughputRps = 1000 / timeDiff;
-            self.lastProgressTime = now;
-          }
-          
-          callback(null, row);
-        } catch (error) {
-          callback(error instanceof Error ? error : new Error(String(error)));
+      // Process each record
+      for (const record of records) {
+        this.rowNumber++;
+        const row = this.processRow(record, headerMappings, this.rowNumber);
+        this.processedRows++;
+        
+        // Calculate throughput every 1000 rows
+        if (this.processedRows % 1000 === 0) {
+          const now = Date.now();
+          const timeDiff = (now - this.lastProgressTime) / 1000;
+          const throughputRps = 1000 / timeDiff;
+          this.lastProgressTime = now;
         }
+        
+        yield row;
       }
-    });
-
-    stream.pipe(parser).pipe(transformStream);
-
-    for await (const row of transformStream) {
-      yield row as ParsedRow;
+    } catch (error) {
+      console.error('CSV parsing error:', error);
+      throw new Error(`CSV parsing failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 

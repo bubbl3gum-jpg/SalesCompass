@@ -397,15 +397,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Auth middleware
   await setupAuth(app);
 
-  // Initialize high-performance import system
-  const { jobQueue } = await import('./jobQueue');
-  const { progressSSE } = await import('./progressSSE');
-  
-  // Initialize ImportWorker to start processing jobs
-  const { ImportWorker } = await import('./importWorker');
-  new ImportWorker();
-  
-  console.log('🚀 High-performance import system initialized with job queue and SSE');
+  // Initialize simple import system
+  console.log('🚀 Simple import system initialized');
 
   // Health check
   app.get('/api/health', (req, res) => {
@@ -796,7 +789,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: 'No file uploaded' });
       }
 
-      const { tableName, additionalData, idempotencyKey } = req.body;
+      const { tableName, additionalData } = req.body;
       if (!tableName) {
         return res.status(400).json({ message: 'Table name is required' });
       }
@@ -806,6 +799,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!validTables.includes(tableName)) {
         return res.status(400).json({ message: 'Invalid table name' });
       }
+
+      console.log(`📂 Processing direct import: ${req.file.originalname} (${tableName})`);
 
       // Parse additional data if provided
       let parsedAdditionalData = null;
@@ -817,27 +812,61 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      // Add job to queue (returns immediately with job ID)
-      const jobId = await jobQueue.addJob(
-        tableName,
-        req.file.originalname,
-        req.file.buffer,
-        idempotencyKey,
-        parsedAdditionalData
-      );
+      // Process CSV directly for transfer-items
+      if (tableName === 'transfer-items') {
+        const csvContent = req.file.buffer.toString('utf-8');
+        const { parse } = await import('csv-parse');
+        
+        const records = await new Promise<any[]>((resolve, reject) => {
+          parse(csvContent, {
+            columns: true,
+            skip_empty_lines: true,
+            trim: true
+          }, (err, output) => {
+            if (err) reject(err);
+            else resolve(output);
+          });
+        });
+        
+        console.log(`📊 Parsed ${records.length} records from CSV`);
+        
+        const toId = parsedAdditionalData?.toId;
+        if (!toId) {
+          return res.status(400).json({ message: 'toId is required for transfer items' });
+        }
+        
+        // Insert records directly
+        const insertData = records.map(record => ({
+          toId: parseInt(toId),
+          sn: record.sn || record.serial_number || record['Serial Number'] || '',
+          kodeItem: record.kode_item || record.item_code || record['Item Code'] || '',
+          namaItem: record.nama_item || record.item_name || record['Item Name'] || '',
+          qty: parseInt(record.qty || record.quantity || '1') || 1
+        })).filter(item => item.sn || item.kodeItem);
+        
+        if (insertData.length > 0) {
+          await db.insert(toItemList).values(insertData);
+          console.log(`✅ Inserted ${insertData.length} transfer items`);
+        }
+        
+        return res.json({
+          jobId: `direct-${Date.now()}`,
+          message: 'Import completed successfully',
+          status: 'completed',
+          summary: {
+            totalRecords: records.length,
+            successfulRecords: insertData.length,
+            failedRecords: records.length - insertData.length
+          }
+        });
+      }
 
-      // Return job ID immediately (<1s response time)
-      res.json({
-        jobId,
-        message: 'Import job queued successfully',
-        progressUrl: `/api/import/progress/${jobId}`,
-        sseUrl: `/api/import/progress/${jobId}/stream`
-      });
+      res.status(400).json({ message: `Table type ${tableName} not yet supported in direct import` });
 
     } catch (error) {
-      console.error('Import queue error:', error);
+      console.error('❌ Direct import error:', error);
       res.status(500).json({ 
-        message: 'Failed to queue import job', 
+        message: 'Import failed', 
         error: error instanceof Error ? error.message : 'Unknown error' 
       });
     }
@@ -890,10 +919,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get all import jobs for monitoring (admin only)
+  // Get all import jobs for monitoring (admin only) - simplified
   app.get('/api/import/jobs', isAuthenticated, (req, res) => {
-    const jobs = jobQueue.getAllJobs();
-    res.json(jobs);
+    res.json([]); // No jobs in direct import mode
   });
 
   // Performance monitoring endpoint for import system

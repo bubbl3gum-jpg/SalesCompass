@@ -199,17 +199,17 @@ class JobQueue extends EventEmitter {
     
     while (!this.isShutdown) {
       try {
-        // Find a job to process
+        // Find a job to process (only process jobs that haven't been started)
         const processingJob = Array.from(this.processing).find(jobId => {
           const job = this.jobs.get(jobId);
-          return job?.status === 'processing';
+          return job?.status === 'processing' && !job.startedAt;
         });
 
         if (processingJob) {
-          console.log(`🎯 Worker found job to process: ${processingJob}`);
           const job = this.jobs.get(processingJob);
-          if (job) {
-            console.log(`🏃 Processing job ${job.id} for table ${job.tableName}`);
+          if (job && !job.startedAt) {
+            console.log(`🎯 Worker processing job: ${job.id} for table ${job.tableName}`);
+            job.startedAt = new Date(); // Mark as started immediately
             await this.processJob(job);
           }
         } else {
@@ -225,8 +225,11 @@ class JobQueue extends EventEmitter {
 
   // Process an individual job (will be implemented in worker.ts)
   private async processJob(job: ImportJob): Promise<void> {
-    // This will be implemented by the ImportWorker
-    this.emit('processJob', job);
+    // Only emit once per job to prevent race conditions
+    if (job.status === 'processing' && !job.startedAt) {
+      job.startedAt = new Date();
+      this.emit('processJob', job);
+    }
   }
 
   // Clean up old completed jobs (run periodically)
