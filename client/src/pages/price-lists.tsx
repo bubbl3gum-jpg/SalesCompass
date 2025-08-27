@@ -196,7 +196,7 @@ export default function PriceLists() {
               <Button
                 variant="outline"
                 onClick={() => setShowImportModal(true)}
-                className="bg-white/20 dark:bg-black/20 backdrop-blur-xl border border-white/20 dark:border-gray-800/50"
+                className="text-[#000000] bg-[#96e683de] backdrop-blur-xl border border-white/20 dark:border-gray-800/50"
                 data-testid="button-import-prices"
               >
                 <i className="fas fa-upload mr-2"></i>
