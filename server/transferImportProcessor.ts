@@ -238,21 +238,28 @@ export class TransferImportProcessor {
     const job = jobs.get(uploadId);
     if (!job) throw new Error(`Job ${uploadId} not found`);
 
+    console.log(`🔍 Validating ${records.length} records...`);
+    console.log(`📋 Sample record keys:`, Object.keys(records[0] || {}));
+
     for (let i = 0; i < records.length; i++) {
       const record = records[i];
       
-      // Map columns with aliases
+      // Map columns with aliases (more flexible)
       const mappedRecord = {
-        sn: record.sn || record.serial_number || record['Serial Number'] || record['serial no'] || '',
-        kodeItem: record.kode_item || record.item_code || record['Item Code'] || record.sku || record.itemcode || '',
-        namaItem: record.nama_item || record.item_name || record['Item Name'] || record['product name'] || '',
-        qty: parseInt(record.qty || record.quantity || record.jumlah || '1') || 1
+        sn: record.sn || record.serial_number || record['Serial Number'] || record['serial no'] || record.serialno || '',
+        kodeItem: record.kode_item || record.kodeitem || record.item_code || record.itemcode || record['Item Code'] || record.sku || record.code || '',
+        namaItem: record.nama_item || record.namaitem || record.item_name || record.itemname || record['Item Name'] || record['product name'] || record.name || record.description || '',
+        qty: parseInt(record.qty || record.quantity || record.jumlah || record.amount || '1') || 1
       };
 
-      // Validate required fields
+      console.log(`📝 Record ${i + 1}:`, { original: record, mapped: mappedRecord });
+
+      // More lenient validation - require either SN or item code
       if (mappedRecord.sn || mappedRecord.kodeItem) {
         validRecords.push(mappedRecord);
+        console.log(`✅ Record ${i + 1} valid`);
       } else {
+        console.log(`❌ Record ${i + 1} invalid - missing both SN and item code`);
         job.progress.rowsFailed++;
       }
 
@@ -264,6 +271,7 @@ export class TransferImportProcessor {
       }
     }
 
+    console.log(`📊 Validation complete: ${validRecords.length} valid out of ${records.length}`);
     return validRecords;
   }
 
@@ -272,31 +280,44 @@ export class TransferImportProcessor {
     const job = jobs.get(uploadId);
     if (!job) throw new Error(`Job ${uploadId} not found`);
 
-    const batchSize = 5000;
+    console.log(`💾 Writing ${records.length} records to database for TO ID: ${toId}`);
+
+    const batchSize = 1000; // Smaller batches for better error handling
     let written = 0;
 
     for (let i = 0; i < records.length; i += batchSize) {
       const batch = records.slice(i, i + batchSize);
       const insertData = batch.map(record => ({
         toId,
-        ...record
+        sn: record.sn || null,
+        kodeItem: record.kodeItem || null,
+        namaItem: record.namaItem || null,
+        qty: record.qty || 1
       }));
 
+      console.log(`📝 Writing batch ${i / batchSize + 1} with ${batch.length} records...`);
+      console.log(`📋 Sample insert data:`, insertData[0]);
+
       try {
-        await db.insert(toItemList).values(insertData);
+        const result = await db.insert(toItemList).values(insertData).returning();
         written += batch.length;
+        
+        console.log(`✅ Batch ${i / batchSize + 1} written successfully: ${result.length} rows`);
         
         // Update progress
         job.progress.rowsWritten = written;
         this.calculateThroughput(job);
         this.emitProgress(uploadId);
         
-        console.log(`📝 Batch written: ${written}/${records.length} records`);
+        console.log(`📊 Progress: ${written}/${records.length} records written`);
       } catch (error) {
-        console.error('❌ Batch write error:', error);
+        console.error(`❌ Batch write error for batch ${i / batchSize + 1}:`, error);
+        console.error(`📋 Failed insert data sample:`, insertData[0]);
         throw error;
       }
     }
+
+    console.log(`🎉 All ${written} records written successfully!`);
   }
 
   // Calculate throughput and ETA
