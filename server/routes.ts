@@ -401,8 +401,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   const { jobQueue } = await import('./jobQueue');
   const { progressSSE } = await import('./progressSSE');
   
-  // Note: Staging tables initialization temporarily disabled due to PostgreSQL sequence conflict
-  // This doesn't affect the core job queue functionality
+  // Initialize ImportWorker to start processing jobs
+  const { ImportWorker } = await import('./importWorker');
+  new ImportWorker();
+  
   console.log('🚀 High-performance import system initialized with job queue and SSE');
 
   // Health check
