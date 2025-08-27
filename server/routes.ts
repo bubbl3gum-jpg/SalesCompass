@@ -22,8 +22,10 @@ import {
   insertStaffSchema,
   insertPositionSchema,
   insertToItemListSchema,
+  toItemList,
   type Pricelist 
 } from "@shared/schema";
+import { db } from "./db";
 
 // Progress tracking for imports
 const importProgress = new Map<string, { current: number; total: number; status: string }>();
@@ -872,75 +874,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // New high-performance import progress endpoints
-  
-  // Get job status and progress
-  app.get('/api/import/progress/:jobId', isAuthenticated, (req, res) => {
-    const { jobId } = req.params;
-    const job = jobQueue.getJob(jobId);
-    
-    if (!job) {
-      return res.status(404).json({ message: 'Import job not found' });
-    }
 
-    res.json({
-      id: job.id,
-      status: job.status,
-      progress: job.progress,
-      result: job.result,
-      error: job.error,
-      createdAt: job.createdAt,
-      startedAt: job.startedAt,
-      completedAt: job.completedAt
-    });
-  });
 
-  // Server-Sent Events for real-time progress updates
-  app.get('/api/import/progress/:jobId/stream', isAuthenticated, (req, res) => {
-    const { jobId } = req.params;
-    const job = jobQueue.getJob(jobId);
-    
-    if (!job) {
-      return res.status(404).json({ message: 'Import job not found' });
-    }
-
-    progressSSE.handleSSEConnection(req, res, jobId);
-  });
-
-  // Cancel a running import job
-  app.delete('/api/import/:jobId', isAuthenticated, (req, res) => {
-    const { jobId } = req.params;
-    const success = jobQueue.cancelJob(jobId);
-    
-    if (success) {
-      res.json({ message: 'Import job cancelled successfully' });
-    } else {
-      res.status(400).json({ message: 'Cannot cancel job (not found or already completed)' });
-    }
-  });
 
   // Get all import jobs for monitoring (admin only) - simplified
   app.get('/api/import/jobs', isAuthenticated, (req, res) => {
     res.json([]); // No jobs in direct import mode
   });
 
-  // Performance monitoring endpoint for import system
-  app.get('/api/import/system-stats', isAuthenticated, (req, res) => {
-    res.json({
-      activeJobs: jobQueue.getActiveJobsCount(),
-      totalConnections: progressSSE.getConnectionCount(),
-      systemStatus: 'operational',
-      lastUpdated: new Date().toISOString()
-    });
-  });
 
-  // ===== HIGH-PERFORMANCE IMPORT SYSTEM ACTIVE =====
-  // Legacy synchronous import endpoints completely removed and replaced with:
-  // ✅ Job queue system with sub-1s response times
-  // ✅ Background worker processing with staging tables  
-  // ✅ Server-sent events for real-time progress updates
-  // ✅ Bulk operations for ≥50k rows/min throughput
-  // All import processing now happens asynchronously via the job queue
+  // Simple direct import system
 
   // Retry single failed import record
   app.post('/api/import/retry', isAuthenticated, async (req, res) => {

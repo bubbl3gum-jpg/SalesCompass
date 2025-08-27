@@ -1,0 +1,277 @@
+You are an expert full-stack engineer. Implement a production-ready import feature that ingests large CSV/XLSX files quickly, smoothly, and with minimal cloud/app traffic. Prioritize streaming, idempotency, and concise network flows. Keep UX crisp with a live progress bar.
+
+Tech Stack (use these unless told otherwise)
+
+Backend: FastAPI (Python)
+
+DB: MySQL 8
+
+Cache/Queue: Redis + Celery/RQ
+
+Object storage: S3-compatible (minio / AWS S3)
+
+Frontend: React (or framework-agnostic HTML/JS if simpler)
+
+If a different stack is detected, adapt patterns (e.g., Node + Nest, Postgres COPY, GCS signed URLs) but keep the same architecture goals.
+
+Core Goals
+
+Direct-to-object-storage upload: Client uploads file straight to S3 via pre-signed URL (bypass app server).
+
+Streamed parsing: Workers stream from S3; never load full file into memory.
+
+Chunked DB writes: Batch inserts/upserts (e.g., 5k–20k rows per transaction).
+
+Low network chatter: One control-plane call to init, one to complete, short polling or WebSocket for progress. No re-uploading or echoing payloads.
+
+Idempotent + resumable: Idempotency keys, content fingerprints, safe replays.
+
+Visible progress: Deterministic progress bar with row counts, throughput, ETA.
+
+Schema mapping & validation: Header mapping (aliases), preview sample, typed coercion, row-level error ledger.
+
+Resource limits: Bounded memory/CPU, backpressure & concurrency caps per user.
+
+User Flow (happy path)
+
+POST /imports/initiate → returns:
+
+upload_id, presigned_url (PUT), max_part_size, content_md5
+
+Client uploads file → S3 (PUT to presigned_url, multipart if big)
+
+POST /imports/complete with { upload_id, file_key, file_size, file_sha256 }
+
+Backend enqueues a worker job to parse from S3 → validate → bulk write to DB
+
+Client shows /status or WebSocket events for progress; renders a progress bar
+
+On success: summary (rows_ok, rows_failed, duplicates_skipped, duration)
+
+API Design (spec it exactly)
+1) Initiate
+
+POST /imports/initiate
+
+{
+  "file_name": "opening_stock.xlsx",
+  "content_type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "expected_schema": "opening_stock"  // or "price_list", etc.
+}
+
+
+Response
+
+{
+  "upload_id": "imp_9s7y...d2",
+  "presigned_url": "https://s3...signature...",
+  "file_key": "imports/2025/08/imp_9s7y...d2/opening_stock.xlsx",
+  "max_part_size": 5242880,
+  "content_md5": "base64-md5",
+  "expires_in_seconds": 900,
+  "idempotency_key": "idem_abc123"
+}
+
+2) Complete
+
+POST /imports/complete
+
+{
+  "upload_id": "imp_9s7y...d2",
+  "file_key": "imports/2025/08/imp_9s7y...d2/opening_stock.xlsx",
+  "file_size": 104857600,
+  "file_sha256": "hexstring",
+  "idempotency_key": "idem_abc123"
+}
+
+
+Response
+
+{ "job_id": "job_4f2c...", "status": "queued" }
+
+3) Status (polling)
+
+GET /imports/{upload_id}/status
+
+{
+  "phase": "parsing|validating|writing|done|failed",
+  "rows_total": 1000000,
+  "rows_parsed": 420000,
+  "rows_valid": 410000,
+  "rows_written": 400000,
+  "rows_failed": 10000,
+  "duplicates_skipped": 0,
+  "throughput_rps": 9500,
+  "eta_seconds": 96,
+  "started_at": "2025-08-27T03:10:00Z",
+  "updated_at": "2025-08-27T03:12:04Z",
+  "summary_url": "s3://.../imp_9s7y...d2_summary.jsonl"
+}
+
+4) Live events (preferred)
+
+WebSocket /imports/{upload_id}/events
+Emit compact JSON deltas every ~250–500 ms while active.
+
+Worker Pipeline (from S3 to DB)
+
+Open object stream (range requests ok).
+
+Detect type: .csv vs .xlsx.
+
+CSV: use a streaming reader (Python: csv with incremental decode, io.TextIOWrapper, detect delimiter, handle \r\n vs \n, encoding sniff).
+
+XLSX: use openpyxl in read_only=True and data_only=True with iter_rows(); avoid pandas for memory reasons.
+
+Header mapping (aliases):
+
+Example canonical → aliases
+
+serial_number: serial_number, serial no, serial, sn
+
+item_code: item_code, kode item, kode_item, sku, itemcode
+
+qty: qty, quantity, jumlah
+
+Preview 200 rows → build mapping + type coercion plan → persist a manifest (JSON)
+
+Row validation (streamed): collect only first N (e.g., 1000) errors to avoid log bloat
+
+Batch writes: accumulate N valid rows (5k–20k) → one DB transaction with executemany/bulk upsert; prefer MySQL LOAD DATA LOCAL INFILE when safe/available to minimize round trips
+
+Idempotency: dedupe by (upload_id, row_hash) and/or table’s natural key; allow re-run without double-inserts
+
+Backpressure: limit concurrent imports per user/tenant; queue depth caps
+
+Performance & Traffic Rules
+
+Direct upload to S3 = no file bytes crossing app servers. App handles control-plane only.
+
+Worker must run in the same region/VPC as S3 to avoid egress.
+
+Never echo sample data back over the wire unless explicitly requested. Use manifest summaries.
+
+Prefer gzip for CSV at upload; support .csv.gz.
+
+Memory target: < 200 MB peak for 1M rows (CSV).
+
+Latency SLOs:
+
+10k rows: ≤ 10s end-to-end
+
+100k rows: ≤ 60s
+
+1M rows (CSV): ≤ 3–5 min (infra dependent)
+
+Network budget: total egress ≈ file size (+ ≤10% overhead). No duplicate downloads.
+
+Data Model Hooks (examples)
+
+imports table: upload_id (PK), file_key, file_sha256, status, rows_total, rows_written, rows_failed, started_at, finished_at, idempotency_key, summary_key
+
+import_errors (rolling cap): upload_id, row_number, error_code, message, raw_sample (nullable)
+
+Target tables should have clear unique keys for dedupe (e.g., serial_number).
+
+Frontend UX (smooth vibes)
+
+Single card with: file picker (accept .csv,.xlsx,.csv.gz), file size shown.
+
+On “Upload” → call /imports/initiate, PUT to presigned_url.
+
+Show progress bar immediately (upload %), then switch to processing % from status/events.
+
+Display rows written / failed / throughput / ETA; show a Download errors (.csv) link if any.
+
+Keep actions snappy; disable heavy DOM updates (throttle renders to ~4/second).
+
+Reliability & Safety
+
+File limits: default 250 MB (configurable).
+
+Content-type & extension checks; server-side magic-byte sniff.
+
+Virus scan hook (optional) or quarantine bucket.
+
+Timeouts, retries with exponential backoff for S3/DB.
+
+Structured logging with upload_id correlation; Prometheus metrics (duration, rps, errors).
+
+RBAC: only permitted roles can import to given datasets.
+
+Acceptance Criteria (must pass)
+
+Upload goes client → S3; app server never proxies the file bytes.
+
+Worker streams from S3; peak memory stays under target.
+
+For a 100 MB CSV (~1M rows), completes within the SLO and within network budget.
+
+Progress is visible at least every 0.5–1.0s during processing, with accurate ETA (±20%).
+
+Re-issuing /imports/complete with the same idempotency_key does not double-insert.
+
+CSV with mixed encodings and irregular newlines still imports; bad rows counted, not fatal.
+
+XLSX with 5 sheets: user can select sheet or default to first non-empty; streaming read works.
+
+Error log capped; downloadable error CSV is provided.
+
+Concurrency guard prevents >1 heavy import per tenant by default (configurable).
+
+Unit/integration tests cover CSV+XLSX, large files, idempotency, and DB failures.
+
+Skeletons (sketch)
+
+FastAPI endpoints (sketch)
+
+@app.post("/imports/initiate")
+def initiate_import(req: InitiateReq, user=Depends(auth)):
+    # create upload_id, compute key, generate presigned PUT url
+    # persist draft import row with status="initiated"
+    return {...}
+
+@app.post("/imports/complete")
+def complete_import(req: CompleteReq, user=Depends(auth)):
+    # idempotency check; enqueue background job
+    return {"job_id": job_id, "status": "queued"}
+
+@app.get("/imports/{upload_id}/status")
+def status(upload_id: str, user=Depends(auth)):
+    # read from cache/db; return progress struct
+    return progress_dict
+
+
+Worker (sketch)
+
+def process_import(upload_id: str):
+    # stream from S3 -> detect format -> header map
+    # validate rows -> batch write with executemany() or LOAD DATA
+    # update progress every batch; on done set status="done"
+
+
+Progress payload (frontend)
+
+type Progress = {
+  phase: 'uploading'|'parsing'|'validating'|'writing'|'done'|'failed';
+  rows_total?: number;
+  rows_parsed?: number;
+  rows_valid?: number;
+  rows_written?: number;
+  rows_failed?: number;
+  duplicates_skipped?: number;
+  throughput_rps?: number;
+  eta_seconds?: number;
+};
+
+Implementation Notes
+
+Prefer LOAD DATA LOCAL INFILE where possible for CSV to minimize round trips. Otherwise use batched INSERT ... ON DUPLICATE KEY UPDATE.
+
+For XLSX, openpyxl iter_rows(values_only=True), read_only=True.
+
+Header alias map should be configurable per dataset.
+
+Store manifest.json per import (schema map, inferred types, counts).
+
+Use Idempotency-Key header; also fingerprint the uploaded object (sha256) and refuse duplicate work unless explicitly allowed.
