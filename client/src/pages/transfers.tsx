@@ -38,6 +38,7 @@ const transferFormSchema = z.object({
   dariGudang: z.string().min(1, "Source store is required"),
   keGudang: z.string().min(1, "Destination store is required"),
   tanggal: z.string().min(1, "Date is required"),
+  file: z.instanceof(File, { message: "File is required" }),
 });
 
 type TransferFormData = z.infer<typeof transferFormSchema>;
@@ -52,6 +53,7 @@ export default function Transfers() {
   const [fromStoreOpen, setFromStoreOpen] = useState(false);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [selectedTransferForDetails, setSelectedTransferForDetails] = useState<any>(null);
+  const [transferFile, setTransferFile] = useState<File | null>(null);
 
   const form = useForm<TransferFormData>({
     resolver: zodResolver(transferFormSchema),
@@ -59,6 +61,7 @@ export default function Transfers() {
       dariGudang: "",
       keGudang: "",
       tanggal: new Date().toISOString().split('T')[0],
+      file: undefined as any,
     },
   });
 
@@ -74,19 +77,36 @@ export default function Transfers() {
     retry: false,
   });
 
-  // Create transfer mutation
+  // Create transfer with file mutation
   const createTransferMutation = useMutation({
     mutationFn: async (data: TransferFormData) => {
-      const response = await apiRequest('POST', '/api/transfers', data);
+      const formData = new FormData();
+      formData.append('dariGudang', data.dariGudang);
+      formData.append('keGudang', data.keGudang);
+      formData.append('tanggal', data.tanggal);
+      formData.append('file', data.file);
+      
+      const response = await fetch('/api/transfers/create-with-import', {
+        method: 'POST',
+        body: formData,
+        credentials: 'include',
+      });
+      
+      if (!response.ok) {
+        const error = await response.text();
+        throw new Error(error || 'Failed to create transfer');
+      }
+      
       return response.json();
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
       toast({
         title: "Success",
-        description: "Transfer order created successfully",
+        description: `Transfer order created with ${result.import?.inserted || 0} items imported`,
       });
       queryClient.invalidateQueries({ queryKey: ["/api/transfers"] });
       form.reset();
+      setTransferFile(null);
       setShowTransferModal(false);
     },
     onError: (error) => {
@@ -429,12 +449,46 @@ export default function Transfers() {
                 )}
               />
 
+              <FormField
+                control={form.control}
+                name="file"
+                render={({ field: { value, onChange, ...field } }) => (
+                  <FormItem>
+                    <FormLabel className="text-gray-700 dark:text-gray-300">
+                      Import File (Required) <span className="text-red-500">*</span>
+                    </FormLabel>
+                    <FormControl>
+                      <Input
+                        type="file"
+                        accept=".csv,.xlsx,.xls"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            onChange(file);
+                            setTransferFile(file);
+                          }
+                        }}
+                        data-testid="input-transfer-file"
+                        className="cursor-pointer"
+                        {...field}
+                      />
+                    </FormControl>
+                    {transferFile && (
+                      <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                        Selected: {transferFile.name} ({(transferFile.size / 1024).toFixed(1)} KB)
+                      </p>
+                    )}
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
               <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
                 <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
-                  After creating the Transfer Order, you can import items using CSV or Excel files.
+                  CSV/Excel file will be imported immediately after creating the Transfer Order.
                 </p>
                 <p className="text-xs text-gray-500 dark:text-gray-500">
-                  Required format: sn, kode_item, nama_item, qty (all fields must be included in transfer imports)
+                  Required columns: sn, kode_item, nama_item (optional), qty
                 </p>
               </div>
 

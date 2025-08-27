@@ -1,0 +1,259 @@
+Feature lives on Transfer page.
+
+Two primary actions: Create New Transfer and Import Items.
+
+Items imported from .csv must land in DB table to_itemlist (transfer line items).
+
+Users must be able to view details (including imported items), delete individual items, and delete the whole transfer (with safe rules).
+
+Currently, “import” and “create transfer” are separate. We want a single, streamlined flow: choose deliverer & receiver when creating, then optionally attach a CSV to import items immediately.
+
+GOALS (Acceptance Criteria)
+
+Create Transfer (single flow)
+
+Modal/form: from_store, to_store, deliverer, receiver, optional CSV file input.
+
+On submit → creates a DRAFT transfer record and, if a file is attached, parses/imports into to_itemlist.
+
+After success, navigates to View Details page showing header and line items.
+
+Import Items (post-creation)
+
+On the transfer’s View Details page, an “Import Items” button accepts .csv and appends rows to to_itemlist for that transfer.
+
+Show real-time progress (client progress bar; chunked upload or background job polling).
+
+Idempotent: re-uploads of the same file (by content hash) do not create duplicates unless user explicitly allows.
+
+View Details
+
+Header shows: transfer ID, status (DRAFT/SENT/RECEIVED/CANCELLED), from_store, to_store, deliverer, receiver, created_at, created_by.
+
+Items table shows live contents of to_itemlist: columns (line_no, serial_number, item_code, qty, note, created_at).
+
+Totals row: item count and sum of qty.
+
+Actions per line: Delete item (with confirmation).
+
+Global actions: Import Items, Delete Transfer (with confirmation).
+
+Delete
+
+Delete Item removes a single row from to_itemlist.
+
+Delete Transfer:
+
+Allowed only while status is DRAFT.
+
+Deletes all associated to_itemlist rows (cascade) and the transfer header.
+
+Requires RBAC permission transfer.delete.
+
+Validation & Errors
+
+CSV required columns: serial_number, item_code (aka kode_item), qty. Accept common aliases (e.g., serial, sn, sku, kode_item, quantity, jumlah).
+
+qty must be integer > 0.
+
+Reject rows missing required fields; surface a downloadable error report (CSV) with row numbers & messages.
+
+Prevent duplicates within the same transfer: unique (transfer_id, serial_number) and unique (transfer_id, item_code, line_no) constraints.
+
+If from_store == to_store, block with clear error.
+
+Performance
+
+Parse CSV streaming (no loading entire file into memory). Process in batches (e.g., 500–1000 rows).
+
+Show progress updates via SSE/WebSocket or polling.
+
+DB writes in transactions per batch; use bulk insert.
+
+Security & Audit
+
+Enforce RBAC:
+
+transfer.create, transfer.import, transfer.delete, transfer.item.delete, transfer.view.
+
+Write audit logs for create/import/delete actions (who, when, counts).
+
+Tests
+
+Unit tests for CSV parser (header mapping, type casting, bad data).
+
+API tests: happy paths + validation errors + idempotency + RBAC.
+
+E2E test: create transfer with CSV, verify rows visible, delete one item, delete transfer.
+
+DATA MODEL (propose/ensure)
+
+transfers (header)
+
+id (PK), from_store_id (FK), to_store_id (FK)
+
+deliverer_user_id (FK), receiver_user_id (FK)
+
+status ENUM(DRAFT,SENT,RECEIVED,CANCELLED) DEFAULT DRAFT
+
+created_at, created_by
+
+to_itemlist (lines)
+
+id (PK), transfer_id (FK → transfers.id ON DELETE CASCADE)
+
+line_no INT
+
+serial_number VARCHAR(…)
+
+item_code VARCHAR(…)
+
+qty INT
+
+note TEXT NULL
+
+created_at
+
+Unique constraints:
+
+UNIQUE(transfer_id, serial_number)
+
+UNIQUE(transfer_id, line_no)
+
+import_jobs (optional if background processing)
+
+id (PK), transfer_id, file_hash, file_name, status (PENDING,RUNNING,DONE,FAILED)
+
+total_rows, processed_rows, error_rows, created_at, ended_at
+
+error_report_path (nullable)
+
+API CONTRACT (FastAPI example names; adapt to your stack)
+
+POST /transfers
+
+Body: { from_store_id, to_store_id, deliverer_user_id, receiver_user_id }
+
+Returns: { id, status, ... }
+
+POST /transfers/{transfer_id}/items/import
+
+Multipart: file: csv, optional mode = skip|upsert|allow_dupes (default skip)
+
+Creates import_job (if async) or processes synchronously in batches.
+
+Returns: { job_id } or { imported_count, skipped_count, errors_count }
+
+GET /imports/{job_id}/status
+
+Returns progress: { status, processed_rows, total_rows, errors_count, error_report_url }
+
+GET /transfers/{transfer_id}
+
+Returns header and paginated to_itemlist rows.
+
+DELETE /transfers/{transfer_id}
+
+Hard-delete allowed only in DRAFT.
+
+DELETE /transfers/{transfer_id}/items/{item_id}
+
+Deletes one line.
+
+Idempotency: For imports, compute SHA-256 of file; if same file_hash already imported for this transfer and mode=skip, return 409 with guidance or 200 with no-op per product decision.
+
+CSV PARSING RULES
+
+Accept .csv UTF-8, , delimiter, header row required.
+
+Header mapping:
+
+serial_number: aliases [serial_number, serial no, serial, sn]
+
+item_code: aliases [item_code, kode item, kode_item, sku, itemcode]
+
+qty: aliases [qty, quantity, jumlah]
+
+Trim whitespace; treat empty string as NULL; cast qty to INT.
+
+Row-level validation:
+
+Missing required → send to error report (don’t fail whole batch).
+
+Non-numeric qty or qty<=0 → error report.
+
+Return/serve an error CSV with row_number, field, error_message, original_value.
+
+UI/UX SPEC
+
+Create Transfer Modal:
+
+Fields: From Store (select), To Store (select), Deliverer (select), Receiver (select), optional CSV file input, “Create & Import” button.
+
+On submit → show inline progress bar if importing, then redirect to View Details.
+
+View Details Page:
+
+Header: metadata & status badge.
+
+Buttons: Import Items, Delete Transfer (disabled if status != DRAFT).
+
+Items table (paginated, searchable by serial/item_code).
+
+Row actions: Delete.
+
+Import Items opens file picker, shows progress; on finish, table refreshes automatically.
+
+Toasts/snackbars for success/failure; link to download error report if any.
+
+IMPLEMENTATION NOTES
+
+Streaming import: use chunked read (e.g., 5–10 MB) and batch inserts (500–1000 rows/commit).
+
+Progress: if not using websockets, poll /imports/{job_id}/status every 500–1000 ms during import.
+
+Transactions: wrap each batch; on failure, rollback that batch only; proceed to next.
+
+Constraints: rely on UNIQUE keys to reject duplicates; count them as “skipped”.
+
+Logging/Audit: log user_id, transfer_id, counts and timing.
+
+RBAC: guard endpoints; return 403 if missing permissions.
+
+Empty states: show guidance when no items yet.
+
+TEST MATRIX (minimum)
+
+Create transfer without file → 201; visible in details; status DRAFT.
+
+Create transfer with valid CSV (1000 rows) → imports all; details show rows; totals correct.
+
+Import again same file → idempotency respected per mode.
+
+CSV with 20% bad rows → good rows inserted; error report downloadable; counts match.
+
+Delete item → disappears from table; totals update; audit logged.
+
+Delete transfer in DRAFT → cascades items; 404 on subsequent fetch.
+
+Delete transfer in SENT → 400 with clear message.
+
+RBAC: user without transfer.delete gets 403 on both delete endpoints.
+
+Performance: 50k rows under acceptable time; UI progress increments smoothly.
+
+DELIVERABLES
+
+DB migrations (DDL) for transfers, to_itemlist, optional import_jobs.
+
+Backend handlers with unit/integration tests.
+
+Frontend components: Create Modal, View Details, Import dialog, progress UI.
+
+Error report generator.
+
+RBAC checks.
+
+README with API examples and screenshots/gifs of flow.
+
+If something is ambiguous (e.g., exact column sizes, store/user catalogs), choose sensible defaults and document them inline.

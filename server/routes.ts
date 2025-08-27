@@ -2,6 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./replitAuth";
+import crypto from 'crypto';
 import { z } from "zod";
 import { withCache, CACHE_KEYS, CACHE_TTL, invalidateCache, invalidateCachePattern } from "./cache";
 import { cache } from "./cache";
@@ -1243,6 +1244,91 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Create transfer with immediate file import (REQUIRED FILE)
+  app.post('/api/transfers/create-with-import', isAuthenticated, upload.single('file'), async (req, res) => {
+    try {
+      const { dariGudang, keGudang, tanggal } = req.body;
+      const file = req.file;
+
+      // Validate required fields
+      if (!dariGudang || !keGudang || !file) {
+        return res.status(400).json({ 
+          message: 'Source store, destination store, and file are required' 
+        });
+      }
+
+      // Validate stores are different
+      if (dariGudang === keGudang) {
+        return res.status(400).json({ 
+          message: 'Source and destination stores must be different' 
+        });
+      }
+
+      // Step 1: Create transfer order
+      const transferOrder = await storage.createTransferOrder({
+        dariGudang,
+        keGudang,
+        tanggal: tanggal || new Date().toISOString().split('T')[0],
+      });
+
+      // Step 2: Upload file to object storage
+      const fileName = file.originalname;
+      const contentType = file.mimetype || 'text/csv';
+      
+      const uploadResult = await transferImportStorage.generatePresignedUploadUrl(fileName, contentType);
+      
+      // Upload file buffer to presigned URL
+      const uploadResponse = await fetch(uploadResult.presignedUrl, {
+        method: 'PUT',
+        body: file.buffer,
+        headers: {
+          'Content-Type': contentType,
+        },
+      });
+
+      if (!uploadResponse.ok) {
+        throw new Error('Failed to upload file to storage');
+      }
+
+      // Step 3: Create import job using existing processor
+      const fileSha256 = crypto.createHash('sha256').update(file.buffer).digest('hex');
+      
+      const job = transferImportProcessor.createJob({
+        uploadId: uploadResult.uploadId,
+        fileKey: uploadResult.fileKey,
+        fileName: fileName,
+        fileSize: file.size,
+        fileSha256,
+        toId: transferOrder.toId,
+        idempotencyKey: `create_${transferOrder.toId}_${Date.now()}`
+      });
+
+      // Wait briefly for initial processing
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      // Get job status
+      const jobStatus = transferImportProcessor.getJob(uploadResult.uploadId);
+
+      res.json({
+        toId: transferOrder.toId,
+        transferOrder,
+        import: {
+          uploadId: uploadResult.uploadId,
+          status: jobStatus?.status,
+          inserted: jobStatus?.progress.rowsWritten || 0,
+          skipped: jobStatus?.progress.duplicatesSkipped || 0,
+          errors: jobStatus?.progress.rowsFailed || 0,
+        }
+      });
+
+    } catch (error) {
+      console.error('Transfer creation with import error:', error);
+      res.status(500).json({ 
+        message: error instanceof Error ? error.message : 'Failed to create transfer with import' 
+      });
+    }
+  });
+
   // Get transfer orders
   app.get('/api/transfers', isAuthenticated, async (req, res) => {
     try {
@@ -1267,6 +1353,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('Get transfer items error:', error);
       res.status(500).json({ message: 'Failed to get transfer items' });
+    }
+  });
+
+  // Delete transfer item
+  app.delete('/api/transfers/:toId/items/:toItemListId', isAuthenticated, checkRole(['Supervisor', 'Stockist', 'System Administrator']), async (req, res) => {
+    try {
+      const toId = parseInt(req.params.toId);
+      const toItemListId = parseInt(req.params.toItemListId);
+      
+      if (isNaN(toId) || isNaN(toItemListId)) {
+        return res.status(400).json({ message: 'Invalid IDs' });
+      }
+      
+      await storage.deleteTransferItem(toItemListId, toId);
+      res.status(204).send();
+    } catch (error) {
+      console.error('Delete transfer item error:', error);
+      res.status(500).json({ message: 'Failed to delete transfer item' });
+    }
+  });
+
+  // Delete entire transfer order
+  app.delete('/api/transfers/:toId', isAuthenticated, checkRole(['Supervisor', 'Stockist', 'System Administrator']), async (req, res) => {
+    try {
+      const toId = parseInt(req.params.toId);
+      
+      if (isNaN(toId)) {
+        return res.status(400).json({ message: 'Invalid transfer ID' });
+      }
+      
+      // First delete all items
+      await storage.deleteAllTransferItems(toId);
+      // Then delete the transfer order
+      await storage.deleteTransferOrder(toId);
+      
+      res.status(204).send();
+    } catch (error) {
+      console.error('Delete transfer error:', error);
+      res.status(500).json({ message: 'Failed to delete transfer order' });
     }
   });
 

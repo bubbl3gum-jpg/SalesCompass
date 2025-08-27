@@ -244,12 +244,25 @@ export class TransferImportProcessor {
     for (let i = 0; i < records.length; i++) {
       const record = records[i];
       
-      // Map columns with aliases (more flexible)
+      // Map columns with aliases - canonical order: sn, kode_item, nama_item, qty
+      // Normalize header names (case-insensitive, space/underscore tolerant)
+      const normalizeKey = (obj: any, aliases: string[]): string => {
+        for (const key of Object.keys(obj)) {
+          const normalizedKey = key.toLowerCase().replace(/[\s_-]/g, '');
+          for (const alias of aliases) {
+            if (normalizedKey === alias.toLowerCase().replace(/[\s_-]/g, '')) {
+              return obj[key]?.toString().trim() || '';
+            }
+          }
+        }
+        return '';
+      };
+
       const mappedRecord = {
-        sn: record.sn || record.serial_number || record['Serial Number'] || record['serial no'] || record.serialno || '',
-        kodeItem: record.kode_item || record.kodeitem || record.item_code || record.itemcode || record['Item Code'] || record.sku || record.code || '',
-        namaItem: record.nama_item || record.namaitem || record.item_name || record.itemname || record['Item Name'] || record['product name'] || record.name || record.description || '',
-        qty: parseInt(record.qty || record.quantity || record.jumlah || record.amount || '1') || 1
+        sn: normalizeKey(record, ['sn', 'serial_number', 'serial no', 'serial', 'serialno']),
+        kodeItem: normalizeKey(record, ['kode_item', 'kode item', 'item_code', 'sku', 'itemcode', 'code']),
+        namaItem: normalizeKey(record, ['nama_item', 'nama item', 'item_name', 'nama', 'itemname', 'product name', 'description']) || null,
+        qty: parseInt(normalizeKey(record, ['qty', 'quantity', 'jumlah', 'amount']) || '1') || 1
       };
 
       console.log(`📝 Record ${i + 1}:`, { original: record, mapped: mappedRecord });

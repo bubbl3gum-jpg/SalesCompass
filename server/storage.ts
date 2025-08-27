@@ -121,6 +121,9 @@ export interface IStorage {
   // Transfer operations
   createTransferOrder(data: InsertTransferOrder): Promise<TransferOrder>;
   getTransferOrders(): Promise<TransferOrder[]>;
+  deleteTransferItem(toItemListId: number, toId: number): Promise<void>;
+  deleteAllTransferItems(toId: number): Promise<void>;
+  deleteTransferOrder(toId: number): Promise<void>;
 
   // EDC operations
   getEdc(): Promise<Edc[]>;
@@ -778,6 +781,22 @@ export class DatabaseStorage implements IStorage {
   
   async getToItemListByTransferOrderId(toId: number): Promise<ToItemList[]> {
     return await db.select().from(toItemList).where(eq(toItemList.toId, toId));
+  }
+
+  async deleteTransferItem(toItemListId: number, toId: number): Promise<void> {
+    await db.delete(toItemList)
+      .where(and(
+        eq(toItemList.toItemListId, toItemListId),
+        eq(toItemList.toId, toId)
+      ));
+  }
+
+  async deleteAllTransferItems(toId: number): Promise<void> {
+    await db.delete(toItemList).where(eq(toItemList.toId, toId));
+  }
+
+  async deleteTransferOrder(toId: number): Promise<void> {
+    await db.delete(transferOrders).where(eq(transferOrders.toId, toId));
   }
 }
 

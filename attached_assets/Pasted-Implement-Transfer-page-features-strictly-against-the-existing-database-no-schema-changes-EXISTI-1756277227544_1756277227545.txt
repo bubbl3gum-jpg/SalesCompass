@@ -1,0 +1,137 @@
+Implement Transfer page features strictly against the existing database (no schema changes).
+
+EXISTING TABLES (use as-is)
+
+transfer_order
+
+to_id (PK, identity), dari_gudang (FK→store.kode_gudang), ke_gudang (FK→store.kode_gudang), tanggal (DATE), to_number (VARCHAR)
+
+to_itemlist
+
+to_itemlist_id (PK, identity), to_id (INT), sn (VARCHAR), kode_item (VARCHAR), qty (INT DEFAULT 1), nama_item (VARCHAR)
+
+Do not alter schema, constraints, or indexes.
+
+SCOPE
+
+Build end-to-end UX + APIs so that:
+
+Create New Transfer requires attaching a .csv or .xlsx file and immediately imports its rows into to_itemlist.
+
+View Details shows imported items and supports Import Items (csv/xlsx), Delete Item, and Delete Transfer.
+
+“Import Items” remains available after creation.
+
+Combine the “New Transfer” action with the existing “Import Items” function: after inserting the transfer header and obtaining to_id, call the same import code path you already use for “Import Items” (do not duplicate logic) to process the initial file for that to_id.
+
+Additional Explanation (re: combination)
+
+After transfer_order is created and to_id is returned, programmatically invoke the existing Import Items flow (same controller/service, same validation, same batching, same error reporting).
+
+Treat this as if the user clicked “Import Items” for that new to_id, but do it automatically during the create flow so both paths share one implementation.
+
+MANDATORY FILE + CANONICAL COLUMN ORDER
+
+File is required on Create New Transfer and required when pressing Import Items.
+
+Accept .csv (UTF-8, comma, header row) and .xlsx.
+
+Be lenient with header names but normalize to this canonical order before insert:
+sn, kode_item, nama_item, qty
+
+Header alias mapping (case/space/underscore tolerant):
+
+sn ← [sn, serial_number, serial no, serial]
+
+kode_item ← [kode_item, kode item, item_code, sku, itemcode]
+
+nama_item ← [nama_item, nama item, item_name, nama] (optional)
+
+qty ← [qty, quantity, jumlah]
+
+Normalize steps per row:
+
+Trim whitespace on all fields.
+
+Build a canonical record with keys in this exact order: sn, kode_item, nama_item, qty.
+
+Cast qty to integer; require sn, kode_item, and qty > 0.
+
+If nama_item missing, insert NULL/empty as allowed by DB.
+
+Insert into to_itemlist using these four fields, plus the correct to_id (see next section).
+
+to_id BEHAVIOR (important)
+
+transfer_order.to_id is auto-generated (identity).
+
+On Create New Transfer: insert header, capture the generated to_id, and use that same to_id for every inserted row in to_itemlist.
+
+Do not auto-increment or generate a separate to_id for to_itemlist—it must reference the header’s to_id.
+
+ACCEPTANCE CRITERIA
+A) Create New Transfer (file required)
+
+Form: From Store (dari_gudang), To Store (ke_gudang), Tanggal (default today), File (.csv/.xlsx, REQUIRED).
+
+Validate: dari_gudang and ke_gudang exist in store.kode_gudang and are not equal. File extension must be csv or xlsx.
+
+Flow: insert transfer_order → get to_id → call the existing Import Items flow with the uploaded file and that to_id → mapping + canonical order → batch insert → redirect to View Details.
+
+B) Import Items (post-creation)
+
+Button on View Details opens upload (csv/xlsx, REQUIRED).
+
+Same mapping & canonical order rules. Batch insert into to_itemlist for the current to_id.
+
+Show progress (spinner or percentage). Provide downloadable error CSV for bad rows (include row_number, field, message, original_value).
+
+C) View Details
+
+Header: to_id, to_number, dari_gudang, ke_gudang, tanggal.
+
+Items table (where to_id = :to_id): columns to_itemlist_id, sn, kode_item, nama_item, qty. Show totals (row count, sum of qty).
+
+Actions: Import Items, Delete item, Delete transfer.
+
+D) Delete
+
+Delete item: DELETE FROM to_itemlist WHERE to_itemlist_id = :id AND to_id = :to_id.
+
+Delete transfer: first DELETE FROM to_itemlist WHERE to_id = :to_id, then DELETE FROM transfer_order WHERE to_id = :to_id. Confirm dialog required.
+
+API CONTRACT (adapt names to your stack)
+
+POST /transfers (multipart): dari_gudang, ke_gudang, optional tanggal, file (.csv/.xlsx REQUIRED)
+→ { to_id, import: { inserted, skipped, errors, error_report_url? } }
+
+GET /transfers/:to_id → header + paginated to_itemlist + totals
+
+POST /transfers/:to_id/items/import (multipart, file REQUIRED)
+→ { inserted, skipped, errors, error_report_url? }
+
+DELETE /transfers/:to_id/items/:to_itemlist_id → 204
+
+DELETE /transfers/:to_id → 204
+
+IMPLEMENTATION NOTES
+
+Batch size ~500–1000 rows. Transactions per batch.
+
+Lenient header parsing: case-insensitive; treat spaces/underscores/hyphens as equivalent.
+
+Duplicate handling (within same to_id): skip exact duplicates of (sn, kode_item, nama_item, qty) and count as “skipped”.
+
+After import/delete, refresh the table and totals.
+
+TESTS (minimum)
+
+Create with CSV and with XLSX → items inserted under the new to_id; order enforced as sn, kode_item, nama_item, qty.
+
+Create without file → blocked with clear error.
+
+Import with mixed good/bad rows → good inserted; bad in downloadable error CSV.
+
+Delete one item → removed from to_itemlist.
+
+Delete transfer → items deleted then header deleted.
