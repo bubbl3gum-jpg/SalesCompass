@@ -66,6 +66,13 @@ type PricelistFormData = z.infer<typeof pricelistFormSchema>;
 export default function PriceLists() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  
+  const [showPriceModal, setShowPriceModal] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [searchTerm, setSearchTerm] = useState<string>('');
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState<string>('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
 
   // Helper function to invalidate and refetch price list data
   const refreshPricelistData = useCallback(async () => {
@@ -75,21 +82,9 @@ export default function PriceLists() {
     queryClient.removeQueries({ queryKey: ['/api/pricelist'] });
     queryClient.clear(); // Clear entire cache as a fallback
     
-    // Force new queries with timestamp to bypass any caching
-    const timestamp = Date.now();
-    await queryClient.refetchQueries({ 
-      queryKey: ['/api/pricelist', currentPage, pageSize, debouncedSearchTerm, timestamp] 
-    });
-    
     // Also refresh the current query
     window.location.reload();
-  }, [queryClient, currentPage, pageSize, debouncedSearchTerm]);
-  const [showPriceModal, setShowPriceModal] = useState(false);
-  const [showImportModal, setShowImportModal] = useState(false);
-  const [searchTerm, setSearchTerm] = useState<string>('');
-  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState<string>('');
-  const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(50);
+  }, [queryClient]);
 
   // Debounce search term to avoid too many API calls
   useEffect(() => {
