@@ -147,12 +147,15 @@ export class TransferImportProcessor {
       job.progress.phase = 'validating';
       this.emitProgress(uploadId);
 
+      // Filter out header rows first
+      const dataRecords = this.filterHeaderRows(records, uploadId);
+      
       // Validate and process records
-      const validRecords = await this.validateRecords(records, uploadId);
+      const validRecords = await this.validateRecords(dataRecords, uploadId);
       
       // Update progress
       job.progress.rowsValid = validRecords.length;
-      job.progress.rowsFailed = records.length - validRecords.length;
+      job.progress.rowsFailed = dataRecords.length - validRecords.length;
       job.progress.phase = 'writing';
       this.emitProgress(uploadId);
 
@@ -185,6 +188,55 @@ export class TransferImportProcessor {
       return this.parseExcel(stream, uploadId);
     } else {
       return this.parseCSV(stream, uploadId);
+    }
+  }
+
+  // Filter out header rows - skip rows containing column headers like "no.baris, sn, kode item, qty"
+  private filterHeaderRows(records: any[], uploadId: string): any[] {
+    console.log(`🔍 Filtering header rows from ${records.length} records...`);
+    
+    // Look for header patterns that indicate column names
+    const headerPatterns = [
+      'no.baris', 'no baris', 'nobaris',
+      'sn', 's/n',
+      'kode item', 'kodeitem', 'item code',
+      'qty', 'quantity', 'jumlah'
+    ];
+    
+    let headerRowIndex = -1;
+    
+    // Find the first row that looks like a header row
+    for (let i = 0; i < records.length; i++) {
+      const record = records[i];
+      const recordValues = Object.values(record).map(v => 
+        (v?.toString() || '').toLowerCase().trim().replace(/[\s_-]/g, '')
+      );
+      
+      // Check if this row contains header-like values
+      let headerMatches = 0;
+      for (const pattern of headerPatterns) {
+        const normalizedPattern = pattern.toLowerCase().replace(/[\s_-]/g, '');
+        if (recordValues.some(value => value === normalizedPattern || value.includes(normalizedPattern))) {
+          headerMatches++;
+        }
+      }
+      
+      // If we found at least 3 header pattern matches, consider this a header row
+      if (headerMatches >= 3) {
+        headerRowIndex = i;
+        console.log(`📋 Found header row at index ${i}:`, record);
+        break;
+      }
+    }
+    
+    if (headerRowIndex >= 0) {
+      // Return only records after the header row
+      const dataRecords = records.slice(headerRowIndex + 1);
+      console.log(`✂️ Skipped ${headerRowIndex + 1} rows (including headers), processing ${dataRecords.length} data rows`);
+      return dataRecords;
+    } else {
+      console.log(`📋 No header row detected, processing all ${records.length} rows`);
+      return records;
     }
   }
 
