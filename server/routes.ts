@@ -834,10 +834,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         console.log(`📊 Parsed ${records.length} records from CSV`);
         
-        const toId = parsedAdditionalData?.toId;
-        const toNumber = parsedAdditionalData?.toNumber || (toId ? `TO-${toId}` : null);
+        const toNumber = parsedAdditionalData?.toNumber;
         if (!toNumber) {
-          return res.status(400).json({ message: 'toNumber or toId is required for transfer items' });
+          return res.status(400).json({ message: 'toNumber is required for transfer items' });
         }
         
         // Insert records directly
@@ -925,11 +924,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Complete transfer import - starts background processing
   app.post('/api/transfer-imports/complete', isAuthenticated, async (req, res) => {
     try {
-      const { uploadId, fileKey, fileSize, fileSha256, idempotencyKey, toId } = req.body;
+      const { uploadId, fileKey, fileSize, fileSha256, idempotencyKey, toNumber } = req.body;
       
-      if (!uploadId || !fileKey || !fileSize || !fileSha256 || !idempotencyKey || !toId) {
+      if (!uploadId || !fileKey || !fileSize || !fileSha256 || !idempotencyKey || !toNumber) {
         return res.status(400).json({ 
-          message: 'uploadId, fileKey, fileSize, fileSha256, idempotencyKey, and toId are required' 
+          message: 'uploadId, fileKey, fileSize, fileSha256, idempotencyKey, and toNumber are required' 
         });
       }
 
@@ -942,7 +941,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         fileName,
         fileSize: parseInt(fileSize),
         fileSha256,
-        toId: parseInt(toId),
+        toNumber: toNumber,
         idempotencyKey
       });
 
@@ -1334,8 +1333,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         fileName: fileName,
         fileSize: file.size,
         fileSha256,
-        toNumber,
-        toId: transferOrder.toId, // Keep for backward compatibility
+        toNumber: transferOrder.toNumber,
         idempotencyKey: `create_${toNumber}_${Date.now()}`
       });
 
@@ -1346,7 +1344,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const jobStatus = transferImportProcessor.getJob(uploadResult.uploadId);
 
       res.json({
-        toId: transferOrder.toId,
+        toNumber: transferOrder.toNumber,
         transferOrder,
         import: {
           uploadId: uploadResult.uploadId,
@@ -1377,14 +1375,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get transfer order items
-  app.get('/api/transfers/:toId/items', isAuthenticated, async (req, res) => {
+  app.get('/api/transfers/:toNumber/items', isAuthenticated, async (req, res) => {
     try {
-      const toId = parseInt(req.params.toId);
-      if (isNaN(toId)) {
-        return res.status(400).json({ message: 'Invalid transfer order ID' });
+      const toNumber = req.params.toNumber;
+      if (!toNumber) {
+        return res.status(400).json({ message: 'Invalid transfer order number' });
       }
       
-      const items = await storage.getToItemListByTransferOrderNumber('TO-' + toId);
+      const items = await storage.getToItemListByTransferOrderNumber(toNumber);
       res.json(items);
     } catch (error) {
       console.error('Get transfer items error:', error);
@@ -1393,16 +1391,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Delete transfer item
-  app.delete('/api/transfers/:toId/items/:toItemListId', isAuthenticated, checkRole(['Supervisor', 'Stockist', 'System Administrator']), async (req, res) => {
+  app.delete('/api/transfers/:toNumber/items/:toItemListId', isAuthenticated, checkRole(['Supervisor', 'Stockist', 'System Administrator']), async (req, res) => {
     try {
-      const toId = parseInt(req.params.toId);
+      const toNumber = req.params.toNumber;
       const toItemListId = parseInt(req.params.toItemListId);
       
-      if (isNaN(toId) || isNaN(toItemListId)) {
-        return res.status(400).json({ message: 'Invalid IDs' });
+      if (!toNumber || isNaN(toItemListId)) {
+        return res.status(400).json({ message: 'Invalid transfer number or item ID' });
       }
       
-      await storage.deleteTransferItem(toItemListId, 'TO-' + toId);
+      await storage.deleteTransferItem(toItemListId, toNumber);
       res.status(204).send();
     } catch (error) {
       console.error('Delete transfer item error:', error);
@@ -1411,18 +1409,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Delete entire transfer order
-  app.delete('/api/transfers/:toId', isAuthenticated, checkRole(['Supervisor', 'Stockist', 'System Administrator']), async (req, res) => {
+  app.delete('/api/transfers/:toNumber', isAuthenticated, checkRole(['Supervisor', 'Stockist', 'System Administrator']), async (req, res) => {
     try {
-      const toId = parseInt(req.params.toId);
+      const toNumber = req.params.toNumber;
       
-      if (isNaN(toId)) {
-        return res.status(400).json({ message: 'Invalid transfer ID' });
+      if (!toNumber) {
+        return res.status(400).json({ message: 'Invalid transfer number' });
       }
       
       // First delete all items
-      await storage.deleteAllTransferItems('TO-' + toId);
+      await storage.deleteAllTransferItems(toNumber);
       // Then delete the transfer order
-      await storage.deleteTransferOrder('TO-' + toId);
+      await storage.deleteTransferOrder(toNumber);
       
       res.status(204).send();
     } catch (error) {
@@ -1557,7 +1555,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const storageData = {
         ...validatedData,
         ...(validatedData.discountAmount !== undefined && {
-          discountAmount: validatedData.discountAmount.toString()
+          discountAmount: String(validatedData.discountAmount)
         })
       };
       const discount = await storage.updateDiscountType(parseInt(discountId), storageData);

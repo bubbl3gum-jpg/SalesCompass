@@ -205,8 +205,7 @@ export const staff = pgTable("staff", {
 
 // Transfer Orders
 export const transferOrders = pgTable("transfer_order", {
-  toId: integer("to_id").generatedByDefaultAsIdentity(),
-  toNumber: varchar("to_number", { length: 50 }).primaryKey().notNull(), // Primary key now
+  toNumber: varchar("to_number", { length: 50 }).primaryKey().notNull(),
   dariGudang: varchar("dari_gudang", { length: 50 }).references(() => stores.kodeGudang),
   keGudang: varchar("ke_gudang", { length: 50 }).references(() => stores.kodeGudang),
   tanggal: date("tanggal"),
@@ -310,7 +309,7 @@ export const insertPricelistSchema = createInsertSchema(pricelist).omit({ pricel
 export const insertOpeningStockSchema = createInsertSchema(openingStock).omit({ itemId: true });
 export const insertLaporanPenjualanSchema = createInsertSchema(laporanPenjualan).omit({ penjualanId: true });
 export const insertSettlementSchema = createInsertSchema(settlements).omit({ settlementId: true });
-export const insertTransferOrderSchema = createInsertSchema(transferOrders).omit({ toId: true });
+export const insertTransferOrderSchema = createInsertSchema(transferOrders);
 export const insertToItemListSchema = createInsertSchema(toItemList).omit({ toItemListId: true });
 export const insertStockOpnameSchema = createInsertSchema(stockOpname).omit({ soId: true });
 export const insertSoItemListSchema = createInsertSchema(soItemList).omit({ soItemListId: true });

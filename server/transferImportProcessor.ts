@@ -26,7 +26,7 @@ export interface TransferImportJob {
   fileName: string;
   fileSize: number;
   fileSha256: string;
-  toId: number;
+  toNumber: string;
   status: 'queued' | 'processing' | 'completed' | 'failed';
   progress: ImportProgress;
   idempotencyKey: string;
@@ -68,7 +68,7 @@ export class TransferImportProcessor {
     fileName: string;
     fileSize: number;
     fileSha256: string;
-    toId: number;
+    toNumber: string;
     idempotencyKey: string;
   }): TransferImportJob {
     // Check idempotency
@@ -335,7 +335,7 @@ export class TransferImportProcessor {
     const jobData = jobs.get(uploadId);
     if (!jobData) throw new Error(`Job ${uploadId} not found`);
 
-    const toNumber = job.toNumber || ('TO-' + job.toId); // Use toNumber if available, else generate from toId
+    const toNumber = job.toNumber;
     console.log(`💾 Writing ${records.length} records to database for TO: ${toNumber}`);
 
     const batchSize = 1000; // Smaller batches for better error handling

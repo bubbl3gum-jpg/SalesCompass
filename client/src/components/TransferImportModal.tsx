@@ -150,7 +150,7 @@ export function TransferImportModal({ isOpen, onClose, transferId, onImportCompl
         fileSize: file.size,
         fileSha256,
         idempotencyKey,
-        toId: transferId
+        toNumber: transferId
       });
       const { jobId, status } = await completeResponse.json();
 

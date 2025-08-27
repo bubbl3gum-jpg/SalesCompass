@@ -212,9 +212,9 @@ export default function Transfers() {
 
                     return (
                       <div
-                        key={transfer.toId}
+                        key={transfer.toNumber}
                         className="flex items-center justify-between p-4 bg-white/10 dark:bg-black/10 rounded-xl hover:bg-white/20 dark:hover:bg-black/20 transition-colors"
-                        data-testid={`card-transfer-${transfer.toId}`}
+                        data-testid={`card-transfer-${transfer.toNumber}`}
                       >
                         <div className="flex items-center space-x-4">
                           <div className="w-12 h-12 bg-gradient-to-r from-purple-500 to-pink-600 rounded-lg flex items-center justify-center">
@@ -222,7 +222,7 @@ export default function Transfers() {
                           </div>
                           <div>
                             <p className="font-medium text-gray-900 dark:text-white">
-                              Transfer #{transfer.toId}
+                              Transfer {transfer.toNumber}
                             </p>
                             <p className="text-sm text-gray-500 dark:text-gray-400">
                               {fromStore?.namaGudang || transfer.dariGudang} → {toStore?.namaGudang || transfer.keGudang}
@@ -242,11 +242,11 @@ export default function Transfers() {
                               size="sm"
                               variant="outline"
                               onClick={() => {
-                                setSelectedTransferId(transfer.toId);
+                                setSelectedTransferId(transfer.toNumber);
                                 setShowImportModal(true);
                               }}
                               className="border-emerald-600 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20"
-                              data-testid={`button-import-items-${transfer.toId}`}
+                              data-testid={`button-import-items-${transfer.toNumber}`}
                             >
                               <i className="fas fa-upload mr-1"></i>
                               Import Items
@@ -259,7 +259,7 @@ export default function Transfers() {
                                 setShowDetailsModal(true);
                               }}
                               className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
-                              data-testid={`button-view-transfer-${transfer.toId}`}
+                              data-testid={`button-view-transfer-${transfer.toNumber}`}
                             >
                               View Details
                             </Button>
@@ -535,7 +535,7 @@ export default function Transfers() {
         <DialogContent className="max-w-4xl bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700">
           <DialogHeader>
             <DialogTitle className="text-2xl font-bold text-gray-900 dark:text-white">
-              Transfer Order Details #{selectedTransferForDetails?.toId}
+              Transfer Order Details {selectedTransferForDetails?.toNumber}
             </DialogTitle>
           </DialogHeader>
 
@@ -555,12 +555,12 @@ export default function Transfers() {
 // Transfer Details Content Component
 function TransferDetailsContent({ transfer, stores, onClose }: { 
   transfer: any, 
-  stores: any[], 
+  stores: any[] | undefined, 
   onClose: () => void 
 }) {
   const { data: transferItems, isLoading: itemsLoading } = useQuery({
-    queryKey: ['/api/transfers', transfer.toId, 'items'],
-    enabled: !!transfer.toId,
+    queryKey: ['/api/transfers', transfer.toNumber, 'items'],
+    enabled: !!transfer.toNumber,
   });
 
   const fromStore = stores?.find((s: any) => s.kodeGudang === transfer.dariGudang);
@@ -608,7 +608,7 @@ function TransferDetailsContent({ transfer, stores, onClose }: {
       {/* Transfer Items */}
       <div>
         <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-          Transfer Items {transferItems && Array.isArray(transferItems) && `(${transferItems.length} items)`}
+          Transfer Items {transferItems && Array.isArray(transferItems) ? `(${transferItems.length} items)` : ''}
         </h3>
         
         {itemsLoading ? (
