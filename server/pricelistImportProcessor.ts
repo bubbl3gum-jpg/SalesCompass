@@ -198,13 +198,13 @@ class PricelistImportProcessor extends EventEmitter {
         // Map columns from various aliases
         const mappedRecord = this.mapColumns(record);
         
-        // Validate required fields
-        if (!mappedRecord.kodeItem) {
+        // Validate required fields - only require normal_price
+        if (!mappedRecord.normalPrice || mappedRecord.normalPrice === '0' || mappedRecord.normalPrice === '') {
           job.errors.push({
             row: rowIndex,
-            field: 'kode_item',
-            value: null,
-            message: 'Missing required field: kode_item'
+            field: 'normal_price',
+            value: mappedRecord.normalPrice,
+            message: 'Missing or invalid normal_price - record must have a valid price to import'
           });
           job.progress.rowsFailed++;
           continue;
@@ -278,8 +278,8 @@ class PricelistImportProcessor extends EventEmitter {
     // sn ← aliases: [sn, serial_number, serial no, serial]
     mapped.sn = this.findColumn(record, ['sn', 'serial_number', 'serial no', 'serial']) || null;
 
-    // kode_item ← [kode item, kode_item, item_code, sku, itemcode] - REQUIRED
-    mapped.kodeItem = this.findColumn(record, ['kode item', 'kode_item', 'item_code', 'sku', 'itemcode']);
+    // kode_item ← [kode item, kode_item, item_code, sku, itemcode] - OPTIONAL
+    mapped.kodeItem = this.findColumn(record, ['kode item', 'kode_item', 'item_code', 'sku', 'itemcode']) || null;
 
     // kelompok ← [kelompok, kelompol, group, category_group] - note "kelompol" is valid
     mapped.kelompok = this.findColumn(record, ['kelompok', 'kelompol', 'group', 'category_group']) || null;
