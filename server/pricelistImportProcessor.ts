@@ -3,392 +3,384 @@ import { parse as csvParse } from 'csv-parse';
 import * as XLSX from 'xlsx';
 import { db } from './db';
 import { pricelist } from '@shared/schema';
+import { File } from '@google-cloud/storage';
 
-// In-memory job storage for import progress tracking
-const jobs = new Map<string, PricelistImportJob>();
-
-export interface PricelistImportJob {
+// Job tracking
+interface ImportJob {
   uploadId: string;
+  fileName: string;
   status: 'pending' | 'processing' | 'completed' | 'failed';
   progress: {
     phase: 'parsing' | 'validating' | 'writing' | 'done' | 'failed';
-    uploadProgress: number;
     rowsParsed: number;
     rowsValid: number;
-    rowsFailed: number;
     rowsWritten: number;
-    throughputRps?: number;
-    eta?: number;
+    rowsFailed: number;
+    throughputRps: number;
+    eta: number;
   };
-  errors: string[];
+  errors: Array<{
+    row: number;
+    field: string;
+    value: any;
+    message: string;
+  }>;
   startedAt: Date;
   updatedAt: Date;
+  errorCsvUrl?: string;
 }
 
-export class PricelistImportProcessor extends EventEmitter {
+class PricelistImportProcessor extends EventEmitter {
+  private jobs = new Map<string, ImportJob>();
+
   constructor() {
     super();
   }
 
-  // Start processing a pricelist import job
-  async startImport(uploadId: string, fileName: string, objectFile: any): Promise<void> {
-    console.log(`🚀 Starting pricelist import job: ${uploadId}`);
+  getJob(uploadId: string): ImportJob | undefined {
+    return this.jobs.get(uploadId);
+  }
 
-    // Initialize job
-    const job: PricelistImportJob = {
+  async startImport(uploadId: string, fileName: string, objectFile: File) {
+    const job: ImportJob = {
       uploadId,
+      fileName,
       status: 'processing',
       progress: {
         phase: 'parsing',
-        uploadProgress: 100, // File already uploaded
         rowsParsed: 0,
         rowsValid: 0,
+        rowsWritten: 0,
         rowsFailed: 0,
-        rowsWritten: 0
+        throughputRps: 0,
+        eta: 0
       },
       errors: [],
       startedAt: new Date(),
       updatedAt: new Date()
     };
-    
-    jobs.set(uploadId, job);
-    this.emitProgress(uploadId);
+
+    this.jobs.set(uploadId, job);
+    this.emit('progress', uploadId, job);
 
     try {
-      // Parse file
-      const stream = objectFile.createReadStream();
-      const records = await this.parseFile(stream, fileName, uploadId);
+      console.log(`📂 Starting pricelist import for ${fileName}`);
       
-      // Update progress
+      // Download file from object storage
+      const [fileBuffer] = await objectFile.download();
+      console.log(`📥 Downloaded file, size: ${fileBuffer.length} bytes`);
+      
+      // Parse file based on extension
+      let records: any[] = [];
+      const lowerFileName = fileName.toLowerCase();
+      
+      if (lowerFileName.endsWith('.csv')) {
+        records = await this.parseCSV(fileBuffer);
+      } else if (lowerFileName.endsWith('.xlsx') || lowerFileName.endsWith('.xls')) {
+        records = this.parseExcel(fileBuffer);
+      } else {
+        throw new Error('Unsupported file format. Please use CSV, XLSX, or XLS files.');
+      }
+
+      console.log(`📊 Parsed ${records.length} records`);
       job.progress.rowsParsed = records.length;
       job.progress.phase = 'validating';
-      this.emitProgress(uploadId);
+      this.emit('progress', uploadId, job);
 
-      // Filter out header rows first
-      const dataRecords = this.filterHeaderRows(records, uploadId);
-      
-      // Validate and process records
-      const validRecords = await this.validateRecords(dataRecords, uploadId);
-      
-      // Update progress
-      job.progress.rowsValid = validRecords.length;
-      job.progress.rowsFailed = dataRecords.length - validRecords.length;
-      job.progress.phase = 'writing';
-      this.emitProgress(uploadId);
+      // Process records in batches
+      const batchSize = 500;
+      for (let i = 0; i < records.length; i += batchSize) {
+        const batch = records.slice(i, Math.min(i + batchSize, records.length));
+        await this.processBatch(batch, job, i);
+        
+        job.progress.throughputRps = Math.round(job.progress.rowsWritten / ((Date.now() - job.startedAt.getTime()) / 1000));
+        job.progress.eta = Math.round((records.length - job.progress.rowsWritten) / Math.max(1, job.progress.throughputRps));
+        job.updatedAt = new Date();
+        this.emit('progress', uploadId, job);
+      }
 
-      // Batch write to database
-      await this.writeToDatabase(validRecords, job, uploadId);
-      
-      // Complete
+      // Generate error CSV if there were errors
+      if (job.errors.length > 0) {
+        job.errorCsvUrl = await this.generateErrorCsv(job);
+      }
+
       job.status = 'completed';
       job.progress.phase = 'done';
-      job.progress.rowsWritten = validRecords.length;
-      job.updatedAt = new Date();
-      this.emitProgress(uploadId);
-
-      console.log(`✅ Pricelist import job ${uploadId} completed: ${validRecords.length} records`);
+      console.log(`✅ Import completed: ${job.progress.rowsWritten} written, ${job.progress.rowsFailed} failed`);
+      this.emit('progress', uploadId, job);
 
     } catch (error) {
-      console.error(`❌ Pricelist import job ${uploadId} failed:`, error);
+      console.error('❌ Import error:', error);
       job.status = 'failed';
       job.progress.phase = 'failed';
-      job.updatedAt = new Date();
-      this.emitProgress(uploadId);
-    }
-  }
-
-  // Parse CSV or XLSX file
-  private async parseFile(stream: NodeJS.ReadableStream, fileName: string, uploadId: string): Promise<any[]> {
-    const isExcel = fileName.toLowerCase().endsWith('.xlsx') || fileName.toLowerCase().endsWith('.xls');
-    
-    if (isExcel) {
-      return this.parseExcel(stream, uploadId);
-    } else {
-      return this.parseCSV(stream, uploadId);
-    }
-  }
-
-  // Filter out header rows - skip rows containing column headers like "sn, kode item, normal price"
-  private filterHeaderRows(records: any[], uploadId: string): any[] {
-    console.log(`🔍 Filtering header rows from ${records.length} records...`);
-    
-    // Look for header patterns that indicate column names
-    const headerPatterns = [
-      'sn', 's/n', 'serial', 'serial number',
-      'kode item', 'kodeitem', 'item code', 'sku',
-      'kelompok', 'group', 'category',
-      'family', 'famili', 'familia',
-      'kode material', 'kodematerial', 'material code', 'kode_material',
-      'kode motif', 'kodemotif', 'motif code', 'pattern code',
-      'nama motif', 'namamotif', 'motif name', 'pattern name',
-      'normal price', 'normalprice', 'harga normal', 'price'
-    ];
-    
-    let headerRowIndex = -1;
-    
-    // Find the first row that looks like a header row
-    for (let i = 0; i < records.length; i++) {
-      const record = records[i];
-      const recordValues = Object.values(record).map(v => 
-        (v?.toString() || '').toLowerCase().trim().replace(/[\s_-]/g, '')
-      );
-      
-      // Check if this row contains header-like values
-      let headerMatches = 0;
-      for (const pattern of headerPatterns) {
-        const normalizedPattern = pattern.toLowerCase().replace(/[\s_-]/g, '');
-        if (recordValues.some(value => value === normalizedPattern || value.includes(normalizedPattern))) {
-          headerMatches++;
-        }
-      }
-      
-      // If we found at least 4 header pattern matches, consider this a header row
-      if (headerMatches >= 4) {
-        headerRowIndex = i;
-        console.log(`📋 Found header row at index ${i}:`, record);
-        break;
-      }
-    }
-    
-    if (headerRowIndex >= 0) {
-      // Return only records after the header row
-      const dataRecords = records.slice(headerRowIndex + 1);
-      console.log(`✂️ Skipped ${headerRowIndex + 1} rows (including headers), processing ${dataRecords.length} data rows`);
-      return dataRecords;
-    } else {
-      console.log(`📋 No header row detected, processing all ${records.length} rows`);
-      return records;
-    }
-  }
-
-  // Parse CSV file using streaming
-  private async parseCSV(stream: NodeJS.ReadableStream, uploadId: string): Promise<any[]> {
-    return new Promise((resolve, reject) => {
-      const records: any[] = [];
-      const parser = csvParse({
-        columns: true,
-        skip_empty_lines: true,
-        trim: true,
-        relax_column_count: true
-      });
-
-      parser.on('data', (record) => {
-        records.push(record);
-        
-        // Update progress every 1000 records
-        if (records.length % 1000 === 0) {
-          const job = jobs.get(uploadId);
-          if (job) {
-            job.progress.rowsParsed = records.length;
-            this.calculateThroughput(job);
-            this.emitProgress(uploadId);
-          }
-        }
-      });
-
-      parser.on('end', () => {
-        console.log(`📊 CSV parsed: ${records.length} records`);
-        resolve(records);
-      });
-
-      parser.on('error', (error) => {
-        reject(new Error(`CSV parsing error: ${error.message}`));
-      });
-
-      stream.pipe(parser);
-    });
-  }
-
-  // Parse Excel file
-  private async parseExcel(stream: NodeJS.ReadableStream, uploadId: string): Promise<any[]> {
-    // Read entire stream into buffer (for XLSX parsing)
-    const chunks: Buffer[] = [];
-    
-    return new Promise((resolve, reject) => {
-      stream.on('data', (chunk) => chunks.push(chunk));
-      stream.on('end', () => {
-        try {
-          const buffer = Buffer.concat(chunks);
-          const workbook = XLSX.read(buffer, { type: 'buffer' });
-          
-          // Use first worksheet
-          const sheetName = workbook.SheetNames[0];
-          const worksheet = workbook.Sheets[sheetName];
-          const records = XLSX.utils.sheet_to_json(worksheet);
-          
-          console.log(`📊 Excel parsed: ${records.length} records`);
-          resolve(records);
-        } catch (error) {
-          reject(new Error(`Excel parsing error: ${error instanceof Error ? error.message : 'Unknown error'}`));
-        }
-      });
-      stream.on('error', reject);
-    });
-  }
-
-  // Validate records and map columns
-  private async validateRecords(records: any[], uploadId: string): Promise<any[]> {
-    const validRecords: any[] = [];
-    const job = jobs.get(uploadId);
-    if (!job) throw new Error(`Job ${uploadId} not found`);
-
-    console.log(`🔍 Validating ${records.length} records...`);
-    console.log(`📋 Sample record keys:`, Object.keys(records[0] || {}));
-
-    for (let i = 0; i < records.length; i++) {
-      const record = records[i];
-      
-      // Map columns with aliases - canonical order: sn, kode_item, kelompok, family, kode_material, kode_motif, nama_motif, normal_price
-      // Normalize header names (case-insensitive, space/underscore tolerant)
-      const normalizeKey = (obj: any, aliases: string[]): string => {
-        for (const key of Object.keys(obj)) {
-          const normalizedKey = key.toLowerCase().replace(/[\s_-]/g, '');
-          for (const alias of aliases) {
-            if (normalizedKey === alias.toLowerCase().replace(/[\s_-]/g, '')) {
-              return obj[key]?.toString().trim() || '';
-            }
-          }
-        }
-        return '';
-      };
-
-      // Parse and clean numeric values
-      const parsePrice = (value: string): number | null => {
-        if (!value || value.trim() === '') return null;
-        
-        // Remove currency symbols, spaces, and separators
-        const cleaned = value.toString()
-          .replace(/[Rp\s,.']/g, '')
-          .replace(/[^\d.-]/g, '');
-          
-        const parsed = parseFloat(cleaned);
-        return isNaN(parsed) ? null : parsed;
-      };
-
-      const mappedRecord = {
-        sn: normalizeKey(record, ['sn', 's/n', 'serial_number', 'serial no', 'serial', 'serialnumber']) || null,
-        kodeItem: normalizeKey(record, ['kode_item', 'kode item', 'item_code', 'sku', 'itemcode', 'code']),
-        kelompok: normalizeKey(record, ['kelompok', 'kelompol', 'group', 'category_group']) || null,
-        family: normalizeKey(record, ['family', 'famili', 'familia']) || null,
-        // Map kode_material to deskripsiMaterial (DB column name)
-        deskripsiMaterial: normalizeKey(record, ['kode_material', 'kode material', 'material_code', 'deskripsi_material', 'deskripsi material']) || null,
-        kodeMotif: normalizeKey(record, ['kode_motif', 'kode motif', 'motif_code', 'pattern_code']) || null,
-        namaMotif: normalizeKey(record, ['nama_motif', 'nama motif', 'motif_name', 'pattern_name', 'nama']) || null,
-        normalPrice: parsePrice(normalizeKey(record, ['normal_price', 'normal price', 'harga_normal', 'harga normal', 'price']))
-      };
-
-      console.log(`📝 Record ${i + 1}:`, { original: record, mapped: mappedRecord });
-
-      // Validate required fields
-      if (!mappedRecord.kodeItem) {
-        console.log(`❌ Record ${i + 1} invalid - missing kode_item:`, mappedRecord);
-        job.progress.rowsFailed++;
-      } else {
-        validRecords.push(mappedRecord);
-        console.log(`✅ Record ${i + 1} valid:`, mappedRecord);
-      }
-
-      // Update progress every 1000 records
-      if (i % 1000 === 0 && i > 0) {
-        job.progress.rowsParsed = i;
-        this.calculateThroughput(job);
-        this.emitProgress(uploadId);
-      }
-    }
-
-    console.log(`📊 Validation complete: ${validRecords.length} valid out of ${records.length}`);
-    return validRecords;
-  }
-
-  // Write records to database in batches
-  private async writeToDatabase(records: any[], job: PricelistImportJob, uploadId: string): Promise<void> {
-    const jobData = jobs.get(uploadId);
-    if (!jobData) throw new Error(`Job ${uploadId} not found`);
-
-    console.log(`💾 Writing ${records.length} records to database`);
-
-    const batchSize = 1000; // Smaller batches for better error handling
-    let written = 0;
-
-    for (let i = 0; i < records.length; i += batchSize) {
-      const batch = records.slice(i, i + batchSize);
-      const insertData = batch.map(record => ({
-        sn: record.sn,
-        kodeItem: record.kodeItem,
-        kelompok: record.kelompok,
-        family: record.family,
-        deskripsiMaterial: record.deskripsiMaterial,
-        kodeMotif: record.kodeMotif,
-        namaMotif: record.namaMotif,
-        normalPrice: record.normalPrice ? record.normalPrice.toString() : null,
-        sp: null // Not in import requirements
-      }));
-
-      console.log(`📝 Writing batch ${i / batchSize + 1} with ${batch.length} records...`);
-      console.log(`📋 Sample insert data:`, insertData[0]);
-
-      try {
-        const result = await db.insert(pricelist).values(insertData).returning();
-        written += result.length;
-        
-        console.log(`✅ Batch ${i / batchSize + 1} written successfully: ${result.length} rows`);
-
-        // Update progress
-        jobData.progress.rowsWritten = written;
-        this.calculateThroughput(jobData);
-        this.emitProgress(uploadId);
-
-      } catch (error) {
-        console.error(`❌ Batch ${i / batchSize + 1} failed:`, error);
-        throw error;
-      }
-    }
-
-    console.log(`📊 Progress: ${written}/${records.length} records written`);
-    console.log(`🎉 All ${written} records written successfully!`);
-  }
-
-  // Calculate throughput metrics
-  private calculateThroughput(job: PricelistImportJob): void {
-    const elapsed = Date.now() - job.startedAt.getTime();
-    const elapsedSeconds = elapsed / 1000;
-    
-    if (elapsedSeconds > 0) {
-      job.progress.throughputRps = job.progress.rowsWritten / elapsedSeconds;
-      
-      const remaining = job.progress.rowsValid - job.progress.rowsWritten;
-      if (job.progress.throughputRps > 0) {
-        job.progress.eta = remaining / job.progress.throughputRps;
-      }
-    }
-  }
-
-  // Emit progress update via Server-Sent Events
-  private emitProgress(uploadId: string): void {
-    const job = jobs.get(uploadId);
-    if (job) {
       this.emit('progress', uploadId, job);
     }
   }
 
-  // Get job status
-  getJob(uploadId: string): PricelistImportJob | undefined {
-    return jobs.get(uploadId);
+  private async parseCSV(buffer: Buffer): Promise<any[]> {
+    return new Promise((resolve, reject) => {
+      const records: any[] = [];
+      let csvString = buffer.toString('utf-8');
+      
+      // Handle BOM
+      if (csvString.charCodeAt(0) === 0xFEFF) {
+        csvString = csvString.substr(1);
+      }
+      
+      // Try to detect delimiter
+      const firstLine = csvString.split('\n')[0];
+      const delimiter = firstLine.includes(';') && !firstLine.includes(',') ? ';' : ',';
+      
+      csvParse(csvString, {
+        columns: true,
+        skip_empty_lines: true,
+        trim: true,
+        delimiter,
+        relax_quotes: true,
+        relax_column_count: true
+      })
+      .on('data', (data) => {
+        // Skip header detection patterns
+        const firstValue = Object.values(data)[0] as string;
+        if (firstValue && firstValue.toLowerCase().includes('no.baris')) {
+          return; // Skip this row
+        }
+        records.push(data);
+      })
+      .on('end', () => resolve(records))
+      .on('error', reject);
+    });
   }
 
-  // Clean up completed jobs (called periodically)
-  cleanup(): void {
-    const cutoff = Date.now() - (24 * 60 * 60 * 1000); // 24 hours
-    for (const [uploadId, job] of jobs.entries()) {
-      if (job.updatedAt.getTime() < cutoff) {
-        jobs.delete(uploadId);
+  private parseExcel(buffer: Buffer): any[] {
+    const workbook = XLSX.read(buffer, { type: 'buffer' });
+    
+    // Find first non-empty sheet
+    let worksheet;
+    let sheetName;
+    for (const name of workbook.SheetNames) {
+      const sheet = workbook.Sheets[name];
+      const range = XLSX.utils.decode_range(sheet['!ref'] || 'A1');
+      if (range.e.r > 0) { // Has more than just header
+        worksheet = sheet;
+        sheetName = name;
+        break;
+      }
+    }
+    
+    if (!worksheet) {
+      worksheet = workbook.Sheets[workbook.SheetNames[0]];
+      sheetName = workbook.SheetNames[0];
+    }
+    
+    console.log(`📄 Using sheet: ${sheetName}`);
+    
+    const jsonData = XLSX.utils.sheet_to_json(worksheet, { 
+      raw: false,
+      defval: ''
+    });
+    
+    // Filter out header detection patterns
+    return jsonData.filter((row: any) => {
+      const firstValue = Object.values(row)[0] as string;
+      return !firstValue || !firstValue.toLowerCase().includes('no.baris');
+    });
+  }
+
+  private async processBatch(batch: any[], job: ImportJob, startIndex: number) {
+    const validRecords: any[] = [];
+
+    for (let i = 0; i < batch.length; i++) {
+      const record = batch[i];
+      const rowIndex = startIndex + i + 2; // +2 for 1-based index and header row
+
+      try {
+        // Map columns from various aliases
+        const mappedRecord = this.mapColumns(record);
+        
+        // Validate required fields
+        if (!mappedRecord.kodeItem) {
+          job.errors.push({
+            row: rowIndex,
+            field: 'kode_item',
+            value: null,
+            message: 'Missing required field: kode_item'
+          });
+          job.progress.rowsFailed++;
+          continue;
+        }
+
+        // Clean and parse prices
+        if (mappedRecord.normalPrice) {
+          try {
+            mappedRecord.normalPrice = this.parsePrice(mappedRecord.normalPrice);
+          } catch (e) {
+            job.errors.push({
+              row: rowIndex,
+              field: 'normal_price',
+              value: mappedRecord.normalPrice,
+              message: 'Invalid number format'
+            });
+            job.progress.rowsFailed++;
+            continue;
+          }
+        }
+
+        if (mappedRecord.sp) {
+          try {
+            mappedRecord.sp = this.parsePrice(mappedRecord.sp);
+          } catch (e) {
+            mappedRecord.sp = null; // Optional field, set to null if invalid
+          }
+        }
+
+        validRecords.push(mappedRecord);
+        job.progress.rowsValid++;
+
+      } catch (error) {
+        job.errors.push({
+          row: rowIndex,
+          field: 'general',
+          value: JSON.stringify(record),
+          message: error instanceof Error ? error.message : 'Processing error'
+        });
+        job.progress.rowsFailed++;
+      }
+    }
+
+    // Insert valid records
+    if (validRecords.length > 0) {
+      try {
+        await db.insert(pricelist).values(validRecords);
+        job.progress.rowsWritten += validRecords.length;
+        job.progress.phase = 'writing';
+      } catch (error) {
+        console.error('Database insert error:', error);
+        // Add all records in batch to errors
+        for (const record of validRecords) {
+          job.errors.push({
+            row: startIndex + validRecords.indexOf(record) + 2,
+            field: 'database',
+            value: JSON.stringify(record),
+            message: 'Database insert failed'
+          });
+        }
+        job.progress.rowsFailed += validRecords.length;
+        job.progress.rowsValid -= validRecords.length;
       }
     }
   }
+
+  private mapColumns(record: any): any {
+    const mapped: any = {};
+
+    // Map columns according to spec with exact aliases
+    // sn ← aliases: [sn, serial_number, serial no, serial]
+    mapped.sn = this.findColumn(record, ['sn', 'serial_number', 'serial no', 'serial']) || null;
+
+    // kode_item ← [kode item, kode_item, item_code, sku, itemcode] - REQUIRED
+    mapped.kodeItem = this.findColumn(record, ['kode item', 'kode_item', 'item_code', 'sku', 'itemcode']);
+
+    // kelompok ← [kelompok, kelompol, group, category_group] - note "kelompol" is valid
+    mapped.kelompok = this.findColumn(record, ['kelompok', 'kelompol', 'group', 'category_group']) || null;
+
+    // family ← [family, famili, familia]
+    mapped.family = this.findColumn(record, ['family', 'famili', 'familia']) || null;
+
+    // kode_material maps to deskripsiMaterial in DB
+    // kode_material ← [kode material, kode_material, material_code]
+    mapped.deskripsiMaterial = this.findColumn(record, ['kode material', 'kode_material', 'material_code']) || null;
+
+    // kode_motif ← [kode motif, kode_motif, motif_code, pattern_code]
+    mapped.kodeMotif = this.findColumn(record, ['kode motif', 'kode_motif', 'motif_code', 'pattern_code']) || null;
+
+    // nama_motif ← [nama motif, nama_motif, motif_name, pattern_name, nama]
+    mapped.namaMotif = this.findColumn(record, ['nama motif', 'nama_motif', 'motif_name', 'pattern_name', 'nama']) || null;
+
+    // normal_price ← [normal price, normal_price, harga normal, harga_normal, price]
+    mapped.normalPrice = this.findColumn(record, ['normal price', 'normal_price', 'harga normal', 'harga_normal', 'price']) || '0';
+
+    // SP (special price) - optional
+    mapped.sp = this.findColumn(record, ['sp', 'special_price', 'special price', 'harga_khusus', 'harga khusus']) || null;
+
+    return mapped;
+  }
+
+  private findColumn(record: any, aliases: string[]): string | undefined {
+    for (const key of Object.keys(record)) {
+      const normalizedKey = key.toLowerCase().trim().replace(/[\s_-]+/g, ' ');
+      for (const alias of aliases) {
+        const normalizedAlias = alias.toLowerCase().trim().replace(/[\s_-]+/g, ' ');
+        if (normalizedKey === normalizedAlias) {
+          const value = record[key];
+          if (value === null || value === undefined || value === '') {
+            return undefined;
+          }
+          return String(value).trim();
+        }
+      }
+    }
+    return undefined;
+  }
+
+  private parsePrice(value: string): string {
+    if (!value || value === '0' || value === '') return '0';
+    
+    // Remove currency symbols and clean up
+    let cleaned = value
+      .replace(/[Rp$€£¥₹]/gi, '') // Remove currency symbols
+      .replace(/\s+/g, '') // Remove spaces
+      .trim();
+    
+    // Handle Indonesian format (1.234.567,89) vs US format (1,234,567.89)
+    if (cleaned.includes(',') && cleaned.includes('.')) {
+      // Check which is the decimal separator
+      const lastComma = cleaned.lastIndexOf(',');
+      const lastDot = cleaned.lastIndexOf('.');
+      
+      if (lastComma > lastDot) {
+        // Indonesian format: dot is thousands, comma is decimal
+        cleaned = cleaned.replace(/\./g, '').replace(',', '.');
+      } else {
+        // US format: comma is thousands, dot is decimal
+        cleaned = cleaned.replace(/,/g, '');
+      }
+    } else if (cleaned.includes(',')) {
+      // Only comma present - could be decimal or thousands
+      const commaCount = (cleaned.match(/,/g) || []).length;
+      if (commaCount === 1 && cleaned.indexOf(',') === cleaned.length - 3) {
+        // Likely decimal separator (e.g., "123,45")
+        cleaned = cleaned.replace(',', '.');
+      } else {
+        // Likely thousands separator
+        cleaned = cleaned.replace(/,/g, '');
+      }
+    }
+    // Dots only - assume decimal point
+    
+    const parsed = parseFloat(cleaned);
+    if (isNaN(parsed)) {
+      throw new Error(`Invalid number: ${value}`);
+    }
+    
+    return parsed.toFixed(2);
+  }
+
+  private async generateErrorCsv(job: ImportJob): Promise<string> {
+    if (job.errors.length === 0) return '';
+    
+    // Create CSV content
+    const csvContent = [
+      'row_number,field,original_value,message',
+      ...job.errors.map(err => 
+        `${err.row},"${err.field}","${err.value || ''}","${err.message}"`
+      )
+    ].join('\n');
+    
+    // For now, return as data URL (in production, upload to object storage)
+    const base64 = Buffer.from(csvContent).toString('base64');
+    return `data:text/csv;base64,${base64}`;
+  }
 }
 
-// Singleton instance
 export const pricelistImportProcessor = new PricelistImportProcessor();
-
-// Cleanup interval
-setInterval(() => pricelistImportProcessor.cleanup(), 60 * 60 * 1000); // Every hour

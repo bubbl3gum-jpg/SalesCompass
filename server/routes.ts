@@ -1749,14 +1749,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
+      console.log('📦 Pricelist import complete request:', { uploadId, fileKey, fileSize });
+
       // Extract filename from fileKey
       const fileName = fileKey.split('/').pop() || 'unknown.csv';
 
+      // Extract the actual object name from the fileKey
+      // fileKey format: /bucket_name/path/to/file
+      let objectName = fileKey;
+      if (fileKey.startsWith('/')) {
+        const parts = fileKey.split('/');
+        parts.shift(); // Remove empty string from leading /
+        const bucketName = parts.shift(); // Remove bucket name
+        objectName = parts.join('/');
+      }
+
+      console.log('🗂️ Object name:', objectName);
+
       // Get the object file from storage
-      const objectFile = transferImportStorage.bucket.file(fileKey.replace('/bucket_name/', ''));
+      const objectFile = transferImportStorage.bucket.file(objectName);
 
       // Start processing in the background
-      pricelistImportProcessor.startImport(uploadId, fileName, objectFile);
+      pricelistImportProcessor.startImport(uploadId, fileName, objectFile).catch(error => {
+        console.error('❌ Background import error:', error);
+      });
 
       res.json({
         jobId: uploadId,
