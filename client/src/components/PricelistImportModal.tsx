@@ -260,12 +260,16 @@ export function PricelistImportModal({
             setImportStatus('completed');
             eventSourceInstance.close();
             setEventSource(null);
-            onComplete?.();
             
             toast({
               title: "Import Completed",
               description: `Successfully imported ${progressData.rowsWritten} pricelist items`,
             });
+            
+            // Delay cache refresh to ensure backend is fully updated
+            setTimeout(() => {
+              onComplete?.();
+            }, 1000);
           } else if (progressData.status === 'failed') {
             setImportStatus('failed');
             eventSourceInstance.close();

@@ -68,10 +68,22 @@ export default function PriceLists() {
   const queryClient = useQueryClient();
 
   // Helper function to invalidate and refetch price list data
-  const refreshPricelistData = useCallback(() => {
-    queryClient.invalidateQueries({ queryKey: ['/api/pricelist'] });
-    queryClient.refetchQueries({ queryKey: ['/api/pricelist'] });
-  }, [queryClient]);
+  const refreshPricelistData = useCallback(async () => {
+    console.log('🔄 Refreshing pricelist data...');
+    
+    // Clear all cached pricelist queries
+    queryClient.removeQueries({ queryKey: ['/api/pricelist'] });
+    queryClient.clear(); // Clear entire cache as a fallback
+    
+    // Force new queries with timestamp to bypass any caching
+    const timestamp = Date.now();
+    await queryClient.refetchQueries({ 
+      queryKey: ['/api/pricelist', currentPage, pageSize, debouncedSearchTerm, timestamp] 
+    });
+    
+    // Also refresh the current query
+    window.location.reload();
+  }, [queryClient, currentPage, pageSize, debouncedSearchTerm]);
   const [showPriceModal, setShowPriceModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
   const [searchTerm, setSearchTerm] = useState<string>('');
