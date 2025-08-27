@@ -23,11 +23,17 @@ export class ImportWorker {
 
   // Main job processing method
   private async processJob(job: ImportJob) {
+    console.log(`🔄 Processing job ${job.id} for table ${job.tableName}`);
+    
     try {
       jobQueue.updateProgress(job.id, 0, 0, 'Starting import...');
+      console.log(`📊 Job ${job.id}: Starting import process`);
       
       // Stage 1: Parse file with streaming
+      console.log(`📂 Job ${job.id}: Starting file parsing...`);
       const parsedRows = await this.parseFile(job);
+      console.log(`📊 Job ${job.id}: File parsed successfully, ${parsedRows.length} rows`);
+      
       if (parsedRows.length === 0) {
         throw new Error('No valid data found in file');
       }
@@ -35,6 +41,7 @@ export class ImportWorker {
       jobQueue.updateProgress(job.id, 0, parsedRows.length, 'Parsed file, loading to staging...');
 
       // Stage 2: Bulk load to staging tables
+      console.log(`🗄️ Job ${job.id}: Starting bulk load to staging tables...`);
       const bulkResult = await this.bulkLoader.bulkLoadToStaging(
         job.id,
         job.tableName,
@@ -44,6 +51,7 @@ export class ImportWorker {
         },
         job.additionalData
       );
+      console.log(`✅ Job ${job.id}: Bulk load completed`, bulkResult);
 
       jobQueue.updateProgress(job.id, parsedRows.length, parsedRows.length, 'Validating data...');
 

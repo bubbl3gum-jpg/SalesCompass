@@ -174,15 +174,20 @@ class JobQueue extends EventEmitter {
   // Process the job queue
   private processQueue() {
     if (this.isShutdown) return;
+    
+    console.log(`📋 Processing queue: ${this.queue.length} jobs waiting, ${this.processing.size} processing`);
 
     while (this.processing.size < this.maxConcurrentJobs && this.queue.length > 0) {
       const jobId = this.queue.shift()!;
       const job = this.jobs.get(jobId);
       
+      console.log(`🎯 Processing job ${jobId} from queue`);
+      
       if (job && job.status === 'queued') {
         job.status = 'processing';
         job.startedAt = new Date();
         this.processing.add(jobId);
+        console.log(`✅ Job ${jobId} marked as processing`);
         this.emit('jobStarted', job);
       }
     }
@@ -190,6 +195,8 @@ class JobQueue extends EventEmitter {
 
   // Worker loop for processing jobs
   private async workerLoop(): Promise<void> {
+    console.log('🔄 Worker loop started');
+    
     while (!this.isShutdown) {
       try {
         // Find a job to process
@@ -199,8 +206,10 @@ class JobQueue extends EventEmitter {
         });
 
         if (processingJob) {
+          console.log(`🎯 Worker found job to process: ${processingJob}`);
           const job = this.jobs.get(processingJob);
           if (job) {
+            console.log(`🏃 Processing job ${job.id} for table ${job.tableName}`);
             await this.processJob(job);
           }
         } else {
@@ -208,7 +217,7 @@ class JobQueue extends EventEmitter {
           await new Promise(resolve => setTimeout(resolve, 100));
         }
       } catch (error) {
-        console.error('Worker error:', error);
+        console.error('❌ Worker error:', error);
         await new Promise(resolve => setTimeout(resolve, 1000));
       }
     }
