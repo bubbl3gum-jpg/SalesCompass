@@ -1598,6 +1598,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const limitNum = Math.max(1, Math.min(100, parseInt(limit as string) || 50));
       const searchTerm = search as string;
 
+      // Clear cache first to ensure fresh data
+      cache.del(CACHE_KEYS.PRICELIST || 'pricelist');
+      
       // Use cache for pricelist data
       const allPricelist = await withCache(
         CACHE_KEYS.PRICELIST || 'pricelist',

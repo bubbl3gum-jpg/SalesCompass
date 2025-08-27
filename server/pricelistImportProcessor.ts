@@ -107,6 +107,16 @@ class PricelistImportProcessor extends EventEmitter {
       job.status = 'completed';
       job.progress.phase = 'done';
       console.log(`✅ Import completed: ${job.progress.rowsWritten} written, ${job.progress.rowsFailed} failed`);
+      
+      // Clear pricelist cache after successful import
+      try {
+        const { cache } = require('./cache');
+        cache.del('pricelist');
+        console.log('🗑️ Cleared pricelist cache after import');
+      } catch (error) {
+        console.error('Cache clear error:', error);
+      }
+      
       this.emit('progress', uploadId, job);
 
     } catch (error) {
