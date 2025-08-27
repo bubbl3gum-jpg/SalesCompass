@@ -1762,17 +1762,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
         parts.shift(); // Remove empty string from leading /
         const bucketName = parts.shift(); // Remove bucket name
         objectName = parts.join('/');
+        console.log('🔗 Parsed bucket:', bucketName, 'object:', objectName);
+      } else {
+        console.log('⚠️ FileKey does not start with /, using as-is:', fileKey);
       }
 
-      console.log('🗂️ Object name:', objectName);
+      console.log('🗂️ Final object name:', objectName);
 
-      // Get the object file from storage
-      const objectFile = transferImportStorage.bucket.file(objectName);
+      try {
+        // Get the object file from storage  
+        const objectFile = transferImportStorage.bucket.file(objectName);
+        
+        // Check if file exists before processing
+        const [exists] = await objectFile.exists();
+        if (!exists) {
+          console.error('❌ Object file does not exist:', objectName);
+          return res.status(404).json({ 
+            message: 'Uploaded file not found in storage',
+            fileKey,
+            objectName 
+          });
+        }
+        
+        console.log('✅ Object file exists, starting import processing...');
 
-      // Start processing in the background
-      pricelistImportProcessor.startImport(uploadId, fileName, objectFile).catch(error => {
-        console.error('❌ Background import error:', error);
-      });
+        // Start processing in the background
+        pricelistImportProcessor.startImport(uploadId, fileName, objectFile).catch(error => {
+          console.error('❌ Background import error:', error);
+        });
+      } catch (fileError) {
+        console.error('❌ Error accessing object file:', fileError);
+        return res.status(500).json({
+          message: 'Failed to access uploaded file',
+          error: fileError instanceof Error ? fileError.message : 'Unknown error'
+        });
+      }
 
       res.json({
         jobId: uploadId,
@@ -1807,6 +1831,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('❌ Get pricelist import status error:', error);
       res.status(500).json({ message: 'Failed to get import status' });
+    }
+  });
+
+  // Get all pricelist import jobs
+  app.get('/api/pricelist-imports/jobs', isAuthenticated, async (req, res) => {
+    try {
+      // Return empty array for now - this endpoint is used by the UI for job listings
+      res.json([]);
+    } catch (error) {
+      console.error('❌ Get pricelist import jobs error:', error);
+      res.status(500).json({ message: 'Failed to get import jobs' });
     }
   });
 
