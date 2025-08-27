@@ -40,6 +40,27 @@ const progressUpdateCallbacks = new Map<string, (progress: ImportProgress) => vo
 
 export class TransferImportProcessor {
   
+  // Extract TO number from the first column of the file  
+  extractToNumber(records: any[]): string | null {
+    // Look for "Untuk nomor TO: <VALUE>" in the first column
+    const pattern = /untuk\s*nomor\s*to\s*:\s*(.+)/i;
+    
+    for (const record of records) {
+      const keys = Object.keys(record);
+      if (keys.length > 0) {
+        const firstColValue = record[keys[0]];
+        if (firstColValue && typeof firstColValue === 'string') {
+          const match = firstColValue.match(pattern);
+          if (match && match[1]) {
+            return match[1].trim();
+          }
+        }
+      }
+    }
+    
+    return null;
+  }
+  
   // Create new import job
   createJob(params: {
     uploadId: string;
@@ -136,7 +157,7 @@ export class TransferImportProcessor {
       this.emitProgress(uploadId);
 
       // Batch write to database
-      await this.writeToDatabase(validRecords, job.toId, uploadId);
+      await this.writeToDatabase(validRecords, job, uploadId);
       
       // Complete
       job.status = 'completed';
@@ -259,10 +280,11 @@ export class TransferImportProcessor {
       };
 
       const mappedRecord = {
-        sn: normalizeKey(record, ['sn', 'serial_number', 'serial no', 'serial', 'serialno']),
-        kodeItem: normalizeKey(record, ['kode_item', 'kode item', 'item_code', 'sku', 'itemcode', 'code']),
-        namaItem: normalizeKey(record, ['nama_item', 'nama item', 'item_name', 'nama', 'itemname', 'product name', 'description']) || null,
-        qty: parseInt(normalizeKey(record, ['qty', 'quantity', 'jumlah', 'amount']) || '1') || 1
+        lineNo: parseInt(normalizeKey(record, ['no. baris', 'no baris', 'line no', 'line_no', 'row no', 'row_no', 'PT. RANCANG INDAH SENTOSA']) || '0') || null,
+        sn: normalizeKey(record, ['s/n', 'sn', 'serial_number', 'serial no', 'serial', 'serialno', '__EMPTY_2']),
+        kodeItem: normalizeKey(record, ['kode_item', 'kode item', 'item_code', 'sku', 'itemcode', 'code', '__EMPTY']),
+        namaItem: normalizeKey(record, ['nama_item', 'nama item', 'item_name', 'nama', 'itemname', 'product name', 'description', '__EMPTY_1']) || null,
+        qty: parseInt(normalizeKey(record, ['q to tran', 'q_to_tran', 'qty', 'quantity', 'jumlah', '__EMPTY_3']) || '1') || 1
       };
 
       console.log(`📝 Record ${i + 1}:`, { original: record, mapped: mappedRecord });
@@ -272,8 +294,28 @@ export class TransferImportProcessor {
         validRecords.push(mappedRecord);
         console.log(`✅ Record ${i + 1} valid:`, mappedRecord);
       } else {
-        console.log(`❌ Record ${i + 1} invalid - completely empty record:`, mappedRecord);
-        job.progress.rowsFailed++;
+        // Check if it's a data row by checking first column has a numeric value
+        const firstCol = record['PT. RANCANG INDAH SENTOSA'];
+        if (firstCol && !isNaN(parseInt(firstCol))) {
+          // It's a data row with mismatched headers, extract directly from __EMPTY columns
+          const fixedRecord = {
+            lineNo: parseInt(firstCol) || null,
+            sn: record.__EMPTY_2 || '',
+            kodeItem: record.__EMPTY || '',
+            namaItem: record.__EMPTY_1 || null,
+            qty: parseFloat(record.__EMPTY_3) || 1
+          };
+          if (fixedRecord.sn || fixedRecord.kodeItem) {
+            validRecords.push(fixedRecord);
+            console.log(`✅ Record ${i + 1} fixed and valid:`, fixedRecord);
+          } else {
+            console.log(`❌ Record ${i + 1} invalid - empty fixed record:`, fixedRecord);
+            job.progress.rowsFailed++;
+          }
+        } else {
+          console.log(`❌ Record ${i + 1} invalid - completely empty record:`, mappedRecord);
+          job.progress.rowsFailed++;
+        }
       }
 
       // Update progress every 1000 records
@@ -289,11 +331,12 @@ export class TransferImportProcessor {
   }
 
   // Write records to database in batches
-  private async writeToDatabase(records: any[], toId: number, uploadId: string): Promise<void> {
-    const job = jobs.get(uploadId);
-    if (!job) throw new Error(`Job ${uploadId} not found`);
+  private async writeToDatabase(records: any[], job: TransferImportJob, uploadId: string): Promise<void> {
+    const jobData = jobs.get(uploadId);
+    if (!jobData) throw new Error(`Job ${uploadId} not found`);
 
-    console.log(`💾 Writing ${records.length} records to database for TO ID: ${toId}`);
+    const toNumber = job.toNumber || ('TO-' + job.toId); // Use toNumber if available, else generate from toId
+    console.log(`💾 Writing ${records.length} records to database for TO: ${toNumber}`);
 
     const batchSize = 1000; // Smaller batches for better error handling
     let written = 0;
@@ -301,7 +344,8 @@ export class TransferImportProcessor {
     for (let i = 0; i < records.length; i += batchSize) {
       const batch = records.slice(i, i + batchSize);
       const insertData = batch.map(record => ({
-        toId,
+        toNumber,
+        lineNo: record.lineNo,
         sn: record.sn || null,
         kodeItem: record.kodeItem || null,
         namaItem: record.namaItem || null,
@@ -318,7 +362,7 @@ export class TransferImportProcessor {
         console.log(`✅ Batch ${i / batchSize + 1} written successfully: ${result.length} rows`);
         
         // Update progress
-        job.progress.rowsWritten = written;
+        jobData.progress.rowsWritten = written;
         this.calculateThroughput(job);
         this.emitProgress(uploadId);
         
@@ -334,20 +378,20 @@ export class TransferImportProcessor {
   }
 
   // Calculate throughput and ETA
-  private calculateThroughput(job: TransferImportJob): void {
+  private calculateThroughput(jobData: TransferImportJob): void {
     const now = new Date();
-    const elapsed = (now.getTime() - job.progress.startedAt.getTime()) / 1000;
+    const elapsed = (now.getTime() - jobData.progress.startedAt.getTime()) / 1000;
     
     if (elapsed > 0) {
-      job.progress.throughputRps = Math.round(job.progress.rowsParsed / elapsed);
+      jobData.progress.throughputRps = Math.round(jobData.progress.rowsParsed / elapsed);
       
-      const remaining = job.progress.rowsTotal - job.progress.rowsParsed;
-      if (job.progress.throughputRps > 0) {
-        job.progress.etaSeconds = Math.round(remaining / job.progress.throughputRps);
+      const remaining = jobData.progress.rowsTotal - jobData.progress.rowsParsed;
+      if (jobData.progress.throughputRps > 0) {
+        jobData.progress.etaSeconds = Math.round(remaining / jobData.progress.throughputRps);
       }
     }
     
-    job.progress.updatedAt = now;
+    jobData.progress.updatedAt = now;
   }
 
   // Emit progress update

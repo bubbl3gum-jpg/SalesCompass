@@ -1,0 +1,240 @@
+Update the Transfer flow to support new file structure and keys.
+
+EXISTING TABLES (current) — for reference
+
+transfer_order: to_id (identity, PK), dari_gudang (FK→store.kode_gudang), ke_gudang (FK→store.kode_gudang), tanggal (DATE), to_number (VARCHAR)
+
+to_itemlist: to_itemlist_id (identity, PK), to_id (INT), sn (VARCHAR), kode_item (VARCHAR), qty (INT DEFAULT 1), nama_item (VARCHAR)
+
+REQUIRED DB CHANGES (PostgreSQL)
+
+Make only these changes:
+
+Primary key switch on transfer_order
+
+Drop PK on to_id and set to_number as the new PRIMARY KEY.
+
+Ensure to_number is NOT NULL and UNIQUE.
+
+Foreign key switch on to_itemlist
+
+Add column to_number VARCHAR.
+
+Backfill to_itemlist.to_number by joining to transfer_order on existing to_id.
+
+Set to_number NOT NULL.
+
+Add FK: to_itemlist.to_number → transfer_order.to_number (ON UPDATE CASCADE, ON DELETE CASCADE).
+
+Drop column to_id from to_itemlist.
+
+(Optional but recommended) Add line_no (INT) to to_itemlist to store “No. Baris”.
+
+If you must avoid schema growth, you may omit line_no and only use it for ordering/error reports. If allowed, add:
+
+ALTER TABLE to_itemlist ADD COLUMN line_no INT;
+
+Index (optional): CREATE INDEX idx_to_itemlist_line_no ON to_itemlist(to_number, line_no);
+
+Safe migration sketch (run inside a transaction):
+BEGIN;
+
+-- 1) Promote to_number to PK
+ALTER TABLE transfer_order
+  ALTER COLUMN to_number SET NOT NULL;
+
+-- if needed:
+-- CREATE UNIQUE INDEX IF NOT EXISTS uq_transfer_order_to_number ON transfer_order(to_number);
+
+ALTER TABLE transfer_order
+  DROP CONSTRAINT IF EXISTS transfer_order_pkey,
+  ADD CONSTRAINT transfer_order_pkey PRIMARY KEY (to_number);
+
+-- 2) Switch FK in to_itemlist
+ALTER TABLE to_itemlist ADD COLUMN to_number VARCHAR;
+
+UPDATE to_itemlist ti
+SET to_number = t.to_number
+FROM transfer_order t
+WHERE ti.to_id = t.to_id;
+
+ALTER TABLE to_itemlist
+  ALTER COLUMN to_number SET NOT NULL;
+
+ALTER TABLE to_itemlist
+  ADD CONSTRAINT fk_to_itemlist_to_number
+  FOREIGN KEY (to_number)
+  REFERENCES transfer_order(to_number)
+  ON UPDATE CASCADE ON DELETE CASCADE;
+
+-- drop old link
+ALTER TABLE to_itemlist DROP COLUMN to_id;
+
+-- 3) Optional: line_no
+-- ALTER TABLE to_itemlist ADD COLUMN line_no INT;
+-- CREATE INDEX idx_to_itemlist_line_no ON to_itemlist(to_number, line_no);
+
+COMMIT;
+
+FILE FORMAT & PARSING (CSV/XLSX)
+A) Extract to_number from first column
+
+The file’s first column will contain a cell like:
+"Untuk nomor TO: <VALUE>" (case/spacing tolerant).
+
+Logic:
+
+Scan column A top-down for a value matching (?i).*untuk\s*nomor\s*to\s*:\s*(.+).
+
+Extract <VALUE>, trim it, assign to to_number.
+
+If not found → hard error: “Couldn’t find ‘Untuk nomor TO: …’ in first column”.
+
+B) Detect item columns (lenient headers)
+
+Target fields you must read from the sheet/table:
+
+No. Baris → line_no (optional DB store; always use for ordering/error context)
+
+Kode Item → kode_item
+
+Nama Item → nama_item
+
+SN → sn
+
+Q to tran → treat as qty (alias of quantity)
+
+Header alias rules (case/space/underscore tolerant):
+
+line_no ← [no. baris, no baris, line no, line_no, row no, row_no]
+
+kode_item ← [kode item, kode_item, item_code, sku, itemcode]
+
+nama_item ← [nama item, nama_item, item_name, nama]
+
+sn ← [sn, serial_number, serial no, serial]
+
+qty ← [q to tran, qty, quantity, jumlah, q_to_tran]
+
+Normalize per row:
+
+Trim whitespace for all fields.
+
+Build canonical order: sn, kode_item, nama_item, qty (and line_no if you added it).
+
+Cast qty → integer; require qty > 0.
+
+Required fields: sn, kode_item, qty.
+
+If nama_item missing → insert NULL/empty as allowed.
+
+Error handling:
+
+Bad/missing fields → skip row and add to downloadable error CSV (row_number, field, original_value, message).
+
+Continue processing other rows.
+
+Performance:
+
+Support .csv (UTF-8, comma, header row) and .xlsx.
+
+Stream & batch insert (500–1000 rows/commit). Show progress if UI supports it.
+
+FLOW CHANGES (combine create + import)
+Create New Transfer (file required)
+
+Form: From Store (dari_gudang), To Store (ke_gudang), Tanggal (default today), File (.csv/.xlsx, REQUIRED).
+
+Steps:
+
+Read file → extract to_number from column A.
+
+Validate dari_gudang & ke_gudang exist and differ; ensure to_number is not already in transfer_order.
+
+Insert into transfer_order:
+{ to_number (PK), dari_gudang, ke_gudang, tanggal }.
+
+Invoke the existing Import Items routine with the same file (same service/path used by the Import Items button), passing to_number.
+
+Redirect to View Details of to_number with import summary (inserted/skipped/errors + link to error CSV).
+
+Import Items (post-creation)
+
+On View Details, the Import Items button still accepts .csv/.xlsx.
+
+Use exact same parser/mapping rules above and insert into to_itemlist with to_number.
+
+ENDPOINTS (switch to use to_number)
+
+POST /transfers (multipart): dari_gudang, ke_gudang, optional tanggal, file REQUIRED
+→ Extract to_number from file; create header; then import items.
+Response: { to_number, import: { inserted, skipped, errors, error_report_url? } }
+
+GET /transfers/:to_number → header + paginated to_itemlist + totals
+
+POST /transfers/:to_number/items/import (multipart, file REQUIRED)
+→ { inserted, skipped, errors, error_report_url? }
+
+DELETE /transfers/:to_number/items/:to_itemlist_id → 204
+
+NEW: Delete Transfer (implement this)
+
+Add: DELETE /transfers/:to_number
+Behavior:
+
+If FK has ON DELETE CASCADE, a single delete on transfer_order suffices.
+DELETE FROM transfer_order WHERE to_number = :to_number
+
+If not using cascade, do:
+
+DELETE FROM to_itemlist WHERE to_number = :to_number;
+
+DELETE FROM transfer_order WHERE to_number = :to_number;
+
+Return 204; show confirm dialog in UI: “This will remove the transfer and all its items.”
+
+UI/UX (unchanged except key switch)
+
+Create form unchanged visually, but:
+
+File remains required and drives to_number.
+
+On error extracting to_number, show clear message.
+
+View Details:
+
+Header shows to_number, dari_gudang, ke_gudang, tanggal.
+
+Table columns: to_itemlist_id, sn, kode_item, nama_item, qty (+ line_no if added).
+
+Actions: Import Items, Delete item, Delete transfer.
+
+After import/delete, refresh table & totals; expose error CSV link if any.
+
+TESTS
+
+Create with CSV/XLSX where col A contains Untuk nomor TO: … → header created with that to_number; items imported correctly.
+
+Missing/invalid “Untuk nomor TO” → 400 with clear message.
+
+Header exists with same to_number → 409 conflict.
+
+Import with “Q to tran” correctly mapped to qty; quantity cast & validated.
+
+Mixed good/bad rows → good inserted; error CSV lists the rest with row numbers.
+
+Delete item → 204; row disappears from to_itemlist.
+
+Delete transfer (DELETE /transfers/:to_number) → removes header (and items), 204.
+
+Performance: 50k rows batched without timeouts; progress visually updates if supported.
+
+IMPLEMENTATION NOTES
+
+Treat header mapping as case/space/underscore/hyphen insensitive.
+
+Keep the canonical insert order to to_itemlist: sn, kode_item, nama_item, qty (+ line_no if you added it) along with to_number.
+
+Use a single import service for both “Create” flow and the “Import Items” button to avoid duplicated logic.
+
+Log audit info (user, to_number, counts, timing) if you have an audit layer.

@@ -9,6 +9,7 @@ import { cache } from "./cache";
 import multer from "multer";
 import * as XLSX from "xlsx";
 import * as csv from "csv-parser";
+import { parse as csvParse } from "csv-parse";
 import { Readable } from "stream";
 import { 
   insertLaporanPenjualanSchema, 
@@ -834,13 +835,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.log(`📊 Parsed ${records.length} records from CSV`);
         
         const toId = parsedAdditionalData?.toId;
-        if (!toId) {
-          return res.status(400).json({ message: 'toId is required for transfer items' });
+        const toNumber = parsedAdditionalData?.toNumber || (toId ? `TO-${toId}` : null);
+        if (!toNumber) {
+          return res.status(400).json({ message: 'toNumber or toId is required for transfer items' });
         }
         
         // Insert records directly
         const insertData = records.map(record => ({
-          toId: parseInt(toId),
+          toNumber: toNumber,
           sn: record.sn || record.serial_number || record['Serial Number'] || '',
           kodeItem: record.kode_item || record.item_code || record['Item Code'] || '',
           namaItem: record.nama_item || record.item_name || record['Item Name'] || '',
@@ -1264,15 +1266,48 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      // Step 1: Create transfer order
+      // Step 1: Parse file to extract TO number
+      const fileName = file.originalname;
+      const isExcel = fileName.toLowerCase().endsWith('.xlsx') || fileName.toLowerCase().endsWith('.xls');
+      let records: any[] = [];
+      
+      if (isExcel) {
+        const workbook = XLSX.read(file.buffer, { type: 'buffer' });
+        const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+        records = XLSX.utils.sheet_to_json(firstSheet, { defval: '' });
+      } else {
+        // Parse CSV
+        const csvContent = file.buffer.toString('utf-8');
+        records = await new Promise((resolve, reject) => {
+          const results: any[] = [];
+          const parser = csvParse(csvContent, {
+            columns: true,
+            skip_empty_lines: true,
+            trim: true,
+          });
+          parser.on('data', (data) => results.push(data));
+          parser.on('end', () => resolve(results));
+          parser.on('error', reject);
+        });
+      }
+
+      // Extract TO number from file
+      const toNumber = transferImportProcessor.extractToNumber(records);
+      if (!toNumber) {
+        return res.status(400).json({ 
+          message: 'Could not extract TO number from file. File must contain "Untuk nomor TO: <NUMBER>" in the first column.' 
+        });
+      }
+
+      // Step 2: Create transfer order with extracted TO number
       const transferOrder = await storage.createTransferOrder({
+        toNumber,
         dariGudang,
         keGudang,
         tanggal: tanggal || new Date().toISOString().split('T')[0],
       });
 
-      // Step 2: Upload file to object storage
-      const fileName = file.originalname;
+      // Step 3: Upload file to object storage  
       const contentType = file.mimetype || 'text/csv';
       
       const uploadResult = await transferImportStorage.generatePresignedUploadUrl(fileName, contentType);
@@ -1290,7 +1325,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         throw new Error('Failed to upload file to storage');
       }
 
-      // Step 3: Create import job using existing processor
+      // Step 4: Create import job using extracted TO number
       const fileSha256 = crypto.createHash('sha256').update(file.buffer).digest('hex');
       
       const job = transferImportProcessor.createJob({
@@ -1299,8 +1334,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         fileName: fileName,
         fileSize: file.size,
         fileSha256,
-        toId: transferOrder.toId,
-        idempotencyKey: `create_${transferOrder.toId}_${Date.now()}`
+        toNumber,
+        toId: transferOrder.toId, // Keep for backward compatibility
+        idempotencyKey: `create_${toNumber}_${Date.now()}`
       });
 
       // Wait briefly for initial processing
@@ -1348,7 +1384,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: 'Invalid transfer order ID' });
       }
       
-      const items = await storage.getToItemListByTransferOrderId(toId);
+      const items = await storage.getToItemListByTransferOrderNumber('TO-' + toId);
       res.json(items);
     } catch (error) {
       console.error('Get transfer items error:', error);
@@ -1366,7 +1402,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: 'Invalid IDs' });
       }
       
-      await storage.deleteTransferItem(toItemListId, toId);
+      await storage.deleteTransferItem(toItemListId, 'TO-' + toId);
       res.status(204).send();
     } catch (error) {
       console.error('Delete transfer item error:', error);
@@ -1384,9 +1420,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // First delete all items
-      await storage.deleteAllTransferItems(toId);
+      await storage.deleteAllTransferItems('TO-' + toId);
       // Then delete the transfer order
-      await storage.deleteTransferOrder(toId);
+      await storage.deleteTransferOrder('TO-' + toId);
       
       res.status(204).send();
     } catch (error) {

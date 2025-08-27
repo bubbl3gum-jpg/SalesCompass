@@ -121,9 +121,9 @@ export interface IStorage {
   // Transfer operations
   createTransferOrder(data: InsertTransferOrder): Promise<TransferOrder>;
   getTransferOrders(): Promise<TransferOrder[]>;
-  deleteTransferItem(toItemListId: number, toId: number): Promise<void>;
-  deleteAllTransferItems(toId: number): Promise<void>;
-  deleteTransferOrder(toId: number): Promise<void>;
+  deleteTransferItem(toItemListId: number, toNumber: string): Promise<void>;
+  deleteAllTransferItems(toNumber: string): Promise<void>;
+  deleteTransferOrder(toNumber: string): Promise<void>;
 
   // EDC operations
   getEdc(): Promise<Edc[]>;
@@ -153,7 +153,7 @@ export interface IStorage {
   
   // Transfer order item list operations
   createToItemList(data: InsertToItemList): Promise<ToItemList>;
-  getToItemListByTransferOrderId(toId: number): Promise<ToItemList[]>;
+  getToItemListByTransferOrderNumber(toNumber: string): Promise<ToItemList[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -779,24 +779,24 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
   
-  async getToItemListByTransferOrderId(toId: number): Promise<ToItemList[]> {
-    return await db.select().from(toItemList).where(eq(toItemList.toId, toId));
+  async getToItemListByTransferOrderNumber(toNumber: string): Promise<ToItemList[]> {
+    return await db.select().from(toItemList).where(eq(toItemList.toNumber, toNumber));
   }
 
-  async deleteTransferItem(toItemListId: number, toId: number): Promise<void> {
+  async deleteTransferItem(toItemListId: number, toNumber: string): Promise<void> {
     await db.delete(toItemList)
       .where(and(
         eq(toItemList.toItemListId, toItemListId),
-        eq(toItemList.toId, toId)
+        eq(toItemList.toNumber, toNumber)
       ));
   }
 
-  async deleteAllTransferItems(toId: number): Promise<void> {
-    await db.delete(toItemList).where(eq(toItemList.toId, toId));
+  async deleteAllTransferItems(toNumber: string): Promise<void> {
+    await db.delete(toItemList).where(eq(toItemList.toNumber, toNumber));
   }
 
-  async deleteTransferOrder(toId: number): Promise<void> {
-    await db.delete(transferOrders).where(eq(transferOrders.toId, toId));
+  async deleteTransferOrder(toNumber: string): Promise<void> {
+    await db.delete(transferOrders).where(eq(transferOrders.toNumber, toNumber));
   }
 }
 

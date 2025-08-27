@@ -205,8 +205,8 @@ export const staff = pgTable("staff", {
 
 // Transfer Orders
 export const transferOrders = pgTable("transfer_order", {
-  toId: integer("to_id").primaryKey().generatedByDefaultAsIdentity(),
-  toNumber: varchar("to_number", { length: 50 }), // Original TO number from Excel
+  toId: integer("to_id").generatedByDefaultAsIdentity(),
+  toNumber: varchar("to_number", { length: 50 }).primaryKey().notNull(), // Primary key now
   dariGudang: varchar("dari_gudang", { length: 50 }).references(() => stores.kodeGudang),
   keGudang: varchar("ke_gudang", { length: 50 }).references(() => stores.kodeGudang),
   tanggal: date("tanggal"),
@@ -219,12 +219,15 @@ export const transferOrders = pgTable("transfer_order", {
 // Transfer Order Item List
 export const toItemList = pgTable("to_itemlist", {
   toItemListId: integer("to_itemlist_id").primaryKey().generatedByDefaultAsIdentity(),
-  toId: integer("to_id"),
+  toNumber: varchar("to_number", { length: 50 }).notNull().references(() => transferOrders.toNumber, { onUpdate: "cascade", onDelete: "cascade" }),
+  lineNo: integer("line_no"), // Line number from import
   sn: varchar("sn", { length: 100 }),
   kodeItem: varchar("kode_item", { length: 50 }),
   namaItem: varchar("nama_item", { length: 255 }),
   qty: integer("qty").default(1),
-});
+}, (table) => [
+  index("idx_to_itemlist_line_no").on(table.toNumber, table.lineNo),
+]);
 
 // Stock Opname
 export const stockOpname = pgTable("stock_opname", {
