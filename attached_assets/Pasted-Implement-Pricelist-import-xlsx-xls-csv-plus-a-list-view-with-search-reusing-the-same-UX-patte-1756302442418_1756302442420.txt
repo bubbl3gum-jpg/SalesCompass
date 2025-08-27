@@ -1,0 +1,148 @@
+Implement Pricelist import (.xlsx/.xls/.csv) plus a list view with search, reusing the same UX patterns as the Transfer import. Do not change the DB schema unless it already contains these columns. Use the existing pricelist table and map fields by name.
+
+SCOPE
+
+Add a Pricelist page that can:
+
+Import files (.xlsx, .xls, .csv) and insert rows into the existing pricelist table.
+
+Parse + normalize incoming columns to the canonical order:
+sn, kode_item, kelompok, family, kode_material, kode_motif, nama_motif, normal_price
+(Some values may be blank; that’s allowed.)
+
+List all pricelist rows in a paginated table inside the UI.
+
+Provide a search bar that searches across key fields (at least: sn, kode_item, family, kode_motif, nama_motif).
+
+Follow the same import flow UX used for Transfer: progress indicator, error CSV for bad rows, and batch inserts for performance.
+
+If anything is ambiguous (e.g., exact table name/column names), use the existing pricelist table and do not alter schema. Perform header-to-column mapping at import time. If a required destination column is missing in the DB, return a clear error telling which column is missing.
+
+ACCEPTANCE CRITERIA
+A) File Import (required behavior)
+
+Accept .xlsx/.xls (Excel) and .csv (UTF-8, comma, header row).
+
+Excel: select the first non-empty sheet by default.
+
+Show a progress indicator during import.
+
+On completion, display counts { inserted, skipped, errors } and a link to download an error CSV.
+
+B) Header Mapping (lenient but canonicalized)
+
+Normalize headers (case/space/underscore/hyphen tolerant) into this canonical order before insert:
+
+sn ← aliases: [sn, serial_number, serial no, serial]
+
+kode_item ← [kode item, kode_item, item_code, sku, itemcode]
+
+kelompok ← [kelompok, kelompol, kelompok, group, category_group] ← treat “kelompol” as valid alias
+
+family ← [family, famili, familia]
+
+kode_material ← [kode material, kode_material, material_code]
+
+kode_motif ← [kode motif, kode_motif, motif_code, pattern_code]
+
+nama_motif ← [nama motif, nama_motif, motif_name, pattern_name, nama]
+
+normal_price ← [normal price, normal_price, harga normal, harga_normal, price]
+
+Row normalization rules
+
+Trim whitespace for all fields.
+
+normal_price:
+
+Strip currency symbols and thousands separators (Rp, spaces, ,, .) safely and parse to numeric (decimal/float).
+
+If empty → insert NULL (or DB default).
+
+If non-numeric after cleaning → send to error CSV.
+
+Required fields: kode_item.
+
+sn can be blank if your schema allows; otherwise treat as required and error if missing (choose based on actual DB constraint).
+
+All other fields may be blank; insert as NULL/empty per DB allowance.
+
+The final insert order must be exactly:
+sn, kode_item, kelompok, family, kode_material, kode_motif, nama_motif, normal_price.
+
+Error handling
+
+Do not fail the entire file for partial errors.
+
+Collect per-row errors into an error CSV with columns:
+row_number, field, original_value, message.
+
+Typical error messages: “missing required field”, “invalid number”, “header not found”.
+
+C) Performance & Idempotency
+
+Stream large files; process in batches of ~500–1000 rows per DB transaction.
+
+Optional idempotency: if an exact duplicate record (by a sensible key like sn+kode_item or table PK) already exists, skip and count as skipped. (Do not alter schema; use existing unique keys if present.)
+
+D) UI — Pricelist Page
+
+Toolbar:
+
+Import Pricelist (button) → file picker for .xlsx/.xls/.csv → show progress → toast summary → refresh table.
+
+Search bar (debounced ~300–500 ms) that searches (ILIKE/CONTAINS) across: sn, kode_item, family, kode_motif, nama_motif.
+
+Table view (paginated, sortable at least by kode_item and sn):
+
+Columns: sn, kode_item, kelompok, family, kode_material, kode_motif, nama_motif, normal_price.
+
+Show total rows count and current page info.
+
+Empty state: clear guidance (“Import .xlsx/.xls/.csv with headers: sn, kode item, … normal price”).
+
+E) API CONTRACT (adapt names to your stack)
+
+POST /pricelist/import (multipart)
+
+Form: file (.xlsx/.xls/.csv required)
+
+Returns: { inserted, skipped, errors, error_report_url? }
+
+GET /pricelist
+
+Query params: q (search text), page, page_size, sort_by, sort_dir
+
+Returns: { rows: [...], total, page, page_size }
+
+Reuse the same import utilities used by Transfer: chunked parsing, progress events (SSE/WebSocket or polling), error CSV generation, and shared header-mapping helpers.
+
+IMPLEMENTATION NOTES
+
+Header parsing must be case-insensitive and whitespace/underscore tolerant. Treat “kelompol” exactly as an alias of kelompok.
+
+CSV: handle BOM; assume comma delimiter; if semicolon is detected consistently, auto-switch.
+
+Excel: rely on first non-empty sheet; header row is the first non-blank row.
+
+Number parsing for normal_price: remove Rp, spaces, apostrophes, commas, dots; then parse; keep two decimals if your DB column is DECIMAL.
+
+After import, refresh the table and keep the current search query if one is active.
+
+Log an audit entry with counts and filename if your system has audit logging.
+
+TESTS (minimum)
+
+Import .xlsx and .csv with mixed valid/invalid rows → valid inserted; invalid in error CSV; counts match.
+
+Headers with variants (kelompol, harga normal, kode item) map correctly.
+
+normal_price parses values like Rp 1.234.567,89 and 1,234,567.89.
+
+Large file (≥50k rows) imports within reasonable time; UI progress updates.
+
+Search: typing a term filters rows across sn, kode_item, family, kode_motif, nama_motif; clearing search restores full list.
+
+Table pagination and sorting work; import refreshes list without losing search context.
+
+Build exactly as above, without altering the database schema (use the existing pricelist table and map by column names). If a required destination column is missing in the DB, return a clear, actionable error message to the user.
