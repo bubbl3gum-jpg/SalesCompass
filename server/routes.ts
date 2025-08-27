@@ -1770,13 +1770,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log('🗂️ Final object name:', objectName);
 
       try {
-        // Get the object file from storage  
-        const objectFile = transferImportStorage.bucket.file(objectName);
+        // Use the proper method to get the import file
+        console.log('🔍 Getting import file from storage...');
+        const objectFile = await transferImportStorage.getImportFile(fileKey);
         
         // Check if file exists before processing
         const [exists] = await objectFile.exists();
         if (!exists) {
-          console.error('❌ Object file does not exist:', objectName);
+          console.error('❌ Object file does not exist:', fileKey);
           return res.status(404).json({ 
             message: 'Uploaded file not found in storage',
             fileKey,
