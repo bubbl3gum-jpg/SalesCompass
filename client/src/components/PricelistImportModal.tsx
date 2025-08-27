@@ -160,9 +160,29 @@ export function PricelistImportModal({
     },
     onError: (error) => {
       console.error('Complete import error:', error);
+      
+      // Check for specific error types
+      if (isUnauthorizedError(error as Error)) {
+        toast({
+          title: "Unauthorized",
+          description: "You are logged out. Logging in again...",
+          variant: "destructive",
+        });
+        setTimeout(() => {
+          window.location.href = "/api/login";
+        }, 500);
+        return;
+      }
+      
+      // Extract error message from response
+      let errorMessage = "Failed to start processing";
+      if (error && typeof error === 'object' && 'message' in error) {
+        errorMessage = (error as any).message || errorMessage;
+      }
+      
       toast({
         title: "Import Failed",
-        description: "Failed to start processing",
+        description: errorMessage,
         variant: "destructive"
       });
       setImportStatus('failed');
@@ -197,10 +217,19 @@ export function PricelistImportModal({
       setUploadProgress(100);
 
       // Step 3: Complete import and start processing
+      console.log('🔄 Starting complete step...');
       const fileBuffer = await selectedFile.arrayBuffer();
       const hashBuffer = await crypto.subtle.digest('SHA-256', fileBuffer);
       const hashArray = Array.from(new Uint8Array(hashBuffer));
       const fileSha256 = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+
+      console.log('📝 Complete request data:', {
+        uploadId: initResult.uploadId,
+        fileKey: initResult.fileKey,
+        fileSize: selectedFile.size,
+        fileSha256: fileSha256.substring(0, 16) + '...', // Log first 16 chars only
+        idempotencyKey: initResult.idempotencyKey
+      });
 
       const completeResult = await completeMutation.mutateAsync({
         uploadId: initResult.uploadId,
@@ -262,10 +291,30 @@ export function PricelistImportModal({
 
     } catch (error) {
       console.error('Import error:', error);
+      
+      // Extract meaningful error information
+      let errorMessage = "An unknown error occurred";
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      } else if (error && typeof error === 'object') {
+        // Try to extract error from response
+        if ('message' in error) {
+          errorMessage = (error as any).message;
+        } else if ('error' in error) {
+          errorMessage = (error as any).error;
+        }
+      }
+      
+      console.log('📋 Detailed error info:', {
+        type: typeof error,
+        message: errorMessage,
+        error: error
+      });
+      
       setImportStatus('failed');
       toast({
         title: "Import Failed",
-        description: error instanceof Error ? error.message : 'Unknown error',
+        description: errorMessage,
         variant: "destructive"
       });
     }
