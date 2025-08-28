@@ -38,9 +38,9 @@ export default function SalesEntry() {
       if (user.store_id && !user.can_access_all_stores) {
         setSelectedStore(user.store_id);
       } 
-      // If user can access all stores, use their authenticated store or default to first
+      // If user can access all stores, default to ALL_STORE for collective data
       else if (user.can_access_all_stores) {
-        setSelectedStore(user.store_id || stores[0].kodeGudang);
+        setSelectedStore('ALL_STORE');
       }
       // Fallback to first store
       else {
@@ -74,6 +74,30 @@ export default function SalesEntry() {
                 </div>
               )}
               
+              {/* Store Display - Show for all-store users when ALL_STORE is selected */}
+              {user?.can_access_all_stores && selectedStore === 'ALL_STORE' && (
+                <div className="text-right">
+                  <p className="text-lg font-semibold text-gray-900 dark:text-white">
+                    All Store Access
+                  </p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                    ALL_STORE
+                  </p>
+                </div>
+              )}
+              
+              {/* Store Display - Show individual store for all-store users */}
+              {user?.can_access_all_stores && selectedStore !== 'ALL_STORE' && selectedStore && (
+                <div className="text-right">
+                  <p className="text-lg font-semibold text-gray-900 dark:text-white">
+                    {stores.find(s => s.kodeGudang === selectedStore)?.namaGudang || selectedStore}
+                  </p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                    {selectedStore}
+                  </p>
+                </div>
+              )}
+              
               <Button
                 onClick={() => setShowSalesModal(true)}
                 className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700"
@@ -97,6 +121,7 @@ export default function SalesEntry() {
                     <SelectValue placeholder="Choose your store..." />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="ALL_STORE">All Stores</SelectItem>
                     {stores.map((store: any) => (
                       <SelectItem key={store.kodeGudang} value={store.kodeGudang}>
                         {store.namaGudang}

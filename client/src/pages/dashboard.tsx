@@ -177,9 +177,9 @@ export default function Dashboard() {
       if (user.store_id && !user.can_access_all_stores) {
         setSelectedStore(user.store_id);
       } 
-      // If user can access all stores, use their authenticated store or default to first
+      // If user can access all stores, default to ALL_STORE for collective data
       else if (user.can_access_all_stores) {
-        setSelectedStore(user.store_id || stores[0].kodeGudang);
+        setSelectedStore('ALL_STORE');
       }
       // Fallback to first store
       else {
@@ -306,7 +306,9 @@ export default function Dashboard() {
                       className="w-64 justify-between bg-white/20 dark:bg-black/20 backdrop-blur-xl border border-white/20 dark:border-gray-800/50 text-gray-900 dark:text-white"
                       data-testid="select-store"
                     >
-                      {selectedStore
+                      {selectedStore === 'ALL_STORE'
+                        ? "All Store Access"
+                        : selectedStore
                         ? stores.find((store) => store.kodeGudang === selectedStore)?.namaGudang || "Select store..."
                         : "Select store..."}
                       <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
@@ -321,6 +323,28 @@ export default function Dashboard() {
                       <CommandList>
                         <CommandEmpty>No store found.</CommandEmpty>
                         <CommandGroup>
+                          <CommandItem
+                            key="ALL_STORE"
+                            value="ALL_STORE All Stores"
+                            onSelect={() => {
+                              setSelectedStore('ALL_STORE');
+                              setStoreDropdownOpen(false);
+                            }}
+                            className="cursor-pointer"
+                          >
+                            <Check
+                              className={cn(
+                                "mr-2 h-4 w-4",
+                                selectedStore === 'ALL_STORE' ? "opacity-100" : "opacity-0"
+                              )}
+                            />
+                            <div className="flex flex-col">
+                              <span className="font-medium">All Stores</span>
+                              <span className="text-sm text-gray-500 dark:text-gray-400">
+                                ALL_STORE
+                              </span>
+                            </div>
+                          </CommandItem>
                           {stores.map((store) => (
                             <CommandItem
                               key={store.kodeGudang}
