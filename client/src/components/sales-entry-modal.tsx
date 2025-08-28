@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -80,6 +80,13 @@ export function SalesEntryModal({ isOpen, onClose, selectedStore }: SalesEntryMo
       finalPrice: "0",
     },
   });
+
+  // Update form when selectedStore changes
+  useEffect(() => {
+    if (selectedStore) {
+      form.setValue('kodeGudang', selectedStore);
+    }
+  }, [selectedStore, form]);
 
   // Get stores
   const { data: stores } = useQuery({
@@ -330,7 +337,7 @@ export function SalesEntryModal({ isOpen, onClose, selectedStore }: SalesEntryMo
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Payment Method</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
                         <SelectTrigger data-testid="select-payment-method">
                           <SelectValue placeholder="Select Payment Method" />
