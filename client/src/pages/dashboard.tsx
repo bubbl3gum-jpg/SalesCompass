@@ -278,13 +278,15 @@ export default function Dashboard() {
             <div>
               <h2 className="text-3xl font-bold text-gray-900 dark:text-white">Command Center</h2>
               <p className="text-gray-600 dark:text-gray-400 mt-1">
-                {selectedStore ? `${stores.find(s => s.kodeGudang === selectedStore)?.namaGudang || selectedStore} • ${new Date().toLocaleDateString('id-ID')}` : 'Select a store to view data'}
+                {new Date().toLocaleDateString('id-ID')}
               </p>
             </div>
             <div className="flex items-center space-x-4">
-              {/* Store Selection - Only show for users with all-store access */}
-              {stores.length > 0 && user?.can_access_all_stores && (
-                <Popover open={storeDropdownOpen} onOpenChange={setStoreDropdownOpen}>
+              {/* Store Display/Selection */}
+              {user?.can_access_all_stores ? (
+                // Store Selection - For users with all-store access
+                stores.length > 0 && (
+                  <Popover open={storeDropdownOpen} onOpenChange={setStoreDropdownOpen}>
                   <PopoverTrigger asChild>
                     <Button
                       variant="outline"
@@ -337,6 +339,19 @@ export default function Dashboard() {
                     </Command>
                   </PopoverContent>
                 </Popover>
+                  )
+              ) : (
+                // Store Display - For individual store users
+                selectedStore && (
+                  <div className="text-right">
+                    <p className="text-lg font-semibold text-gray-900 dark:text-white">
+                      {stores.find(s => s.kodeGudang === selectedStore)?.namaGudang || selectedStore}
+                    </p>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                      {selectedStore}
+                    </p>
+                  </div>
+                )
               )}
             </div>
           </div>

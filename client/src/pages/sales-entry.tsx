@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Sidebar } from "@/components/sidebar";
 import { useSidebar } from "@/hooks/useSidebar";
@@ -31,6 +31,15 @@ export default function SalesEntry() {
     retry: false,
   });
 
+  // Auto-select store for individual store users
+  useEffect(() => {
+    if (user && !user.can_access_all_stores && user.storeCode && !selectedStore) {
+      setSelectedStore(user.storeCode);
+    } else if (stores.length > 0 && !selectedStore) {
+      setSelectedStore(stores[0].kodeGudang);
+    }
+  }, [user, stores, selectedStore]);
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 dark:from-slate-900 dark:via-slate-800 dark:to-indigo-900">
       <Sidebar />
@@ -43,47 +52,61 @@ export default function SalesEntry() {
               <h2 className="text-3xl font-bold text-gray-900 dark:text-white">Sales Entry</h2>
               <p className="text-gray-600 dark:text-gray-400 mt-1">Record and manage sales transactions</p>
             </div>
-            <Button
-              onClick={() => setShowSalesModal(true)}
-              className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700"
-              data-testid="button-new-sale"
-            >
-              <i className="fas fa-plus mr-2"></i>
-              New Sale
-            </Button>
+            <div className="flex items-center space-x-4">
+              {/* Store Display - Show for individual store users */}
+              {!user?.can_access_all_stores && selectedStore && (
+                <div className="text-right">
+                  <p className="text-lg font-semibold text-gray-900 dark:text-white">
+                    {stores.find(s => s.kodeGudang === selectedStore)?.namaGudang || selectedStore}
+                  </p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                    {selectedStore}
+                  </p>
+                </div>
+              )}
+              
+              <Button
+                onClick={() => setShowSalesModal(true)}
+                className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700"
+                data-testid="button-new-sale"
+              >
+                <i className="fas fa-plus mr-2"></i>
+                New Sale
+              </Button>
+            </div>
           </div>
           
           {/* Store Selector - Only show for users with all-store access */}
           {user?.can_access_all_stores && (
             <div className="flex items-center gap-4">
-            <label className="text-sm font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap">
-              Select Store:
-            </label>
-            <div className="flex-1 max-w-sm">
-              <Select value={selectedStore} onValueChange={setSelectedStore}>
-                <SelectTrigger data-testid="select-store-main">
-                  <SelectValue placeholder="Choose your store..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {stores.map((store: any) => (
-                    <SelectItem key={store.kodeGudang} value={store.kodeGudang}>
-                      {store.namaGudang}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            {selectedStore && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setSelectedStore('')}
-                className="text-xs"
-                data-testid="button-clear-store"
-              >
-                Clear
-              </Button>
-            )}
+              <label className="text-sm font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap">
+                Select Store:
+              </label>
+              <div className="flex-1 max-w-sm">
+                <Select value={selectedStore} onValueChange={setSelectedStore}>
+                  <SelectTrigger data-testid="select-store-main">
+                    <SelectValue placeholder="Choose your store..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {stores.map((store: any) => (
+                      <SelectItem key={store.kodeGudang} value={store.kodeGudang}>
+                        {store.namaGudang}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              {selectedStore && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setSelectedStore('')}
+                  className="text-xs"
+                  data-testid="button-clear-store"
+                >
+                  Clear
+                </Button>
+              )}
             </div>
           )}
         </header>
