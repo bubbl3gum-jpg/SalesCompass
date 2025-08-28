@@ -105,13 +105,20 @@ export async function comparePasswords(supplied: string, stored: string): Promis
       return await bcrypt.compare(supplied, stored);
     }
     
-    // Otherwise, use the legacy scrypt method
-    const [hashed, salt] = stored.split(".");
-    if (!hashed || !salt) return false;
+    // Check if it's a legacy scrypt method (contains a ".")
+    if (stored.includes('.')) {
+      const [hashed, salt] = stored.split(".");
+      if (!hashed || !salt) return false;
+      
+      const hashedBuf = Buffer.from(hashed, "hex");
+      const suppliedBuf = (await scryptAsync(supplied, salt, 64)) as Buffer;
+      return timingSafeEqual(hashedBuf, suppliedBuf);
+    }
     
-    const hashedBuf = Buffer.from(hashed, "hex");
-    const suppliedBuf = (await scryptAsync(supplied, salt, 64)) as Buffer;
-    return timingSafeEqual(hashedBuf, suppliedBuf);
+    // Handle plain text passwords (for development/legacy data)
+    // TODO: In production, all passwords should be hashed
+    console.warn("Plain text password comparison - this should be hashed in production");
+    return supplied === stored;
   } catch (error) {
     console.error("Password comparison error:", error);
     return false;
