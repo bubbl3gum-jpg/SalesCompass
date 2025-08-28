@@ -157,6 +157,8 @@ export default function AdminSettings() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
+  const [activeTab, setActiveTab] = useState('reference-sheet');
+
   // Fetch positions for staff form - only when needed
   const { data: positions = [] } = useQuery({
     queryKey: ['/api/positions'],
@@ -172,8 +174,6 @@ export default function AdminSettings() {
     retry: false,
     enabled: activeTab === 'staff' || activeTab === 'positions', // Only fetch when staff or positions tab is active
   });
-
-  const [activeTab, setActiveTab] = useState('reference-sheet');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
