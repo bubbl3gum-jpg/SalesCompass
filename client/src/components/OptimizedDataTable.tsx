@@ -39,20 +39,26 @@ const TableRow = memo(({ index, style, data }: any) => {
         onCheckedChange={(checked) => onSelectItem(itemId, checked as boolean)}
         className="mr-4"
       />
-      {config.fields.slice(0, 4).map((field) => (
-        <div key={field.key} className="flex-1 px-2 truncate">
-          {field.type === 'password' ? '••••••••' : (
-            (() => {
-              const value = item[field.key];
-              if (value === null || value === undefined) return '-';
-              if (typeof value === 'object') {
-                return Array.isArray(value) ? value.join(', ') : JSON.stringify(value);
-              }
-              return String(value);
-            })()
-          )}
-        </div>
-      ))}
+      {config.fields.slice(0, 4).map((field) => {
+        const value = item[field.key];
+        let displayValue = '-';
+        
+        if (field.type === 'password') {
+          displayValue = '••••••••';
+        } else if (value !== null && value !== undefined) {
+          if (typeof value === 'object') {
+            displayValue = Array.isArray(value) ? value.join(', ') : JSON.stringify(value);
+          } else {
+            displayValue = String(value);
+          }
+        }
+        
+        return (
+          <div key={String(field.key)} className="flex-1 px-2 truncate">
+            {displayValue}
+          </div>
+        );
+      })}
       <div className="flex gap-2 ml-4">
         <Button
           size="sm"
