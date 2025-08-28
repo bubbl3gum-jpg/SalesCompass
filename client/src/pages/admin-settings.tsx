@@ -105,7 +105,7 @@ const tableConfigs: TableConfig[] = [
     displayName: 'Staff',
     endpoint: '/api/staff',
     importTable: 'staff',
-    keyField: 'employeeId',
+    keyField: 'nik',
     fields: [
       { key: 'nik', label: 'NIK', type: 'text', required: true },
       { key: 'email', label: 'Email', type: 'email', required: true },
@@ -411,12 +411,9 @@ export default function AdminSettings() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    console.log('Form submission:', { editingItem, formData });
     if (editingItem) {
-      console.log('Calling updateMutation for item:', editingItem);
       updateMutation.mutate(formData);
     } else {
-      console.log('Calling createMutation');
       createMutation.mutate(formData);
     }
   };
@@ -600,7 +597,6 @@ export default function AdminSettings() {
                                     variant="ghost"
                                     size="sm"
                                     onClick={() => {
-                                      console.log('Edit button clicked for item:', item[config.keyField], item);
                                       setEditingItem(item[config.keyField]);
                                       setFormData(item);
                                       setShowEditModal(true);
@@ -698,12 +694,6 @@ export default function AdminSettings() {
             <DialogTitle>
               {editingItem ? 'Update' : 'Create'} {getCurrentConfig()?.displayName} Record
             </DialogTitle>
-            {/* Debug info */}
-            {process.env.NODE_ENV === 'development' && (
-              <p className="text-xs text-gray-500">
-                Debug: editingItem = {editingItem || 'null'}, mode = {editingItem ? 'UPDATE' : 'CREATE'}
-              </p>
-            )}
           </DialogHeader>
           
           <form onSubmit={handleSubmit} className="space-y-4">
