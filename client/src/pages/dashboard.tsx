@@ -170,12 +170,23 @@ export default function Dashboard() {
     }
   }, [metricsError, toast]);
 
-  // Set default store when stores load
+  // Set default store when stores load - prioritize user's authenticated store
   useEffect(() => {
-    if (stores.length > 0 && !selectedStore) {
-      setSelectedStore(stores[0].kodeGudang);
+    if (stores.length > 0 && !selectedStore && user) {
+      // If user has a specific store from authentication, use that
+      if (user.store_id && !user.can_access_all_stores) {
+        setSelectedStore(user.store_id);
+      } 
+      // If user can access all stores, use their authenticated store or default to first
+      else if (user.can_access_all_stores) {
+        setSelectedStore(user.store_id || stores[0].kodeGudang);
+      }
+      // Fallback to first store
+      else {
+        setSelectedStore(stores[0].kodeGudang);
+      }
     }
-  }, [stores, selectedStore]);
+  }, [stores, selectedStore, user]);
 
   // Update settlement form store when selectedStore changes
   useEffect(() => {
