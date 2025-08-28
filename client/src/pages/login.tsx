@@ -161,7 +161,7 @@ export default function Login() {
 
             <Button
               type="submit"
-              className="w-full"
+              className="w-full bg-[#f0f6ff]"
               disabled={loginMutation.isPending}
               data-testid="button-login"
             >
