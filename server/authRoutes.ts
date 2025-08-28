@@ -6,20 +6,64 @@ import type { InsertStaff } from "@shared/schema";
 
 export const authRouter = Router();
 
-// Login endpoint with store authentication
+// Helper function to pick first present key from aliases
+function pickAlias(body: any, aliases: string[]): any {
+  for (const alias of aliases) {
+    if (body[alias] !== undefined && body[alias] !== null && body[alias] !== '') {
+      return body[alias];
+    }
+  }
+  return undefined;
+}
+
+// Login endpoint with store authentication and multilingual field aliases
 authRouter.post("/api/auth/login", async (req, res) => {
+  const correlationId = `auth_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  
   try {
-    const { username, password, store_id, store_password } = req.body;
+    console.log(`[${correlationId}] Login attempt initiated`);
+    
+    // Field alias mapping (English and Bahasa Indonesia)
+    const emailAliases = ['email', 'username', 'user', 'staff_email', 'email_pegawai'];
+    const passwordAliases = ['password', 'kata_sandi', 'sandi'];
+    const storeCodeAliases = ['store_code', 'store_id', 'kode_gudang', 'kode_toko', 'kode_store', 'gudang_id', 'id_toko'];
+    const storePasswordAliases = ['store_password', 'password_gudang', 'sandi_gudang', 'pin_gudang'];
+    
+    // Extract fields using aliases
+    const email = pickAlias(req.body, emailAliases);
+    const password = pickAlias(req.body, passwordAliases);
+    const storeCodeOrId = pickAlias(req.body, storeCodeAliases);
+    const storePassword = pickAlias(req.body, storePasswordAliases);
+    
+    console.log(`[${correlationId}] Fields extracted - email: ${email}, storeCodeOrId: ${storeCodeOrId}`);
     
     // Validate required fields
-    if (!username || !password || !store_id || !store_password) {
+    if (!email || !password || !storeCodeOrId || !storePassword) {
+      console.log(`[${correlationId}] Missing required fields`);
       return res.status(400).json({ 
-        message: "Username, password, store ID, and store password are required" 
+        message: "Username, password, store ID, and store password are required",
+        error_code: "MISSING_FIELDS"
       });
     }
+    
+    // Normalize fields (trim whitespace, lowercase email/store but NOT passwords)
+    const normalizedEmail = email.trim().toLowerCase();
+    const normalizedStoreCodeOrId = storeCodeOrId.trim().toUpperCase(); // Keep uppercase for store codes
+    const normalizedPassword = password.trim(); // Don't alter password case
+    const normalizedStorePassword = storePassword.trim(); // Don't alter password case
+    
+    console.log(`[${correlationId}] Fields normalized - email: ${normalizedEmail}, store: ${normalizedStoreCodeOrId}`);
 
     // Authenticate user with store
-    const result = await authenticateUser(username, password, store_id, store_password);
+    const result = await authenticateUser(
+      normalizedEmail, 
+      normalizedPassword, 
+      normalizedStoreCodeOrId, 
+      normalizedStorePassword,
+      correlationId
+    );
+    
+    console.log(`[${correlationId}] Authentication successful, token issued`);
 
     // Set refresh token as httpOnly cookie
     res.cookie("refreshToken", result.tokens.refresh, {
@@ -36,18 +80,23 @@ authRouter.post("/api/auth/login", async (req, res) => {
     });
 
   } catch (error: any) {
-    console.error("Login error:", error);
+    console.error(`[${correlationId}] Login error:`, error.message);
     
-    // Return appropriate error message
-    if (error.message === "Invalid store" || error.message === "Invalid store credentials") {
-      return res.status(401).json({ message: "Invalid store credentials" });
-    }
+    // Return appropriate error message based on error code
+    const errorMap: Record<string, { status: number, message: string }> = {
+      'STORE_NOT_FOUND': { status: 404, message: 'Store not found' },
+      'STORE_PASSWORD_INVALID': { status: 401, message: 'Invalid store password' },
+      'USER_NOT_FOUND_OR_PASSWORD_INVALID': { status: 401, message: 'Invalid username or password' },
+      'USER_INACTIVE': { status: 403, message: 'User account is inactive' },
+      'USER_NOT_AUTHORIZED_FOR_STORE': { status: 403, message: 'User not authorized for this store' }
+    };
     
-    if (error.message === "Invalid credentials") {
-      return res.status(401).json({ message: "Invalid username or password" });
-    }
-    
-    res.status(500).json({ message: "Login failed" });
+    const errorResponse = errorMap[error.code] || { status: 500, message: 'Login failed' };
+    return res.status(errorResponse.status).json({ 
+      message: errorResponse.message,
+      error_code: error.code || 'LOGIN_FAILED',
+      correlation_id: correlationId
+    });
   }
 });
 

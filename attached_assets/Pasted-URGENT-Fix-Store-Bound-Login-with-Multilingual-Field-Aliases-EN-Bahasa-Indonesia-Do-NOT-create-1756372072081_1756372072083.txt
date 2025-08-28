@@ -1,0 +1,197 @@
+URGENT: Fix Store-Bound Login with Multilingual Field Aliases (EN + Bahasa Indonesia)
+
+Do NOT create new tables/columns. Reuse existing schema, utilities, and Store.store_password.
+
+Context
+
+Login requires staff credentials + store context.
+
+Inputs may arrive with English or Bahasa Indonesia keys (e.g., store_code vs kode_gudang).
+
+Roles: admin, supervisor, spg with store-scoped access and different UI menus.
+
+Symptom: correct credentials still fail to reach main system (401/403/redirect loop/stuck).
+
+Hard Guardrails
+
+No schema changes, no new tables, no renames.
+
+Use existing password hashing (bcrypt/argon2), JWT/session utilities, DI/middleware, logging.
+
+Store credential field is store_password (use exactly that column on Store).
+
+If parameter names differ, map in code only (aliasing). Do not alter DB.
+
+Task
+1) Accept multilingual request keys via alias mapping
+
+The login endpoint (e.g., POST /auth/login) must accept either English or Bahasa keys and map them to canonical variables without breaking existing clients.
+
+Canonical variables (internal):
+
+email (staff email/username)
+
+password (staff password)
+
+store_code_or_id (string provided by client, may be a code or id)
+
+store_password (store credential)
+
+Accepted aliases → canonical:
+
+email: email, username, user, staff_email, email_pegawai
+
+password: password, kata_sandi, sandi
+
+store_code_or_id:
+
+English: store_code, store_id
+
+Bahasa: kode_gudang, kode_toko, kode_store, gudang_id, id_toko
+
+store_password: store_password, password_gudang, sandi_gudang, pin_gudang
+
+Normalization rules:
+
+Trim whitespace on all fields.
+
+Lowercase + Unicode-normalize email and store_code_or_id for lookup (do not lowercase passwords).
+
+Accept both store_code and store_id. If it parses to an integer ID, treat as ID; otherwise treat as code.
+
+Implementation hint (pseudocode):
+
+Build a small alias dictionary per field and pick the first present key.
+
+Example: email = pick(["email","username","user","staff_email","email_pegawai"]).
+
+2) Validation flow (strict order)
+
+Resolve store
+
+If store_code_or_id is numeric → lookup by existing ID.
+
+Else → lookup by existing code field (e.g., kode_gudang or store_code, whichever exists in schema).
+
+If not found → STORE_NOT_FOUND.
+
+Verify store_password against existing Store.store_password (plaintext or hashed as already stored). Use constant-time compare. If mismatch → STORE_PASSWORD_INVALID.
+
+Resolve user by email (case-insensitive). If not found or disabled → USER_NOT_FOUND_OR_PASSWORD_INVALID (don’t leak which).
+
+Verify user password using the existing hashing util.
+
+Verify user ↔ store authorization with the existing relationship (e.g., user.store_id == store.id or membership table). If not authorized → USER_NOT_AUTHORIZED_FOR_STORE.
+
+Issue token (use existing utility) with claims:
+
+{
+  "sub": "<user_id>",
+  "username": "<display_name>",
+  "role": "<role>",
+  "store_id": "<resolved_store_id>",
+  "store_name": "<resolved_store_name>",
+  "perms": ["sales:create","settlement:read","..."],
+  "iat": 0,
+  "exp": 0
+}
+
+
+Implement/keep GET /auth/me, POST /auth/refresh (if supported), POST /auth/logout as per current project.
+
+3) Logging & diagnostics (PII-safe)
+
+Generate a correlation_id per request.
+
+Log INFO checkpoints (no secrets):
+
+store lookup result (id/code)
+
+store_password verified (boolean only)
+
+user lookup result (user_id, active)
+
+password verified (boolean only)
+
+user-store authorization (boolean only)
+
+token issued (yes/no)
+
+Use concise error codes: STORE_NOT_FOUND, STORE_PASSWORD_INVALID, USER_NOT_FOUND_OR_PASSWORD_INVALID, USER_INACTIVE, USER_NOT_AUTHORIZED_FOR_STORE.
+
+4) Enforce store scoping & RBAC (reuse existing)
+
+Middleware extracts token, enforces:
+
+Non-admin reads/writes are implicitly filtered by store_id from token.
+
+Ignore client-provided store_id for authorization.
+
+UI:
+
+Topbar shows username + store badge (store_name/id).
+
+Menus by role:
+
+SPG: New Sales, Settlements, Transfers, Pricelist, Stock Opname, Discounts.
+
+Supervisor: SPG + Store Overview (current store only).
+
+Admin: everything.
+
+5) Store switching
+
+Require re-auth with store_code_or_id + store_password (plus staff creds), then issue a new store-scoped token. Clear store-scoped caches/state.
+
+6) Common pitfalls to check (and fix)
+
+Parameter name mismatches (e.g., frontend sends kode_gudang, backend expects store_code). Alias correctly.
+
+Wrong field used for store lookup (ID vs code). Implement dual-path as above.
+
+Hashing mismatch for either staff password or store_password. Reuse existing hashing utilities and configs.
+
+CORS/cookies or missing Authorization header on subsequent requests.
+
+Server time skew causing token invalidation.
+
+Environment/DB pointing to a different schema than the UI expects.
+
+Example requests (both should work)
+
+English keys:
+
+curl -i -X POST https://<API_BASE>/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "spg@example.com",
+    "password": "CorrectStaffPassword!",
+    "store_code": "STORE-A",
+    "store_password": "CorrectStorePassword!"
+  }'
+
+
+Bahasa keys:
+
+curl -i -X POST https://<API_BASE>/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email_pegawai": "spg@example.com",
+    "kata_sandi": "CorrectStaffPassword!",
+    "kode_gudang": "GUDANG-01",
+    "password_gudang": "CorrectStorePassword!"
+  }'
+
+Acceptance Criteria
+
+Login succeeds with either EN or Bahasa keys (aliased) when credentials are correct.
+
+Tokens include role + store_id; GET /auth/me returns the same context.
+
+SPG/Supervisor/Admin permissions and store scoping behave exactly as defined.
+
+Clear error codes for all failure paths; correlation logging covers the 6 checkpoints.
+
+No schema changes; only alias mapping, normalization, and small handler fixes.
+
+Deliverable: PR with alias mapping, normalization, logging, precise error handling, and minimal integration tests covering EN/Bahasa payloads.

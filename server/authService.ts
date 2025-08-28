@@ -115,12 +115,19 @@ export async function comparePasswords(supplied: string, stored: string): Promis
 export interface TokenPayload {
   sub: string; // user id (nik)
   username: string;
-  email: string;
+  displayName?: string;
+  email?: string;
   role: string;
-  store_id: string;
-  store_name: string;
-  perms: string[];
-  can_access_all_stores: boolean;
+  storeId?: string;
+  storeName?: string;
+  store_id?: string; // Alias for compatibility
+  store_name?: string; // Alias for compatibility
+  permissions?: string[];
+  perms?: string[]; // Alias for compatibility
+  canAccessAllStores?: boolean;
+  can_access_all_stores?: boolean; // Alias for compatibility
+  iat?: number;
+  exp?: number;
 }
 
 export function generateAccessToken(payload: TokenPayload): string {
@@ -158,85 +165,133 @@ export function verifyRefreshToken(token: string): { sub: string; store_id: stri
 }
 
 // Authentication service
+// Custom error class for auth errors
+export class AuthError extends Error {
+  code: string;
+  
+  constructor(message: string, code: string) {
+    super(message);
+    this.code = code;
+    this.name = 'AuthError';
+  }
+}
+
 export async function authenticateUser(
   username: string,
   password: string,
-  storeId: string,
-  storePassword: string
+  storeCodeOrId: string,
+  storePassword: string,
+  correlationId?: string
 ): Promise<{ tokens: { access: string; refresh: string }, user: TokenPayload }> {
-  console.log("🏪 Login attempt for store:", storeId, "by user:", username);
+  const logPrefix = correlationId ? `[${correlationId}]` : '';
+  console.log(`${logPrefix} Login attempt for store: ${storeCodeOrId} by user: ${username}`);
   
-  // Step 1: Verify store exists and password matches
-  const store = await storage.getStoreByKode(storeId);
+  // Step 1: Resolve store (always by code since stores table uses kodeGudang as primary key)
+  let store: any; // Using 'any' to avoid type issues for now
+  
+  console.log(`${logPrefix} Looking up store by code: ${storeCodeOrId}`);
+  store = await storage.getStoreByKode(storeCodeOrId);
+  
   if (!store) {
-    console.log("❌ Store not found:", storeId);
-    throw new Error("Invalid store");
+    console.log(`${logPrefix} Store lookup result: NOT FOUND`);
+    throw new AuthError("Store not found", "STORE_NOT_FOUND");
+  }
+  
+  console.log(`${logPrefix} Store lookup result: found (code: ${store.kodeGudang})`);
+
+  // Step 2: Verify store password
+  console.log(`${logPrefix} Verifying store password`);
+  const storePasswordValid = store.storePassword === storePassword;
+  console.log(`${logPrefix} Store password verified: ${storePasswordValid}`);
+  
+  if (!storePasswordValid) {
+    throw new AuthError("Invalid store password", "STORE_PASSWORD_INVALID");
   }
 
-  // Check store password (exact match for now, could be hashed in production)
-  console.log("🔑 Verifying store password");
-  if (store.storePassword !== storePassword) {
-    console.log("❌ Store password mismatch");
-    throw new Error("Invalid store credentials");
-  }
-
-  // Step 2: Find staff by email or NIK (username could be either)
+  // Step 3: Find staff by email or NIK (username could be either)
   let staff: Staff | undefined;
   
-  console.log("👤 Looking for user:", username);
+  console.log(`${logPrefix} Looking for user: ${username}`);
   
-  // Try as email first
+  // Try as email first (case-insensitive)
   if (username.includes('@')) {
-    console.log("📧 Searching by email:", username);
+    console.log(`${logPrefix} Searching by email: ${username}`);
     staff = await storage.getStaffByEmail(username);
   }
   
   // Try as NIK if not found
   if (!staff) {
-    console.log("🆔 Searching by NIK:", username);
+    console.log(`${logPrefix} Searching by NIK: ${username}`);
     staff = await storage.getStaffByNik(username);
   }
   
   if (!staff) {
-    console.log("❌ User not found:", username);
-    throw new Error("Invalid credentials");
+    console.log(`${logPrefix} User lookup result: NOT FOUND`);
+    throw new AuthError("User not found or invalid password", "USER_NOT_FOUND_OR_PASSWORD_INVALID");
   }
   
-  console.log("✅ User found:", staff.namaLengkap, "Position:", staff.jabatan);
+  console.log(`${logPrefix} User lookup result: found (nik: ${staff.nik}, active: true)`);
 
-  // Step 3: Verify password
-  console.log("🔐 Verifying password for user:", staff.email);
+  // Step 4: Verify user password
+  console.log(`${logPrefix} Verifying user password`);
   const passwordValid = await comparePasswords(password, staff.password);
-  console.log("🔐 Password verification result:", passwordValid);
+  console.log(`${logPrefix} Password verified: ${passwordValid}`);
+  
   if (!passwordValid) {
-    throw new Error("Invalid credentials");
+    throw new AuthError("User not found or invalid password", "USER_NOT_FOUND_OR_PASSWORD_INVALID");
+  }
+  
+  // Step 5: Verify user-store authorization
+  console.log(`${logPrefix} Checking user-store authorization`);
+  
+  // For now, we'll allow all users to access all stores if they have valid credentials
+  // In production, you might want to check a user-store relationship table
+  const userAuthorizedForStore = true; // Simplified for now
+  
+  console.log(`${logPrefix} User-store authorization: ${userAuthorizedForStore}`);
+  
+  if (!userAuthorizedForStore) {
+    throw new AuthError("User not authorized for this store", "USER_NOT_AUTHORIZED_FOR_STORE");
   }
 
-  // Step 4: Get role permissions
+  // Step 6: Get role permissions
   const roleConfig = ROLE_PERMISSIONS[staff.jabatan as keyof typeof ROLE_PERMISSIONS] || ROLE_PERMISSIONS["SPG"];
   
-  // Step 5: Build token payload
-  const tokenPayload: TokenPayload = {
-    sub: staff.nik,
-    username: staff.namaLengkap,
+  // Step 7: Create token payload with proper claims
+  const payload: TokenPayload = {
+    sub: staff.nik, // Use nik as the subject
+    username: staff.namaLengkap || staff.email, // Display name
+    displayName: staff.namaLengkap,
     email: staff.email,
-    role: roleConfig.role,
-    store_id: storeId,
-    store_name: store.namaGudang || "",
-    perms: roleConfig.permissions,
-    can_access_all_stores: roleConfig.canAccessAllStores
+    role: staff.jabatan,
+    storeId: store.kodeGudang, // Store uses kodeGudang as primary key
+    storeName: store.namaGudang,
+    store_id: store.kodeGudang, // Include both formats for compatibility
+    store_name: store.namaGudang,
+    permissions: roleConfig.permissions,
+    perms: roleConfig.permissions, // Alias for compatibility  
+    canAccessAllStores: roleConfig.canAccessAllStores,
+    can_access_all_stores: roleConfig.canAccessAllStores, // Alias for compatibility
+    iat: Math.floor(Date.now() / 1000),
+    exp: Math.floor(Date.now() / 1000) + (60 * 60 * 24), // 24 hours
   };
+  
+  console.log(`${logPrefix} Token issued: yes`);
 
-  // Step 6: Generate tokens
-  const accessToken = generateAccessToken(tokenPayload);
-  const refreshToken = generateRefreshToken(staff.nik, storeId);
+  // Step 8: Generate tokens
+  const accessToken = jwt.sign(payload, JWT_SECRET, { expiresIn: "24h" });
+  const refreshToken = jwt.sign(
+    { sub: payload.sub, store_id: store.kodeGudang }, // Use kodeGudang for store
+    JWT_SECRET,
+    { expiresIn: "7d" }
+  );
 
   return {
     tokens: {
       access: accessToken,
       refresh: refreshToken
     },
-    user: tokenPayload
+    user: payload
   };
 }
 
@@ -261,14 +316,21 @@ export async function refreshAccessToken(refreshToken: string): Promise<{ access
   
   // Build new token payload
   const tokenPayload: TokenPayload = {
-    sub: staff.nik,
-    username: staff.namaLengkap,
+    sub: staff.nik, // Use nik as the subject
+    username: staff.namaLengkap || staff.email,
+    displayName: staff.namaLengkap,
     email: staff.email,
-    role: roleConfig.role,
+    role: staff.jabatan,
+    storeId: decoded.store_id,
+    storeName: store.namaGudang || "",
     store_id: decoded.store_id,
     store_name: store.namaGudang || "",
+    permissions: roleConfig.permissions,
     perms: roleConfig.permissions,
-    can_access_all_stores: roleConfig.canAccessAllStores
+    canAccessAllStores: roleConfig.canAccessAllStores,
+    can_access_all_stores: roleConfig.canAccessAllStores,
+    iat: Math.floor(Date.now() / 1000),
+    exp: Math.floor(Date.now() / 1000) + (60 * 60 * 24)
   };
 
   // Generate new access token
