@@ -41,7 +41,16 @@ const TableRow = memo(({ index, style, data }: any) => {
       />
       {config.fields.slice(0, 4).map((field) => (
         <div key={field.key} className="flex-1 px-2 truncate">
-          {field.type === 'password' ? '••••••••' : item[field.key] || '-'}
+          {field.type === 'password' ? '••••••••' : (
+            (() => {
+              const value = item[field.key];
+              if (value === null || value === undefined) return '-';
+              if (typeof value === 'object') {
+                return Array.isArray(value) ? value.join(', ') : JSON.stringify(value);
+              }
+              return String(value);
+            })()
+          )}
         </div>
       ))}
       <div className="flex gap-2 ml-4">

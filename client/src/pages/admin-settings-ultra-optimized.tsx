@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo, Suspense, lazy, memo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useAuth } from "@/hooks/useAuth";
+import { useStoreAuth } from "@/hooks/useStoreAuth";
 import { useSidebar } from "@/hooks/useSidebar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -235,7 +235,7 @@ const TabContent = memo(({
 TabContent.displayName = 'TabContent';
 
 export default function AdminSettingsUltraOptimized() {
-  const { user } = useAuth();
+  const { user } = useStoreAuth();
   const { isExpanded } = useSidebar();
   const { toast } = useToast();
 
