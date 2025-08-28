@@ -134,7 +134,7 @@ const tableConfigs: TableConfig[] = [
   }
 ];
 
-function useTableData(endpoint: string) {
+function useTableData(endpoint: string, enabled = true) {
   return useQuery({
     queryKey: [endpoint],
     queryFn: async () => {
@@ -147,6 +147,7 @@ function useTableData(endpoint: string) {
       return response.json();
     },
     retry: false,
+    enabled, // Only fetch when enabled is true
   });
 }
 
@@ -156,7 +157,7 @@ export default function AdminSettings() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  // Fetch positions for staff form  
+  // Fetch positions for staff form - only when needed
   const { data: positions = [] } = useQuery({
     queryKey: ['/api/positions'],
     queryFn: async () => {
@@ -169,6 +170,7 @@ export default function AdminSettings() {
       return response.json();
     },
     retry: false,
+    enabled: activeTab === 'staff' || activeTab === 'positions', // Only fetch when staff or positions tab is active
   });
 
   const [activeTab, setActiveTab] = useState('reference-sheet');
@@ -421,7 +423,9 @@ export default function AdminSettings() {
   };
 
   const renderTableContent = (config: TableConfig) => {
-    const { data: rawData, isLoading, error } = useTableData(config.endpoint);
+    // Only fetch data for the active tab
+    const isActiveTab = config.name === activeTab;
+    const { data: rawData, isLoading, error } = useTableData(config.endpoint, isActiveTab);
     
     // Filter data based on search query
     const searchQuery = searchQueries[config.name] || '';
@@ -654,7 +658,12 @@ export default function AdminSettings() {
 
               {tableConfigs.map((config) => (
                 <TabsContent key={config.name} value={config.name} className="mt-6">
-                  {renderTableContent(config)}
+                  {/* Only render content for active tab for better performance */}
+                  {config.name === activeTab ? renderTableContent(config) : (
+                    <div className="flex items-center justify-center h-32">
+                      <p className="text-gray-500 dark:text-gray-400">Click to load {config.displayName} data</p>
+                    </div>
+                  )}
                 </TabsContent>
               ))}
             </Tabs>
