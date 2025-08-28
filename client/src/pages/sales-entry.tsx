@@ -57,24 +57,8 @@ export default function SalesEntry() {
           {/* Filters */}
           <Card className="bg-white/20 dark:bg-black/20 backdrop-blur-xl border border-white/20 dark:border-gray-800/50 mb-6">
             <CardContent className="p-6">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Store
-                  </label>
-                  <Select value={selectedStore} onValueChange={setSelectedStore}>
-                    <SelectTrigger data-testid="select-store-filter">
-                      <SelectValue placeholder="Select Store" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {stores?.map((store: any) => (
-                        <SelectItem key={store.kodeGudang} value={store.kodeGudang}>
-                          {store.namaGudang}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
