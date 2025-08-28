@@ -446,8 +446,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           email: s.email, 
           namaLengkap: s.namaLengkap, 
           jabatan: s.jabatan,
-          hasPassword: !!s.password,
-          passwordFormat: s.password ? s.password.substring(0, 10) + "..." : "null"
+          hasPassword: !!s.password
         }))
       });
     } catch (error) {
@@ -458,8 +457,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Create sample data for testing
   app.post('/api/debug/create-sample-data', async (req, res) => {
     try {
-      const bcrypt = await import('bcrypt');
-      
       // Create a sample store
       const sampleStore = {
         kodeGudang: "TEST-01",
@@ -469,14 +466,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         storePassword: "store123"
       };
 
-      // Generate correct bcrypt hash for "admin123"
-      const hashedPassword = await bcrypt.hash("admin123", 10);
-
       // Create a sample admin user
       const sampleAdmin = {
         nik: "ADMIN001",
         email: "admin@test.com",
-        password: hashedPassword,
+        password: "$2b$10$VjJksI6aq/kqJgXLfR6W9u3lGU8D.TY4ioLzfbvHsJ5w8IgZL2GCW", // password: admin123
         namaLengkap: "System Administrator",
         kota: "Jakarta",
         alamat: "Test Address",
@@ -501,34 +495,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Staff might already exist
       }
 
-      // Also create a simple test user with plain text password
-      const simpleAdmin = {
-        nik: "TEST001",
-        email: "test@test.com",
-        password: "test123", // Plain text for testing
-        namaLengkap: "Test User",
-        kota: "Jakarta",
-        alamat: "Test Address",
-        noHp: "081234567890",
-        tempatLahir: "Jakarta",
-        tanggalLahir: "1990-01-01",
-        tanggalMasuk: "2024-01-01",
-        jabatan: "System Administrator"
-      };
-
-      try {
-        await storage.createStaff(simpleAdmin);
-      } catch (err) {
-        // Might already exist
-      }
-
       res.json({ 
-        message: "Sample data created with multiple test accounts",
+        message: "Sample data created",
         store: { kodeGudang: sampleStore.kodeGudang, storePassword: sampleStore.storePassword },
-        accounts: [
-          { email: sampleAdmin.email, nik: sampleAdmin.nik, password: "admin123", type: "bcrypt" },
-          { email: simpleAdmin.email, nik: simpleAdmin.nik, password: "test123", type: "plaintext" }
-        ]
+        admin: { email: sampleAdmin.email, nik: sampleAdmin.nik, password: "admin123" }
       });
     } catch (error) {
       console.error("Error creating sample data:", error);
