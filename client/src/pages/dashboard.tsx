@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useAuth } from "@/hooks/useAuth";
+import { useStoreAuth } from "@/hooks/useStoreAuth";
 import { useSidebar } from "@/hooks/useSidebar";
 import { useToast } from "@/hooks/use-toast";
 import { isUnauthorizedError } from "@/lib/authUtils";
@@ -74,7 +74,7 @@ interface ImportJob {
 
 export default function Dashboard() {
   const { toast } = useToast();
-  const { isAuthenticated, isLoading } = useAuth();
+  const { user, isLoading } = useStoreAuth(); // Get user for permissions
   const { isExpanded } = useSidebar();
   const [selectedStore, setSelectedStore] = useState<string>('');
   const [showSalesModal, setShowSalesModal] = useState(false);
@@ -282,8 +282,8 @@ export default function Dashboard() {
               </p>
             </div>
             <div className="flex items-center space-x-4">
-              {/* Store Selection */}
-              {stores.length > 0 && (
+              {/* Store Selection - Only show for users with all-store access */}
+              {stores.length > 0 && user?.can_access_all_stores && (
                 <Popover open={storeDropdownOpen} onOpenChange={setStoreDropdownOpen}>
                   <PopoverTrigger asChild>
                     <Button

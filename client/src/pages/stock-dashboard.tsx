@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Sidebar } from "@/components/sidebar";
 import { useSidebar } from "@/hooks/useSidebar";
+import { useStoreAuth } from "@/hooks/useStoreAuth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,6 +15,7 @@ import { cn } from "@/lib/utils";
 
 export default function StockDashboard() {
   const { isExpanded } = useSidebar();
+  const { user } = useStoreAuth(); // Get user for permissions
   const [selectedStore, setSelectedStore] = useState<string>('');
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [storeDropdownOpen, setStoreDropdownOpen] = useState(false);
@@ -74,10 +76,12 @@ export default function StockDashboard() {
           <Card className="bg-white/20 dark:bg-black/20 backdrop-blur-xl border border-white/20 dark:border-gray-800/50 mb-6">
             <CardContent className="p-6">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Store
-                  </label>
+                {/* Store Selector - Only show for users with all-store access */}
+                {user?.can_access_all_stores && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Store
+                    </label>
                   <Popover open={storeDropdownOpen} onOpenChange={setStoreDropdownOpen}>
                     <PopoverTrigger asChild>
                       <Button
@@ -131,7 +135,8 @@ export default function StockDashboard() {
                       </Command>
                     </PopoverContent>
                   </Popover>
-                </div>
+                  </div>
+                )}
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
