@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo } from "react";
 import { useLocation } from "wouter";
-import { useAuth } from "@/hooks/useAuth";
+import { useStoreAuth } from "@/hooks/useStoreAuth";
 import { useSidebar } from "@/hooks/useSidebar";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -23,7 +23,7 @@ const navigationItems = [
     name: "Home",
     href: "/",
     icon: "fas fa-home",
-    permission: "canAccessDashboard"
+    permission: "dashboard:read"
   },
   {
     category: "Sales",
@@ -32,19 +32,19 @@ const navigationItems = [
         name: "Sales Entry",
         href: "/sales-entry", 
         icon: "fas fa-cash-register",
-        permission: "canAccessSalesEntry"
+        permission: "sales:create"
       },
       {
         name: "Settlements",
         href: "/settlements",
         icon: "fas fa-file-invoice-dollar", 
-        permission: "canAccessSettlements"
+        permission: "settlement:read"
       },
       {
         name: "Discounts",
         href: "/discounts", 
         icon: "fas fa-percentage",
-        permission: "canAccessDiscounts"
+        permission: "discount:read"
       },
     ]
   },
@@ -55,19 +55,19 @@ const navigationItems = [
         name: "Stock Opname",
         href: "/stock-opname",
         icon: "fas fa-clipboard-check",
-        permission: "canAccessStockOpname"
+        permission: "stock:opname"
       },
       {
         name: "Stores Overview",
         href: "/stores-overview",
         icon: "fas fa-store",
-        permission: "canAccessStockDashboard"
+        permission: "store:overview"
       },
       {
         name: "Transfers", 
         href: "/transfers",
         icon: "fas fa-exchange-alt",
-        permission: "canAccessTransfers"
+        permission: "transfer:read"
       },
     ]
   },
@@ -78,13 +78,13 @@ const navigationItems = [
         name: "Price Lists",
         href: "/price-lists",
         icon: "fas fa-tags",
-        permission: "canAccessPriceLists"
+        permission: "pricelist:read"
       },
       {
         name: "Admin Settings",
         href: "/admin-settings",
         icon: "fas fa-cogs",
-        permission: "canAccessAdminSettings"
+        permission: "admin:settings"
       },
     ]
   }
@@ -92,18 +92,12 @@ const navigationItems = [
 
 export function Sidebar() {
   const [location, setLocation] = useLocation();
-  const { user, isAuthenticated } = useAuth();
+  const { user, hasPermission } = useStoreAuth(); // Use useStoreAuth instead
+  const isAuthenticated = !!user;
   const { isExpanded, toggleSidebar } = useSidebar();
   const [storeAuthModalOpen, setStoreAuthModalOpen] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  
-  // Fetch user permissions from the backend
-  const { data: userPermissions, isLoading: permissionsLoading } = useQuery({
-    queryKey: ['/api/user/permissions'],
-    enabled: isAuthenticated,
-    retry: false,
-  });
 
   // Fetch stores for store authentication
   const { data: stores } = useQuery({
@@ -118,11 +112,6 @@ export function Sidebar() {
     enabled: isAuthenticated,
     retry: false,
   });
-
-  const hasPermission = (permission: string) => {
-    if (!userPermissions) return false;
-    return (userPermissions as any)[permission] === true;
-  };
 
   const handleLogout = useCallback(() => {
     window.location.href = '/api/logout';
@@ -319,7 +308,7 @@ export function Sidebar() {
                     }
                   </p>
                   <p className="text-xs text-gray-500 dark:text-gray-400">
-                    {(userPermissions as any)?.positionName || 'User'}
+                    {user?.role || 'User'}
                   </p>
                 </div>
                 <DropdownMenu>
