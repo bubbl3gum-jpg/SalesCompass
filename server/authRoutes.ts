@@ -160,6 +160,9 @@ authRouter.post("/api/auth/switch-store", authenticate, async (req, res) => {
     }
 
     // Re-authenticate with new store
+    if (!req.auth!.email) {
+      return res.status(400).json({ message: "Email not found in token" });
+    }
     const result = await authenticateUser(req.auth!.email, password, store_id, store_password);
 
     // Update refresh token

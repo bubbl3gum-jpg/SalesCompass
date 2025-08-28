@@ -96,11 +96,17 @@ export function SalesEntryModal({ isOpen, onClose, selectedStore }: SalesEntryMo
     retry: false,
   });
 
+  // Ensure stores is an array
+  const storesArray = Array.isArray(stores) ? stores : [];
+
   // Get payment methods
   const { data: paymentMethods } = useQuery({
     queryKey: ["/api/payment-methods"],
     retry: false,
   });
+
+  // Ensure payment methods is an array
+  const paymentMethodsArray = Array.isArray(paymentMethods) ? paymentMethods : [];
 
   // Get discounts
   const { data: discounts } = useQuery({
@@ -238,7 +244,7 @@ export function SalesEntryModal({ isOpen, onClose, selectedStore }: SalesEntryMo
                         </FormControl>
                         <SelectContent>
                           <SelectItem value="ALL_STORE">All Stores</SelectItem>
-                          {stores?.map((store: any) => (
+                          {storesArray?.map((store: any) => (
                             <SelectItem key={store.kodeGudang} value={store.kodeGudang}>
                               {store.namaGudang}
                             </SelectItem>
@@ -250,7 +256,7 @@ export function SalesEntryModal({ isOpen, onClose, selectedStore }: SalesEntryMo
                       <FormControl>
                         <div className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background">
                           <span className="text-foreground">
-                            {stores?.find((store: any) => store.kodeGudang === field.value)?.namaGudang || field.value}
+                            {storesArray?.find((store: any) => store.kodeGudang === field.value)?.namaGudang || field.value}
                           </span>
                         </div>
                       </FormControl>
@@ -359,7 +365,7 @@ export function SalesEntryModal({ isOpen, onClose, selectedStore }: SalesEntryMo
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        {paymentMethods?.map((method: any) => (
+                        {paymentMethodsArray?.map((method: any) => (
                           <SelectItem key={method.paymentMethodId} value={method.paymentMethodId.toString()}>
                             {method.methodName}
                           </SelectItem>
