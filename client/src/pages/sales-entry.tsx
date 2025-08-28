@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Sidebar } from "@/components/sidebar";
 import { useSidebar } from "@/hooks/useSidebar";
+import { useStoreAuth } from "@/hooks/useStoreAuth";
 import { SalesEntryModal } from "@/components/sales-entry-modal";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -12,18 +13,19 @@ import { cn } from "@/lib/utils";
 
 export default function SalesEntry() {
   const { isExpanded } = useSidebar();
+  const { user } = useStoreAuth(); // Get user for permissions
   const [showSalesModal, setShowSalesModal] = useState(false);
   const [selectedStore, setSelectedStore] = useState<string>('');
   const [dateFilter, setDateFilter] = useState<string>(new Date().toISOString().split('T')[0]);
 
   // Get stores
-  const { data: stores } = useQuery({
+  const { data: stores = [] } = useQuery<any[]>({
     queryKey: ["/api/stores"],
     retry: false,
   });
 
   // Get sales data
-  const { data: sales, isLoading: salesLoading } = useQuery({
+  const { data: sales = [], isLoading: salesLoading } = useQuery<any[]>({
     queryKey: ["/api/sales", selectedStore, dateFilter],
     enabled: !!selectedStore,
     retry: false,
@@ -51,8 +53,9 @@ export default function SalesEntry() {
             </Button>
           </div>
           
-          {/* Store Selector - Moved to header */}
-          <div className="flex items-center gap-4">
+          {/* Store Selector - Only show for users with all-store access */}
+          {user?.can_access_all_stores && (
+            <div className="flex items-center gap-4">
             <label className="text-sm font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap">
               Select Store:
             </label>
@@ -62,7 +65,7 @@ export default function SalesEntry() {
                   <SelectValue placeholder="Choose your store..." />
                 </SelectTrigger>
                 <SelectContent>
-                  {stores?.map((store: any) => (
+                  {stores.map((store: any) => (
                     <SelectItem key={store.kodeGudang} value={store.kodeGudang}>
                       {store.namaGudang}
                     </SelectItem>
@@ -81,7 +84,8 @@ export default function SalesEntry() {
                 Clear
               </Button>
             )}
-          </div>
+            </div>
+          )}
         </header>
 
         {/* Content */}
