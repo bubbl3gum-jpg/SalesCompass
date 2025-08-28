@@ -147,13 +147,14 @@ export default function Login() {
           </form>
 
           <div className="mt-6 text-sm text-muted-foreground">
-            <div className="bg-blue-50 dark:bg-blue-950 p-3 rounded border">
-              <p className="font-medium text-blue-800 dark:text-blue-200 mb-2">Sample Login Credentials:</p>
+            <div className="bg-green-50 dark:bg-green-950 p-3 rounded border">
+              <p className="font-medium text-green-800 dark:text-green-200 mb-2">✅ Working Login Credentials:</p>
               <div className="text-xs space-y-1">
-                <p><strong>Username:</strong> admin@test.com or ADMIN001</p>
-                <p><strong>Password:</strong> admin123</p>
+                <p><strong>Username:</strong> stock.risebedding@gmail.com or 3273256108950000</p>
+                <p><strong>Password:</strong> 210895</p>
                 <p><strong>Store Code:</strong> TEST-01</p>
                 <p><strong>Store Password:</strong> store123</p>
+                <p className="text-green-700 dark:text-green-300 mt-2">Role: System Administrator with full access</p>
               </div>
             </div>
             
