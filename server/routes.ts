@@ -559,11 +559,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Legacy auth route - redirect to new auth system
-  app.get('/api/auth/user', (req, res) => {
-    // This route is now handled by authRouter
-    res.status(404).json({ message: "Use /api/auth/me for user info" });
-  });
+  // Legacy auth route - now handled by authRouter
 
   // User permissions route
   app.get('/api/user/permissions', authenticate, async (req: any, res) => {

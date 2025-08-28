@@ -56,6 +56,11 @@ authRouter.get("/api/auth/me", authenticate, (req, res) => {
   res.json(req.auth);
 });
 
+// Legacy endpoint for compatibility (redirects to /api/auth/me)
+authRouter.get("/api/auth/user", authenticate, (req, res) => {
+  res.json(req.auth);
+});
+
 // Refresh access token
 authRouter.post("/api/auth/refresh", async (req, res) => {
   try {
