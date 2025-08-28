@@ -84,9 +84,9 @@ authRouter.post("/api/auth/login", async (req, res) => {
     
     // Return appropriate error message based on error code
     const errorMap: Record<string, { status: number, message: string }> = {
-      'STORE_NOT_FOUND': { status: 404, message: 'Store not found' },
-      'STORE_PASSWORD_INVALID': { status: 401, message: 'Invalid store password' },
-      'USER_NOT_FOUND_OR_PASSWORD_INVALID': { status: 401, message: 'Invalid username or password' },
+      'STORE_NOT_FOUND': { status: 404, message: 'Store code not found. Please check your Store Information.' },
+      'STORE_PASSWORD_INVALID': { status: 401, message: 'Invalid store password. Please check your Store Information.' },
+      'USER_NOT_FOUND_OR_PASSWORD_INVALID': { status: 401, message: 'Invalid user credentials. Please check your username and password in User Credentials.' },
       'USER_INACTIVE': { status: 403, message: 'User account is inactive' },
       'USER_NOT_AUTHORIZED_FOR_STORE': { status: 403, message: 'User not authorized for this store' }
     };
