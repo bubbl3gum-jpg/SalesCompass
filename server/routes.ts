@@ -1467,6 +1467,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.put('/api/stores/:kodeGudang', isAuthenticated, checkRole(['System Administrator']), async (req, res) => {
+    try {
+      const { kodeGudang } = req.params;
+      const validatedData = insertStoreSchema.partial().parse(req.body);
+      const store = await storage.updateStore(kodeGudang, validatedData);
+      
+      // Clear cache after updating store
+      cache.del(CACHE_KEYS.STORES);
+      
+      res.json(store);
+    } catch (error) {
+      console.error('Store update error:', error);
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ message: 'Validation error', errors: error.errors });
+      } else {
+        res.status(500).json({ message: 'Failed to update store' });
+      }
+    }
+  });
+
   app.delete('/api/stores/:kodeGudang', isAuthenticated, checkRole(['System Administrator']), async (req, res) => {
     try {
       const { kodeGudang } = req.params;

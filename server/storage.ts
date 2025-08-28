@@ -406,6 +406,14 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
+  async updateStore(kodeGudang: string, data: Partial<InsertStore>): Promise<Store> {
+    const [result] = await db.update(stores)
+      .set(data)
+      .where(eq(stores.kodeGudang, kodeGudang))
+      .returning();
+    return result;
+  }
+
   // Discount operations
   async getDiscountTypes(): Promise<DiscountType[]> {
     return await db.select().from(discountTypes);
