@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Building2, User, Lock, Store, Loader2 } from "lucide-react";
+import { Building2, User, Lock, Store, Loader2, Eye, EyeOff } from "lucide-react";
 
 export default function Login() {
   const { user, loginMutation } = useStoreAuth();
@@ -18,6 +18,9 @@ export default function Login() {
     store_id: "",
     store_password: "",
   });
+
+  const [showPassword, setShowPassword] = useState(false);
+  const [showStorePassword, setShowStorePassword] = useState(false);
 
   // Redirect if already logged in
   useEffect(() => {
@@ -70,15 +73,30 @@ export default function Login() {
 
               <div className="space-y-2">
                 <Label htmlFor="password">Password</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  placeholder="Enter your password"
-                  value={formData.password}
-                  onChange={handleInputChange("password")}
-                  required
-                  data-testid="input-password"
-                />
+                <div className="relative">
+                  <Input
+                    id="password"
+                    type={showPassword ? "text" : "password"}
+                    placeholder="Enter your password"
+                    value={formData.password}
+                    onChange={handleInputChange("password")}
+                    required
+                    data-testid="input-password"
+                    className="pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
+                    data-testid="button-toggle-password"
+                  >
+                    {showPassword ? (
+                      <EyeOff className="h-4 w-4" />
+                    ) : (
+                      <Eye className="h-4 w-4" />
+                    )}
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -106,15 +124,30 @@ export default function Login() {
 
               <div className="space-y-2">
                 <Label htmlFor="store_password">Store Password</Label>
-                <Input
-                  id="store_password"
-                  type="password"
-                  placeholder="Enter store password"
-                  value={formData.store_password}
-                  onChange={handleInputChange("store_password")}
-                  required
-                  data-testid="input-store-password"
-                />
+                <div className="relative">
+                  <Input
+                    id="store_password"
+                    type={showStorePassword ? "text" : "password"}
+                    placeholder="Enter store password"
+                    value={formData.store_password}
+                    onChange={handleInputChange("store_password")}
+                    required
+                    data-testid="input-store-password"
+                    className="pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowStorePassword(!showStorePassword)}
+                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
+                    data-testid="button-toggle-store-password"
+                  >
+                    {showStorePassword ? (
+                      <EyeOff className="h-4 w-4" />
+                    ) : (
+                      <Eye className="h-4 w-4" />
+                    )}
+                  </button>
+                </div>
               </div>
             </div>
 
