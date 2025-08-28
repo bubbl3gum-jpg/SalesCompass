@@ -45,7 +45,6 @@ export default function SalesEntry() {
               onClick={() => setShowSalesModal(true)}
               className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700"
               data-testid="button-new-sale"
-              disabled={!selectedStore}
             >
               <i className="fas fa-plus mr-2"></i>
               New Sale
@@ -87,36 +86,37 @@ export default function SalesEntry() {
 
         {/* Content */}
         <main className="p-6">
-          {/* Date Filter - Simplified */}
-          {selectedStore && (
-            <Card className="bg-white/20 dark:bg-black/20 backdrop-blur-xl border border-white/20 dark:border-gray-800/50 mb-6">
-              <CardContent className="p-6">
-                <div className="flex items-center gap-4">
-                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap">
-                    Filter by Date:
+          {/* Filters */}
+          <Card className="bg-white/20 dark:bg-black/20 backdrop-blur-xl border border-white/20 dark:border-gray-800/50 mb-6">
+            <CardContent className="p-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Date
                   </label>
-                  <div className="flex-1 max-w-xs">
-                    <Input
-                      type="date"
-                      value={dateFilter}
-                      onChange={(e) => setDateFilter(e.target.value)}
-                      data-testid="input-date-filter"
-                    />
-                  </div>
+                  <Input
+                    type="date"
+                    value={dateFilter}
+                    onChange={(e) => setDateFilter(e.target.value)}
+                    data-testid="input-date-filter"
+                  />
+                </div>
+
+                <div className="flex items-end">
                   <Button
                     variant="outline"
-                    size="sm"
-                    data-testid="button-reset-date"
+                    className="w-full"
+                    data-testid="button-reset-filters"
                     onClick={() => {
                       setDateFilter(new Date().toISOString().split('T')[0]);
                     }}
                   >
-                    Today
+                    Reset Date Filter
                   </Button>
                 </div>
-              </CardContent>
-            </Card>
-          )}
+              </div>
+            </CardContent>
+          </Card>
 
           {/* Sales List */}
           <Card className="bg-white/20 dark:bg-black/20 backdrop-blur-xl border border-white/20 dark:border-gray-800/50">
