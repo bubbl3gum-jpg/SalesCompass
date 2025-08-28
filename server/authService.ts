@@ -164,36 +164,50 @@ export async function authenticateUser(
   storeId: string,
   storePassword: string
 ): Promise<{ tokens: { access: string; refresh: string }, user: TokenPayload }> {
+  console.log("🏪 Login attempt for store:", storeId, "by user:", username);
+  
   // Step 1: Verify store exists and password matches
   const store = await storage.getStoreByKode(storeId);
   if (!store) {
+    console.log("❌ Store not found:", storeId);
     throw new Error("Invalid store");
   }
 
   // Check store password (exact match for now, could be hashed in production)
+  console.log("🔑 Verifying store password");
   if (store.storePassword !== storePassword) {
+    console.log("❌ Store password mismatch");
     throw new Error("Invalid store credentials");
   }
 
   // Step 2: Find staff by email or NIK (username could be either)
   let staff: Staff | undefined;
   
+  console.log("👤 Looking for user:", username);
+  
   // Try as email first
   if (username.includes('@')) {
+    console.log("📧 Searching by email:", username);
     staff = await storage.getStaffByEmail(username);
   }
   
   // Try as NIK if not found
   if (!staff) {
+    console.log("🆔 Searching by NIK:", username);
     staff = await storage.getStaffByNik(username);
   }
   
   if (!staff) {
+    console.log("❌ User not found:", username);
     throw new Error("Invalid credentials");
   }
+  
+  console.log("✅ User found:", staff.namaLengkap, "Position:", staff.jabatan);
 
   // Step 3: Verify password
+  console.log("🔐 Verifying password for user:", staff.email);
   const passwordValid = await comparePasswords(password, staff.password);
+  console.log("🔐 Password verification result:", passwordValid);
   if (!passwordValid) {
     throw new Error("Invalid credentials");
   }

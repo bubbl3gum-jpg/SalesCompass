@@ -147,13 +147,25 @@ export default function Login() {
           </form>
 
           <div className="mt-6 text-sm text-muted-foreground">
-            <p className="mb-2">Access levels:</p>
-            <ul className="space-y-1 text-xs">
-              <li>• <strong>Admin:</strong> Full system access</li>
-              <li>• <strong>SPG:</strong> Sales, Settlements, Transfers</li>
-              <li>• <strong>Supervisor:</strong> SPG + Store Overview</li>
-              <li>• <strong>Stockist:</strong> Stock management</li>
-            </ul>
+            <div className="bg-blue-50 dark:bg-blue-950 p-3 rounded border">
+              <p className="font-medium text-blue-800 dark:text-blue-200 mb-2">Sample Login Credentials:</p>
+              <div className="text-xs space-y-1">
+                <p><strong>Username:</strong> admin@test.com or ADMIN001</p>
+                <p><strong>Password:</strong> admin123</p>
+                <p><strong>Store Code:</strong> TEST-01</p>
+                <p><strong>Store Password:</strong> store123</p>
+              </div>
+            </div>
+            
+            <div className="mt-4">
+              <p className="mb-2">Access levels:</p>
+              <ul className="space-y-1 text-xs">
+                <li>• <strong>System Administrator:</strong> Full system access</li>
+                <li>• <strong>SPG:</strong> Sales, Settlements, Transfers</li>
+                <li>• <strong>Supervisor:</strong> SPG + Store Overview</li>
+                <li>• <strong>Stockist:</strong> Stock management</li>
+              </ul>
+            </div>
           </div>
         </CardContent>
       </Card>
