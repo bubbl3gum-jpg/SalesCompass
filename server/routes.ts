@@ -1433,6 +1433,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Master data endpoints
   app.get('/api/stores', isAuthenticated, async (req, res) => {
     try {
+      // Clear cache first to ensure fresh data
+      cache.del(CACHE_KEYS.STORES);
+      
       const stores = await withCache(
         CACHE_KEYS.STORES,
         CACHE_TTL.STORES,
@@ -1449,6 +1452,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const validatedData = insertStoreSchema.parse(req.body);
       const store = await storage.createStore(validatedData);
+      
+      // Clear cache after creating store
+      cache.del(CACHE_KEYS.STORES);
+      
       res.json(store);
     } catch (error) {
       console.error('Store creation error:', error);
@@ -1457,6 +1464,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } else {
         res.status(500).json({ message: 'Failed to create store' });
       }
+    }
+  });
+
+  app.delete('/api/stores/:kodeGudang', isAuthenticated, checkRole(['System Administrator']), async (req, res) => {
+    try {
+      const { kodeGudang } = req.params;
+      await storage.deleteStore(kodeGudang);
+      
+      // Clear cache after deleting store
+      cache.del(CACHE_KEYS.STORES);
+      
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Store deletion error:', error);
+      res.status(500).json({ message: 'Failed to delete store' });
     }
   });
 

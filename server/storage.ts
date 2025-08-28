@@ -82,6 +82,7 @@ export interface IStorage {
   // Store operations
   getStores(): Promise<Store[]>;
   createStore(data: InsertStore): Promise<Store>;
+  deleteStore(kodeGudang: string): Promise<void>;
   getStoreByKode(kodeGudang: string): Promise<Store | undefined>;
   searchStores(query: string): Promise<Store[]>;
 
@@ -394,6 +395,10 @@ export class DatabaseStorage implements IStorage {
   async createStore(data: InsertStore): Promise<Store> {
     const [result] = await db.insert(stores).values(data).returning();
     return result;
+  }
+
+  async deleteStore(kodeGudang: string): Promise<void> {
+    await db.delete(stores).where(eq(stores.kodeGudang, kodeGudang));
   }
 
   async getStoreByKode(kodeGudang: string): Promise<Store | undefined> {
