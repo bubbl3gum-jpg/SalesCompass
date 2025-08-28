@@ -147,7 +147,7 @@ export function generateAccessToken(payload: TokenPayload): string {
 export function generateRefreshToken(userId: string, storeId: string): string {
   return jwt.sign(
     { sub: userId, store_id: storeId },
-    JWT_REFRESH_SECRET,
+    JWT_SECRET, // Use same secret as access token for simplicity
     { 
       expiresIn: REFRESH_TOKEN_EXPIRY,
       issuer: "salesstock-erp"
@@ -165,7 +165,7 @@ export function verifyAccessToken(token: string): TokenPayload {
 
 export function verifyRefreshToken(token: string): { sub: string; store_id: string } {
   try {
-    return jwt.verify(token, JWT_REFRESH_SECRET, { issuer: "salesstock-erp" }) as { sub: string; store_id: string };
+    return jwt.verify(token, JWT_SECRET, { issuer: "salesstock-erp" }) as { sub: string; store_id: string };
   } catch (error) {
     throw new Error("Invalid or expired refresh token");
   }
@@ -283,13 +283,9 @@ export async function authenticateUser(
   
   console.log(`${logPrefix} Token issued: yes`);
 
-  // Step 8: Generate tokens (let JWT handle the iat and exp timestamps)
-  const accessToken = jwt.sign(payload, JWT_SECRET, { expiresIn: "24h" });
-  const refreshToken = jwt.sign(
-    { sub: payload.sub, store_id: store.kodeGudang }, // Use kodeGudang for store
-    JWT_SECRET,
-    { expiresIn: "7d" }
-  );
+  // Step 8: Generate tokens using the standard functions
+  const accessToken = generateAccessToken(payload);
+  const refreshToken = generateRefreshToken(payload.sub, store.kodeGudang);
 
   return {
     tokens: {
