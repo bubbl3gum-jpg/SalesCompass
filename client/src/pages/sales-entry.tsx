@@ -31,12 +31,21 @@ export default function SalesEntry() {
     retry: false,
   });
 
-  // Auto-select store for individual store users
+  // Auto-select store for individual store users - prioritize authenticated store
   useEffect(() => {
-    if (user && !user.can_access_all_stores && user.storeCode && !selectedStore) {
-      setSelectedStore(user.storeCode);
-    } else if (stores.length > 0 && !selectedStore) {
-      setSelectedStore(stores[0].kodeGudang);
+    if (stores.length > 0 && !selectedStore && user) {
+      // If user has a specific store from authentication, use that
+      if (user.store_id && !user.can_access_all_stores) {
+        setSelectedStore(user.store_id);
+      } 
+      // If user can access all stores, use their authenticated store or default to first
+      else if (user.can_access_all_stores) {
+        setSelectedStore(user.store_id || stores[0].kodeGudang);
+      }
+      // Fallback to first store
+      else {
+        setSelectedStore(stores[0].kodeGudang);
+      }
     }
   }, [user, stores, selectedStore]);
 
