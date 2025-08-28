@@ -879,8 +879,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
 
 
-  // Get all import jobs for monitoring (admin only) - simplified
+  // Get all import jobs for monitoring (admin only) - optimized with caching
   app.get('/api/import/jobs', isAuthenticated, (req, res) => {
+    // Add cache headers to prevent excessive polling
+    res.set('Cache-Control', 'public, max-age=30'); // Cache for 30 seconds
+    res.set('ETag', '"empty-jobs"');
+    
+    // Return 304 Not Modified if client has cached version
+    if (req.headers['if-none-match'] === '"empty-jobs"') {
+      return res.status(304).send();
+    }
+    
     res.json([]); // No jobs in direct import mode
   });
 

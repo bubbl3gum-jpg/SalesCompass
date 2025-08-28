@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import { useSidebar } from "@/hooks/useSidebar";
@@ -172,7 +172,9 @@ export default function AdminSettings() {
       return response.json();
     },
     retry: false,
-    enabled: activeTab === 'staff' || activeTab === 'positions', // Only fetch when staff or positions tab is active
+    enabled: activeTab === 'staff' || activeTab === 'positions',
+    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+    gcTime: 10 * 60 * 1000, // Keep in memory for 10 minutes
   });
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -193,7 +195,7 @@ export default function AdminSettings() {
   const [showPassword, setShowPassword] = useState(false);
 
   // Selection handlers
-  const handleSelectAll = (checked: boolean, data: any[], config: TableConfig) => {
+  const handleSelectAll = useCallback((checked: boolean, data: any[], config: TableConfig) => {
     if (checked) {
       const allIds = new Set(data.map(item => item[config.keyField]));
       setSelectedItems(allIds);
@@ -202,18 +204,20 @@ export default function AdminSettings() {
       setSelectedItems(new Set());
       setSelectAll(false);
     }
-  };
+  }, []);
 
-  const handleSelectItem = (itemId: string, checked: boolean) => {
-    const newSelected = new Set(selectedItems);
-    if (checked) {
-      newSelected.add(itemId);
-    } else {
-      newSelected.delete(itemId);
-      setSelectAll(false);
-    }
-    setSelectedItems(newSelected);
-  };
+  const handleSelectItem = useCallback((itemId: string, checked: boolean) => {
+    setSelectedItems(prev => {
+      const newSelected = new Set(prev);
+      if (checked) {
+        newSelected.add(itemId);
+      } else {
+        newSelected.delete(itemId);
+        setSelectAll(false);
+      }
+      return newSelected;
+    });
+  }, []);
 
   const handleBulkDelete = (config: TableConfig) => {
     if (selectedItems.size === 0) {
@@ -254,7 +258,7 @@ export default function AdminSettings() {
     }
   };
 
-  const getCurrentConfig = () => {
+  const getCurrentConfig = useCallback(() => {
     const config = tableConfigs.find(config => config.name === activeTab);
     // Dynamically populate position options for staff
     if (config?.name === 'staff') {
@@ -269,7 +273,7 @@ export default function AdminSettings() {
       return updatedConfig;
     }
     return config;
-  };
+  }, [activeTab, positions]);
 
   const deleteMutation = useMutation({
     mutationFn: async ({ endpoint, id }: { endpoint: string; id: string }) => {
