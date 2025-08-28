@@ -5,6 +5,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useStoreAuth } from "@/hooks/useStoreAuth";
 import { isUnauthorizedError } from "@/lib/authUtils";
 
 import {
@@ -60,6 +61,7 @@ interface PriceQuote {
 
 export function SalesEntryModal({ isOpen, onClose, selectedStore }: SalesEntryModalProps) {
   const { toast } = useToast();
+  const { user } = useStoreAuth();
   const queryClient = useQueryClient();
   const [priceQuote, setPriceQuote] = useState<PriceQuote | null>(null);
 
@@ -226,20 +228,32 @@ export function SalesEntryModal({ isOpen, onClose, selectedStore }: SalesEntryMo
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Store</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    {user?.can_access_all_stores ? (
+                      // All-store users: Show dropdown selector
+                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <FormControl>
+                          <SelectTrigger data-testid="select-store">
+                            <SelectValue placeholder="Select Store" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {stores?.map((store: any) => (
+                            <SelectItem key={store.kodeGudang} value={store.kodeGudang}>
+                              {store.namaGudang}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      // Individual store users: Show fixed store display
                       <FormControl>
-                        <SelectTrigger data-testid="select-store">
-                          <SelectValue placeholder="Select Store" />
-                        </SelectTrigger>
+                        <div className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background">
+                          <span className="text-foreground">
+                            {stores?.find((store: any) => store.kodeGudang === field.value)?.namaGudang || field.value}
+                          </span>
+                        </div>
                       </FormControl>
-                      <SelectContent>
-                        {stores?.map((store: any) => (
-                          <SelectItem key={store.kodeGudang} value={store.kodeGudang}>
-                            {store.namaGudang}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    )}
                     <FormMessage />
                   </FormItem>
                 )}
