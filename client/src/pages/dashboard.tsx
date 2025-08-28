@@ -105,7 +105,7 @@ export default function Dashboard() {
 
   // Redirect to home if not authenticated
   useEffect(() => {
-    if (!isLoading && !isAuthenticated) {
+    if (!isLoading && !user) {
       toast({
         title: "Unauthorized",
         description: "You are logged out. Logging in again...",
@@ -116,7 +116,7 @@ export default function Dashboard() {
       }, 500);
       return;
     }
-  }, [isAuthenticated, isLoading, toast]);
+  }, [user, isLoading, toast]);
 
   // API Queries with proper typing
   const { data: stores = [], isLoading: storesLoading } = useQuery<Store[]>({
@@ -143,7 +143,7 @@ export default function Dashboard() {
   });
 
   // Price search query
-  const { data: priceResults = [], isLoading: priceLoading } = useQuery({
+  const { data: priceResults = [], isLoading: priceLoading } = useQuery<any[]>({
     queryKey: ["/api/pricelist/search", priceSearchTerm],
     enabled: !!priceSearchTerm && priceSearchTerm.length > 2,
     retry: false,

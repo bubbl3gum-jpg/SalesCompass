@@ -21,23 +21,23 @@ export default function StockDashboard() {
   const [storeDropdownOpen, setStoreDropdownOpen] = useState(false);
 
   // Get stores
-  const { data: stores } = useQuery({
+  const { data: stores = [] } = useQuery<any[]>({
     queryKey: ["/api/stores"],
     retry: false,
   });
 
   // Get stock data
-  const { data: stockData, isLoading: stockLoading } = useQuery({
+  const { data: stockData = [], isLoading: stockLoading } = useQuery<any[]>({
     queryKey: ["/api/stock/onhand", selectedStore],
     enabled: !!selectedStore,
     retry: false,
   });
 
   // Filter stock data based on search
-  const filteredStock = stockData?.filter((item: any) => 
+  const filteredStock = stockData.filter((item: any) => 
     item.kodeItem.toLowerCase().includes(searchTerm.toLowerCase()) ||
     (item.serialNumber && item.serialNumber.toLowerCase().includes(searchTerm.toLowerCase()))
-  ) || [];
+  );
 
   const getStockStatus = (qty: number) => {
     if (qty === 0) return { status: 'Out of Stock', color: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300' };
@@ -92,7 +92,7 @@ export default function StockDashboard() {
                         data-testid="select-store-filter"
                       >
                         {selectedStore
-                          ? stores?.find((store: any) => store.kodeGudang === selectedStore)?.namaGudang
+                          ? stores.find((store: any) => store.kodeGudang === selectedStore)?.namaGudang
                           : "Search and select store..."}
                         <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                       </Button>
@@ -106,7 +106,7 @@ export default function StockDashboard() {
                         <CommandList>
                           <CommandEmpty>No store found.</CommandEmpty>
                           <CommandGroup>
-                            {stores?.map((store: any) => (
+                            {stores.map((store: any) => (
                               <CommandItem
                                 key={store.kodeGudang}
                                 value={`${store.kodeGudang} ${store.namaGudang}`}
