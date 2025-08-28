@@ -45,6 +45,9 @@ function Router() {
   return (
     <Suspense fallback={<PageLoader />}>
       <Switch>
+        {/* Always show login page for /login route */}
+        <Route path="/login" component={Login} />
+        
         {isLoading || !user ? (
           <Route path="/" component={Login} />
         ) : (

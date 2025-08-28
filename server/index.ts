@@ -6,6 +6,9 @@ import { setupVite, serveStatic, log } from "./vite";
 
 const app = express();
 
+// Trust proxy for Replit deployment (fixes rate limiting headers)
+app.set('trust proxy', 1);
+
 // Performance optimizations
 app.use(compression({
   filter: (req: Request, res: Response) => {
