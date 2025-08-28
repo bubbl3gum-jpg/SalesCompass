@@ -92,7 +92,7 @@ const navigationItems = [
 
 export function Sidebar() {
   const [location, setLocation] = useLocation();
-  const { user, hasPermission } = useStoreAuth(); // Use useStoreAuth instead
+  const { user, hasPermission, logoutMutation } = useStoreAuth(); // Use useStoreAuth instead
   const isAuthenticated = !!user;
   const { isExpanded, toggleSidebar } = useSidebar();
   const [storeAuthModalOpen, setStoreAuthModalOpen] = useState(false);
@@ -114,12 +114,12 @@ export function Sidebar() {
   });
 
   const handleLogout = useCallback(() => {
-    window.location.href = '/api/logout';
-  }, []);
+    logoutMutation.mutate();
+  }, [logoutMutation]);
 
   const handleChangeUser = useCallback(() => {
-    window.location.href = '/api/logout';
-  }, []);
+    logoutMutation.mutate();
+  }, [logoutMutation]);
 
   // Store logout mutation
   const storeLogoutMutation = useMutation({
