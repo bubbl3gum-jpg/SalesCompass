@@ -494,7 +494,11 @@ export default function AdminSettings() {
               Import CSV/Excel
             </Button>
             <Button
-              onClick={() => setShowCreateModal(true)}
+              onClick={() => {
+                setEditingItem(null);
+                setFormData({});
+                setShowCreateModal(true);
+              }}
               data-testid={`button-create-${config.name}`}
             >
               <Plus className="h-4 w-4 mr-2" />
@@ -593,9 +597,9 @@ export default function AdminSettings() {
                                     variant="ghost"
                                     size="sm"
                                     onClick={() => {
+                                      setEditingItem(item[config.keyField]);
                                       setFormData(item);
                                       setShowEditModal(true);
-                                      setEditingItem(item[config.keyField]);
                                     }}
                                     data-testid={`button-edit-${item[config.keyField]}`}
                                   >
