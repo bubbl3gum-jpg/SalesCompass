@@ -36,7 +36,7 @@ export default function SalesEntry() {
       <div className={cn("flex-1 transition-all duration-300 ease-in-out", isExpanded ? "ml-64" : "ml-16")}>
         {/* Header */}
         <header className="bg-white/10 dark:bg-black/10 backdrop-blur-xl border-b border-white/20 dark:border-gray-800/50 px-6 py-4">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between mb-4">
             <div>
               <h2 className="text-3xl font-bold text-gray-900 dark:text-white">Sales Entry</h2>
               <p className="text-gray-600 dark:text-gray-400 mt-1">Record and manage sales transactions</p>
@@ -45,65 +45,78 @@ export default function SalesEntry() {
               onClick={() => setShowSalesModal(true)}
               className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700"
               data-testid="button-new-sale"
+              disabled={!selectedStore}
             >
               <i className="fas fa-plus mr-2"></i>
               New Sale
             </Button>
           </div>
+          
+          {/* Store Selector - Moved to header */}
+          <div className="flex items-center gap-4">
+            <label className="text-sm font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap">
+              Select Store:
+            </label>
+            <div className="flex-1 max-w-sm">
+              <Select value={selectedStore} onValueChange={setSelectedStore}>
+                <SelectTrigger data-testid="select-store-main">
+                  <SelectValue placeholder="Choose your store..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {stores?.map((store: any) => (
+                    <SelectItem key={store.kodeGudang} value={store.kodeGudang}>
+                      {store.namaGudang}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {selectedStore && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setSelectedStore('')}
+                className="text-xs"
+                data-testid="button-clear-store"
+              >
+                Clear
+              </Button>
+            )}
+          </div>
         </header>
 
         {/* Content */}
         <main className="p-6">
-          {/* Filters */}
-          <Card className="bg-white/20 dark:bg-black/20 backdrop-blur-xl border border-white/20 dark:border-gray-800/50 mb-6">
-            <CardContent className="p-6">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Store
+          {/* Date Filter - Simplified */}
+          {selectedStore && (
+            <Card className="bg-white/20 dark:bg-black/20 backdrop-blur-xl border border-white/20 dark:border-gray-800/50 mb-6">
+              <CardContent className="p-6">
+                <div className="flex items-center gap-4">
+                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap">
+                    Filter by Date:
                   </label>
-                  <Select value={selectedStore} onValueChange={setSelectedStore}>
-                    <SelectTrigger data-testid="select-store-filter">
-                      <SelectValue placeholder="Select Store" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {stores?.map((store: any) => (
-                        <SelectItem key={store.kodeGudang} value={store.kodeGudang}>
-                          {store.namaGudang}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Date
-                  </label>
-                  <Input
-                    type="date"
-                    value={dateFilter}
-                    onChange={(e) => setDateFilter(e.target.value)}
-                    data-testid="input-date-filter"
-                  />
-                </div>
-
-                <div className="flex items-end">
+                  <div className="flex-1 max-w-xs">
+                    <Input
+                      type="date"
+                      value={dateFilter}
+                      onChange={(e) => setDateFilter(e.target.value)}
+                      data-testid="input-date-filter"
+                    />
+                  </div>
                   <Button
                     variant="outline"
-                    className="w-full"
-                    data-testid="button-reset-filters"
+                    size="sm"
+                    data-testid="button-reset-date"
                     onClick={() => {
-                      setSelectedStore('');
                       setDateFilter(new Date().toISOString().split('T')[0]);
                     }}
                   >
-                    Reset Filters
+                    Today
                   </Button>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Sales List */}
           <Card className="bg-white/20 dark:bg-black/20 backdrop-blur-xl border border-white/20 dark:border-gray-800/50">
