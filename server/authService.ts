@@ -1,6 +1,7 @@
 import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
 import jwt from "jsonwebtoken";
+import bcrypt from "bcrypt";
 import { storage } from "./storage";
 import type { Staff } from "@shared/schema";
 
@@ -99,6 +100,12 @@ export async function hashPassword(password: string): Promise<string> {
 
 export async function comparePasswords(supplied: string, stored: string): Promise<boolean> {
   try {
+    // Check if it's a bcrypt hash (starts with $2b$ or $2a$)
+    if (stored.startsWith('$2b$') || stored.startsWith('$2a$')) {
+      return await bcrypt.compare(supplied, stored);
+    }
+    
+    // Otherwise, use the legacy scrypt method
     const [hashed, salt] = stored.split(".");
     if (!hashed || !salt) return false;
     
@@ -272,13 +279,11 @@ export async function authenticateUser(
     perms: roleConfig.permissions, // Alias for compatibility  
     canAccessAllStores: roleConfig.canAccessAllStores,
     can_access_all_stores: roleConfig.canAccessAllStores, // Alias for compatibility
-    iat: Math.floor(Date.now() / 1000),
-    exp: Math.floor(Date.now() / 1000) + (60 * 60 * 24), // 24 hours
   };
   
   console.log(`${logPrefix} Token issued: yes`);
 
-  // Step 8: Generate tokens
+  // Step 8: Generate tokens (let JWT handle the iat and exp timestamps)
   const accessToken = jwt.sign(payload, JWT_SECRET, { expiresIn: "24h" });
   const refreshToken = jwt.sign(
     { sub: payload.sub, store_id: store.kodeGudang }, // Use kodeGudang for store
@@ -314,7 +319,7 @@ export async function refreshAccessToken(refreshToken: string): Promise<{ access
   // Get role permissions
   const roleConfig = ROLE_PERMISSIONS[staff.jabatan as keyof typeof ROLE_PERMISSIONS] || ROLE_PERMISSIONS["SPG"];
   
-  // Build new token payload
+  // Build new token payload (without iat and exp which JWT will add)
   const tokenPayload: TokenPayload = {
     sub: staff.nik, // Use nik as the subject
     username: staff.namaLengkap || staff.email,
@@ -329,8 +334,6 @@ export async function refreshAccessToken(refreshToken: string): Promise<{ access
     perms: roleConfig.permissions,
     canAccessAllStores: roleConfig.canAccessAllStores,
     can_access_all_stores: roleConfig.canAccessAllStores,
-    iat: Math.floor(Date.now() / 1000),
-    exp: Math.floor(Date.now() / 1000) + (60 * 60 * 24)
   };
 
   // Generate new access token
