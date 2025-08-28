@@ -1,7 +1,9 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { setupAuth, isAuthenticated } from "./replitAuth";
+// import { setupAuth, authenticate } from "./replitAuth"; // Deprecated - using new auth system
+import { authRouter } from "./authRoutes";
+import { authenticate, requireAuth, requireStoreAuth, scopeToStore } from "./authMiddleware";
 import crypto from 'crypto';
 import { z } from "zod";
 import { withCache, CACHE_KEYS, CACHE_TTL, invalidateCache, invalidateCachePattern } from "./cache";
@@ -398,8 +400,11 @@ function validateImportData(data: any[], tableName: string, schema: any): { vali
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  // Auth middleware
-  await setupAuth(app);
+  // Use new auth router
+  app.use(authRouter);
+  
+  // Keep Replit Auth for backward compatibility (optional)
+  // await setupAuth(app);
 
   // Initialize simple import system
   console.log('🚀 Simple import system initialized');
@@ -425,7 +430,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Search endpoints for admin settings
-  app.get('/api/search/reference-sheet', isAuthenticated, async (req, res) => {
+  app.get('/api/search/reference-sheet', authenticate, async (req, res) => {
     try {
       const { q } = req.query;
       if (!q || typeof q !== 'string') {
@@ -439,7 +444,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/search/stores', isAuthenticated, async (req, res) => {
+  app.get('/api/search/stores', authenticate, async (req, res) => {
     try {
       const { q } = req.query;
       if (!q || typeof q !== 'string') {
@@ -453,7 +458,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/search/staff', isAuthenticated, async (req, res) => {
+  app.get('/api/search/staff', authenticate, async (req, res) => {
     try {
       const { q } = req.query;
       if (!q || typeof q !== 'string') {
@@ -467,20 +472,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Auth routes
-  app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {
-    try {
-      const userId = req.user.claims.sub;
-      const user = await storage.getUser(userId);
-      res.json(user);
-    } catch (error) {
-      console.error("Error fetching user:", error);
-      res.status(500).json({ message: "Failed to fetch user" });
-    }
+  // Legacy auth route - redirect to new auth system
+  app.get('/api/auth/user', (req, res) => {
+    // This route is now handled by authRouter
+    res.status(404).json({ message: "Use /api/auth/me for user info" });
   });
 
   // User permissions route
-  app.get('/api/user/permissions', isAuthenticated, async (req: any, res) => {
+  app.get('/api/user/permissions', authenticate, async (req: any, res) => {
     try {
       const userEmail = req.user.claims.email;
       const cacheKey = `${CACHE_KEYS.USER_PERMISSIONS}_${userEmail}`;
@@ -499,7 +498,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Store authentication route
-  app.post('/api/store/auth', isAuthenticated, async (req, res) => {
+  app.post('/api/store/auth', authenticate, async (req, res) => {
     try {
       const { kodeGudang, username, password } = req.body;
       
@@ -536,7 +535,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get current authenticated store
-  app.get('/api/store/current', isAuthenticated, async (req, res) => {
+  app.get('/api/store/current', authenticate, async (req, res) => {
     try {
       const authenticatedStore = (req.session as any).authenticatedStore;
       const storeLoginType = (req.session as any).storeLoginType || 'single_store';
@@ -569,7 +568,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Store switch route (for All Store users only)
-  app.post('/api/store/switch', isAuthenticated, async (req, res) => {
+  app.post('/api/store/switch', authenticate, async (req, res) => {
     try {
       const { kodeGudang } = req.body;
       const storeLoginType = (req.session as any).storeLoginType;
@@ -606,7 +605,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Store logout route
-  app.post('/api/store/logout', isAuthenticated, async (req, res) => {
+  app.post('/api/store/logout', authenticate, async (req, res) => {
     try {
       delete (req.session as any).authenticatedStore;
       delete (req.session as any).storeLoginType;
@@ -677,7 +676,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Store dashboard with aggregated data from all stores
-  app.get('/api/stores/dashboard', isAuthenticated, async (req, res) => {
+  app.get('/api/stores/dashboard', authenticate, async (req, res) => {
     try {
       const stores = await storage.getStores();
       const dashboardData = [];
@@ -711,7 +710,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Price resolution endpoint
-  app.get('/api/price/quote', isAuthenticated, async (req, res) => {
+  app.get('/api/price/quote', authenticate, async (req, res) => {
     try {
       const {
         serial_number,
@@ -775,7 +774,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Opening stock endpoint
-  app.get('/api/opening-stock', isAuthenticated, async (req, res) => {
+  app.get('/api/opening-stock', authenticate, async (req, res) => {
     try {
       const openingStock = await storage.getOpeningStock();
       res.json(openingStock);
@@ -787,7 +786,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Import endpoint for bulk data upload with progress tracking
   // High-performance non-blocking import endpoint (sub-1s response time)
-  app.post('/api/import', isAuthenticated, upload.single('file'), async (req, res) => {
+  app.post('/api/import', authenticate, upload.single('file'), async (req, res) => {
     try {
       if (!req.file) {
         return res.status(400).json({ message: 'No file uploaded' });
@@ -880,7 +879,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
 
   // Get all import jobs for monitoring (admin only) - optimized with caching
-  app.get('/api/import/jobs', isAuthenticated, (req, res) => {
+  app.get('/api/import/jobs', authenticate, (req, res) => {
     // Add cache headers to prevent excessive polling
     res.set('Cache-Control', 'public, max-age=30'); // Cache for 30 seconds
     res.set('ETag', '"empty-jobs"');
@@ -900,7 +899,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   const { pricelistImportProcessor } = await import('./pricelistImportProcessor');
   
   // Initiate transfer import - returns presigned URL for direct S3 upload
-  app.post('/api/transfer-imports/initiate', isAuthenticated, async (req, res) => {
+  app.post('/api/transfer-imports/initiate', authenticate, async (req, res) => {
     try {
       const { fileName, contentType, expectedSchema } = req.body;
       
@@ -932,7 +931,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Complete transfer import - starts background processing
-  app.post('/api/transfer-imports/complete', isAuthenticated, async (req, res) => {
+  app.post('/api/transfer-imports/complete', authenticate, async (req, res) => {
     try {
       const { uploadId, fileKey, fileSize, fileSha256, idempotencyKey, toNumber } = req.body;
       
@@ -970,7 +969,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get transfer import status
-  app.get('/api/transfer-imports/:uploadId/status', isAuthenticated, (req, res) => {
+  app.get('/api/transfer-imports/:uploadId/status', authenticate, (req, res) => {
     try {
       const { uploadId } = req.params;
       const job = transferImportProcessor.getJob(uploadId);
@@ -1004,7 +1003,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Server-sent events for real-time progress updates
-  app.get('/api/transfer-imports/:uploadId/events', isAuthenticated, (req, res) => {
+  app.get('/api/transfer-imports/:uploadId/events', authenticate, (req, res) => {
     const { uploadId } = req.params;
     const job = transferImportProcessor.getJob(uploadId);
     
@@ -1058,7 +1057,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Simple direct import system (keep as fallback)
 
   // Retry single failed import record
-  app.post('/api/import/retry', isAuthenticated, async (req, res) => {
+  app.post('/api/import/retry', authenticate, async (req, res) => {
     try {
       const { tableName, record } = req.body;
       
@@ -1132,7 +1131,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Sales entry - SPG, Supervisors can create
-  app.post('/api/sales', isAuthenticated, checkRole(['SPG', 'Supervisor', 'Sales Administrator']), async (req, res) => {
+  app.post('/api/sales', authenticate, checkRole(['SPG', 'Supervisor', 'Sales Administrator']), async (req, res) => {
     try {
       const validatedData = insertLaporanPenjualanSchema.parse(req.body);
 
@@ -1147,7 +1146,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get sales data
-  app.get('/api/sales', isAuthenticated, async (req, res) => {
+  app.get('/api/sales', authenticate, async (req, res) => {
     try {
       const { kode_gudang, tanggal } = req.query;
       const sales = await storage.getSales(kode_gudang as string, tanggal as string);
@@ -1159,7 +1158,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Settlement creation - Supervisors and above
-  app.post('/api/settlements', isAuthenticated, checkRole(['Supervisor', 'Sales Administrator', 'Finance', 'System Administrator']), async (req, res) => {
+  app.post('/api/settlements', authenticate, checkRole(['Supervisor', 'Sales Administrator', 'Finance', 'System Administrator']), async (req, res) => {
     try {
       const validatedData = insertSettlementSchema.parse(req.body);
 
@@ -1182,7 +1181,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get settlements
-  app.get('/api/settlements', isAuthenticated, async (req, res) => {
+  app.get('/api/settlements', authenticate, async (req, res) => {
     try {
       const { kode_gudang, tanggal } = req.query;
       const settlements = await storage.getSettlements(kode_gudang as string, tanggal as string);
@@ -1194,7 +1193,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Reconciliation endpoint
-  app.get('/api/settlements/reconcile', isAuthenticated, async (req, res) => {
+  app.get('/api/settlements/reconcile', authenticate, async (req, res) => {
     try {
       const { kode_gudang, tanggal } = req.query;
       
@@ -1244,7 +1243,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Transfer orders - Supervisors and Stockists
-  app.post('/api/transfers', isAuthenticated, checkRole(['Supervisor', 'Stockist', 'System Administrator']), async (req, res) => {
+  app.post('/api/transfers', authenticate, checkRole(['Supervisor', 'Stockist', 'System Administrator']), async (req, res) => {
     try {
       const validatedData = insertTransferOrderSchema.parse(req.body);
       const transfer = await storage.createTransferOrder(validatedData);
@@ -1256,7 +1255,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Create transfer with immediate file import (REQUIRED FILE)
-  app.post('/api/transfers/create-with-import', isAuthenticated, upload.single('file'), async (req, res) => {
+  app.post('/api/transfers/create-with-import', authenticate, upload.single('file'), async (req, res) => {
     try {
       const { dariGudang, keGudang, tanggal } = req.body;
       const file = req.file;
@@ -1374,7 +1373,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get transfer orders
-  app.get('/api/transfers', isAuthenticated, async (req, res) => {
+  app.get('/api/transfers', authenticate, async (req, res) => {
     try {
       const transfers = await storage.getTransferOrders();
       res.json(transfers);
@@ -1385,7 +1384,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get transfer order items
-  app.get('/api/transfers/:toNumber/items', isAuthenticated, async (req, res) => {
+  app.get('/api/transfers/:toNumber/items', authenticate, async (req, res) => {
     try {
       const toNumber = req.params.toNumber;
       if (!toNumber) {
@@ -1401,7 +1400,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Delete transfer item
-  app.delete('/api/transfers/:toNumber/items/:toItemListId', isAuthenticated, checkRole(['Supervisor', 'Stockist', 'System Administrator']), async (req, res) => {
+  app.delete('/api/transfers/:toNumber/items/:toItemListId', authenticate, checkRole(['Supervisor', 'Stockist', 'System Administrator']), async (req, res) => {
     try {
       const toNumber = req.params.toNumber;
       const toItemListId = parseInt(req.params.toItemListId);
@@ -1419,7 +1418,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Delete entire transfer order
-  app.delete('/api/transfers/:toNumber', isAuthenticated, checkRole(['Supervisor', 'Stockist', 'System Administrator']), async (req, res) => {
+  app.delete('/api/transfers/:toNumber', authenticate, checkRole(['Supervisor', 'Stockist', 'System Administrator']), async (req, res) => {
     try {
       const toNumber = req.params.toNumber;
       
@@ -1440,7 +1439,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Master data endpoints
-  app.get('/api/stores', isAuthenticated, async (req, res) => {
+  app.get('/api/stores', authenticate, async (req, res) => {
     try {
       // Clear cache first to ensure fresh data
       cache.del(CACHE_KEYS.STORES);
@@ -1457,7 +1456,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/stores', isAuthenticated, checkRole(['System Administrator']), async (req, res) => {
+  app.post('/api/stores', authenticate, checkRole(['System Administrator']), async (req, res) => {
     try {
       const validatedData = insertStoreSchema.parse(req.body);
       const store = await storage.createStore(validatedData);
@@ -1476,7 +1475,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put('/api/stores/:kodeGudang', isAuthenticated, checkRole(['System Administrator']), async (req, res) => {
+  app.put('/api/stores/:kodeGudang', authenticate, checkRole(['System Administrator']), async (req, res) => {
     try {
       const { kodeGudang } = req.params;
       const validatedData = insertStoreSchema.partial().parse(req.body);
@@ -1496,7 +1495,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete('/api/stores/:kodeGudang', isAuthenticated, checkRole(['System Administrator']), async (req, res) => {
+  app.delete('/api/stores/:kodeGudang', authenticate, checkRole(['System Administrator']), async (req, res) => {
     try {
       const { kodeGudang } = req.params;
       await storage.deleteStore(kodeGudang);
@@ -1511,7 +1510,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/reference-sheets', isAuthenticated, async (req, res) => {
+  app.get('/api/reference-sheets', authenticate, async (req, res) => {
     try {
       const referenceSheets = await storage.getReferenceSheets();
       res.json(referenceSheets);
@@ -1520,7 +1519,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/reference-sheets', isAuthenticated, checkRole(['System Administrator']), async (req, res) => {
+  app.post('/api/reference-sheets', authenticate, checkRole(['System Administrator']), async (req, res) => {
     try {
       const validatedData = insertReferenceSheetSchema.parse(req.body);
       const referenceSheet = await storage.createReferenceSheet(validatedData);
@@ -1535,7 +1534,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put('/api/reference-sheets/:refId', isAuthenticated, checkRole(['System Administrator']), async (req, res) => {
+  app.put('/api/reference-sheets/:refId', authenticate, checkRole(['System Administrator']), async (req, res) => {
     try {
       const { refId } = req.params;
       const validatedData = insertReferenceSheetSchema.partial().parse(req.body);
@@ -1551,7 +1550,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete('/api/reference-sheets/:refId', isAuthenticated, checkRole(['System Administrator']), async (req, res) => {
+  app.delete('/api/reference-sheets/:refId', authenticate, checkRole(['System Administrator']), async (req, res) => {
     try {
       const { refId } = req.params;
       await storage.deleteReferenceSheet(refId);
@@ -1562,7 +1561,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/discounts', isAuthenticated, async (req, res) => {
+  app.get('/api/discounts', authenticate, async (req, res) => {
     try {
       const discounts = await withCache(
         CACHE_KEYS.DISCOUNTS,
@@ -1575,7 +1574,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/discounts', isAuthenticated, checkRole(['System Administrator']), async (req, res) => {
+  app.post('/api/discounts', authenticate, checkRole(['System Administrator']), async (req, res) => {
     try {
       const validatedData = insertDiscountTypeSchema.parse(req.body);
       // Convert number to string for storage
@@ -1599,7 +1598,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put('/api/discounts/:discountId', isAuthenticated, checkRole(['System Administrator']), async (req, res) => {
+  app.put('/api/discounts/:discountId', authenticate, checkRole(['System Administrator']), async (req, res) => {
     try {
       const { discountId } = req.params;
       const validatedData = insertDiscountTypeSchema.partial().parse(req.body);
@@ -1626,7 +1625,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete('/api/discounts/:discountId', isAuthenticated, checkRole(['System Administrator']), async (req, res) => {
+  app.delete('/api/discounts/:discountId', authenticate, checkRole(['System Administrator']), async (req, res) => {
     try {
       const { discountId } = req.params;
       await storage.deleteDiscountType(parseInt(discountId));
@@ -1642,7 +1641,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Pricelist endpoints
-  app.get('/api/pricelist', isAuthenticated, async (req, res) => {
+  app.get('/api/pricelist', authenticate, async (req, res) => {
     try {
       const { page = 1, limit = 50, search = '' } = req.query;
       const pageNum = Math.max(1, parseInt(page as string) || 1);
@@ -1693,7 +1692,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/pricelist', isAuthenticated, checkRole(['System Administrator']), async (req, res) => {
+  app.post('/api/pricelist', authenticate, checkRole(['System Administrator']), async (req, res) => {
     try {
       const validatedData = insertPricelistSchema.parse(req.body);
       const pricelistItem = await storage.createPricelist(validatedData);
@@ -1712,7 +1711,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put('/api/pricelist/:pricelistId', isAuthenticated, checkRole(['System Administrator']), async (req, res) => {
+  app.put('/api/pricelist/:pricelistId', authenticate, checkRole(['System Administrator']), async (req, res) => {
     try {
       const { pricelistId } = req.params;
       const validatedData = insertPricelistSchema.partial().parse(req.body);
@@ -1739,7 +1738,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete('/api/pricelist/:pricelistId', isAuthenticated, checkRole(['System Administrator']), async (req, res) => {
+  app.delete('/api/pricelist/:pricelistId', authenticate, checkRole(['System Administrator']), async (req, res) => {
     try {
       const { pricelistId } = req.params;
       // Note: Delete method would need to be added to storage interface
@@ -1762,7 +1761,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Pricelist import endpoints (following Transfer import pattern)
-  app.post('/api/pricelist-imports/initiate', isAuthenticated, checkRole(['System Administrator']), async (req, res) => {
+  app.post('/api/pricelist-imports/initiate', authenticate, checkRole(['System Administrator']), async (req, res) => {
     try {
       const { fileName, contentType, expectedSchema } = req.body;
       
@@ -1793,7 +1792,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/pricelist-imports/complete', isAuthenticated, checkRole(['System Administrator']), async (req, res) => {
+  app.post('/api/pricelist-imports/complete', authenticate, checkRole(['System Administrator']), async (req, res) => {
     try {
       const { uploadId, fileKey, fileSize, fileSha256, idempotencyKey } = req.body;
       
@@ -1867,7 +1866,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/pricelist-imports/:uploadId/status', isAuthenticated, async (req, res) => {
+  app.get('/api/pricelist-imports/:uploadId/status', authenticate, async (req, res) => {
     try {
       const { uploadId } = req.params;
       const job = pricelistImportProcessor.getJob(uploadId);
@@ -1890,7 +1889,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get all pricelist import jobs
-  app.get('/api/pricelist-imports/jobs', isAuthenticated, async (req, res) => {
+  app.get('/api/pricelist-imports/jobs', authenticate, async (req, res) => {
     try {
       // Return empty array for now - this endpoint is used by the UI for job listings
       res.json([]);
@@ -1900,7 +1899,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/pricelist-imports/:uploadId/events', isAuthenticated, (req, res) => {
+  app.get('/api/pricelist-imports/:uploadId/events', authenticate, (req, res) => {
     const { uploadId } = req.params;
     const job = pricelistImportProcessor.getJob(uploadId);
     
@@ -1953,7 +1952,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
   });
 
-  app.get('/api/edc', isAuthenticated, async (req, res) => {
+  app.get('/api/edc', authenticate, async (req, res) => {
     try {
       const edcList = await storage.getEdc();
       res.json(edcList);
@@ -1962,7 +1961,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/edc', isAuthenticated, checkRole(['System Administrator']), async (req, res) => {
+  app.post('/api/edc', authenticate, checkRole(['System Administrator']), async (req, res) => {
     try {
       const validatedData = z.object({
         merchantName: z.string(),
@@ -1980,7 +1979,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put('/api/edc/:edcId', isAuthenticated, checkRole(['System Administrator']), async (req, res) => {
+  app.put('/api/edc/:edcId', authenticate, checkRole(['System Administrator']), async (req, res) => {
     try {
       const { edcId } = req.params;
       const validatedData = z.object({
@@ -1999,7 +1998,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete('/api/edc/:edcId', isAuthenticated, checkRole(['System Administrator']), async (req, res) => {
+  app.delete('/api/edc/:edcId', authenticate, checkRole(['System Administrator']), async (req, res) => {
     try {
       const { edcId } = req.params;
       await storage.deleteEdc(parseInt(edcId));
@@ -2010,7 +2009,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/staff', isAuthenticated, async (req, res) => {
+  app.get('/api/staff', authenticate, async (req, res) => {
     try {
       const staff = await storage.getStaff();
       res.json(staff);
@@ -2019,7 +2018,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/staff', isAuthenticated, checkRole(['System Administrator']), async (req, res) => {
+  app.post('/api/staff', authenticate, checkRole(['System Administrator']), async (req, res) => {
     try {
       const validatedData = insertStaffSchema.parse(req.body);
       const staff = await storage.createStaff(validatedData);
@@ -2034,7 +2033,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put('/api/staff/:nik', isAuthenticated, checkRole(['System Administrator']), async (req, res) => {
+  app.put('/api/staff/:nik', authenticate, checkRole(['System Administrator']), async (req, res) => {
     try {
       const { nik } = req.params;
       const validatedData = insertStaffSchema.partial().parse(req.body);
@@ -2050,7 +2049,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete('/api/staff/:nik', isAuthenticated, checkRole(['System Administrator']), async (req, res) => {
+  app.delete('/api/staff/:nik', authenticate, checkRole(['System Administrator']), async (req, res) => {
     try {
       const { nik } = req.params;
       await storage.deleteStaff(nik);
@@ -2062,7 +2061,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Position endpoints
-  app.get('/api/positions', isAuthenticated, async (req, res) => {
+  app.get('/api/positions', authenticate, async (req, res) => {
     try {
       const positions = await storage.getPositions();
       res.json(positions);
@@ -2071,7 +2070,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/positions', isAuthenticated, checkRole(['System Administrator']), async (req, res) => {
+  app.post('/api/positions', authenticate, checkRole(['System Administrator']), async (req, res) => {
     try {
       const validatedData = insertPositionSchema.parse(req.body);
       const position = await storage.createPosition(validatedData);
@@ -2086,7 +2085,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put('/api/positions/:positionId', isAuthenticated, checkRole(['System Administrator']), async (req, res) => {
+  app.put('/api/positions/:positionId', authenticate, checkRole(['System Administrator']), async (req, res) => {
     try {
       const { positionId } = req.params;
       const validatedData = insertPositionSchema.partial().parse(req.body);
@@ -2102,7 +2101,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete('/api/positions/:positionId', isAuthenticated, checkRole(['System Administrator']), async (req, res) => {
+  app.delete('/api/positions/:positionId', authenticate, checkRole(['System Administrator']), async (req, res) => {
     try {
       const { positionId } = req.params;
       await storage.deletePosition(parseInt(positionId));
@@ -2114,7 +2113,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Stock Opname endpoints
-  app.get('/api/stock-opname', isAuthenticated, async (req, res) => {
+  app.get('/api/stock-opname', authenticate, async (req, res) => {
     try {
       const stockOpname = await storage.getStockOpname();
       res.json(stockOpname);
@@ -2123,7 +2122,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/stock-opname', isAuthenticated, checkRole(['Stockist', 'Supervisor', 'System Administrator']), async (req, res) => {
+  app.post('/api/stock-opname', authenticate, checkRole(['Stockist', 'Supervisor', 'System Administrator']), async (req, res) => {
     try {
       const validatedData = insertStockOpnameSchema.parse(req.body);
       const stockOpname = await storage.createStockOpname(validatedData);
@@ -2134,7 +2133,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/stock-opname-items', isAuthenticated, checkRole(['Stockist', 'Supervisor', 'System Administrator']), async (req, res) => {
+  app.post('/api/stock-opname-items', authenticate, checkRole(['Stockist', 'Supervisor', 'System Administrator']), async (req, res) => {
     try {
       const validatedData = insertSoItemListSchema.parse(req.body);
       const soItem = await storage.createSoItemList(validatedData);
@@ -2146,7 +2145,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Dashboard metrics
-  app.get('/api/dashboard/metrics', isAuthenticated, async (req, res) => {
+  app.get('/api/dashboard/metrics', authenticate, async (req, res) => {
     try {
       const { kode_gudang } = req.query;
       

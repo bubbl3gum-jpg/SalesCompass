@@ -143,6 +143,7 @@ export interface IStorage {
   bulkInsertStaff(data: InsertStaff[]): Promise<void>;
   searchStaff(query: string): Promise<Staff[]>;
   getStaffByEmail(email: string): Promise<Staff | undefined>;
+  getStaffByNik(nik: string): Promise<Staff | undefined>;
 
   // Position operations
   getPositions(): Promise<Position[]>;

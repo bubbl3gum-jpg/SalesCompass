@@ -5,12 +5,13 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/components/theme-provider";
-import { useAuth } from "@/hooks/useAuth";
+import { useStoreAuth } from "@/hooks/useStoreAuth";
+import { AuthProvider } from "@/hooks/useStoreAuth";
 import { SidebarProvider } from "@/hooks/useSidebar";
 import { Skeleton } from "@/components/ui/skeleton";
 
 // Lazy load all page components for code splitting
-const Landing = lazy(() => import("@/pages/landing"));
+const Login = lazy(() => import("@/pages/login"));
 const Dashboard = lazy(() => import("@/pages/dashboard"));
 const SalesEntry = lazy(() => import("@/pages/sales-entry"));
 const Settlements = lazy(() => import("@/pages/settlements"));
@@ -39,13 +40,13 @@ const PageLoader = () => (
 );
 
 function Router() {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { user, isLoading } = useStoreAuth();
 
   return (
     <Suspense fallback={<PageLoader />}>
       <Switch>
-        {isLoading || !isAuthenticated ? (
-          <Route path="/" component={Landing} />
+        {isLoading || !user ? (
+          <Route path="/" component={Login} />
         ) : (
           <>
             <Route path="/" component={Dashboard} />
@@ -75,12 +76,14 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
-        <SidebarProvider>
-          <TooltipProvider>
-            <Toaster />
-            <Router />
-          </TooltipProvider>
-        </SidebarProvider>
+        <AuthProvider>
+          <SidebarProvider>
+            <TooltipProvider>
+              <Toaster />
+              <Router />
+            </TooltipProvider>
+          </SidebarProvider>
+        </AuthProvider>
       </ThemeProvider>
     </QueryClientProvider>
   );
