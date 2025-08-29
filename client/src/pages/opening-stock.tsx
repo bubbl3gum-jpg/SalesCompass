@@ -7,6 +7,8 @@ import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { isUnauthorizedError } from "@/lib/authUtils";
 import { useStoreAuth } from "@/hooks/useStoreAuth";
+import { useSidebar } from "@/hooks/useSidebar";
+import { cn } from "@/lib/utils";
 
 import { Sidebar } from "@/components/sidebar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -69,6 +71,7 @@ export default function OpeningStock() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { hasPermission } = useStoreAuth();
+  const { isExpanded } = useSidebar();
   
   // Check if user can manage opening stock (supervisors only)
   const canReadOpeningStock = hasPermission("opening_stock:read");
@@ -309,15 +312,15 @@ export default function OpeningStock() {
   // If user doesn't have permission to read opening stock, show access denied
   if (!canReadOpeningStock) {
     return (
-      <div className="flex h-screen bg-gray-50">
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 dark:from-slate-900 dark:via-slate-800 dark:to-indigo-900">
         <Sidebar />
-        <div className="flex-1 flex items-center justify-center">
-          <Card className="max-w-md">
+        <div className={cn("flex-1 flex items-center justify-center transition-all duration-300 ease-in-out", isExpanded ? "ml-64" : "ml-16")}>
+          <Card className="max-w-md bg-white/20 dark:bg-black/20 backdrop-blur-xl border border-white/20 dark:border-gray-800/50">
             <CardHeader>
-              <CardTitle>Access Denied</CardTitle>
+              <CardTitle className="text-gray-900 dark:text-white">Access Denied</CardTitle>
             </CardHeader>
             <CardContent>
-              <p>You don't have permission to access opening stock management.</p>
+              <p className="text-gray-600 dark:text-gray-400">You don't have permission to access opening stock management.</p>
             </CardContent>
           </Card>
         </div>
@@ -326,13 +329,23 @@ export default function OpeningStock() {
   }
 
   return (
-    <div className="flex h-screen bg-gray-50" data-testid="opening-stock-page">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 dark:from-slate-900 dark:via-slate-800 dark:to-indigo-900" data-testid="opening-stock-page">
       <Sidebar />
-      <div className="flex-1 overflow-auto">
-        <div className="p-6">
-          <Card>
+      
+      <div className={cn("flex-1 transition-all duration-300 ease-in-out", isExpanded ? "ml-64" : "ml-16")}>
+        <header className="bg-white/10 dark:bg-black/10 backdrop-blur-xl border-b border-white/20 dark:border-gray-800/50 px-6 py-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-3xl font-bold text-gray-900 dark:text-white">Opening Stock Management</h2>
+              <p className="text-gray-600 dark:text-gray-400 mt-1">Manage inventory opening stock and bulk imports</p>
+            </div>
+          </div>
+        </header>
+
+        <main className="p-6">
+          <Card className="bg-white/20 dark:bg-black/20 backdrop-blur-xl border border-white/20 dark:border-gray-800/50">
             <CardHeader>
-              <CardTitle>Opening Stock Management</CardTitle>
+              <CardTitle className="text-gray-900 dark:text-white">Stock Management</CardTitle>
             </CardHeader>
             <CardContent>
               <Tabs defaultValue="stock-list" className="w-full">
@@ -360,6 +373,7 @@ export default function OpeningStock() {
                             form.reset();
                             setShowStockModal(true);
                           }}
+                          className="bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700"
                           data-testid="button-add-stock"
                         >
                           <Plus className="h-4 w-4 mr-2" />
@@ -370,6 +384,7 @@ export default function OpeningStock() {
                         <Button 
                           variant="outline"
                           onClick={() => setShowImportModal(true)}
+                          className="bg-white/20 dark:bg-black/20 backdrop-blur-xl border border-white/20 dark:border-gray-800/50 hover:bg-white/30 dark:hover:bg-black/30"
                           data-testid="button-import"
                         >
                           <Upload className="h-4 w-4 mr-2" />
@@ -392,54 +407,66 @@ export default function OpeningStock() {
                           No opening stock items found.
                         </div>
                       ) : (
-                        <div className="border rounded-lg">
-                          <div className="grid grid-cols-8 gap-4 p-4 font-medium border-b bg-muted/50">
-                            <div>Serial Number</div>
-                            <div>Kode Item</div>
-                            <div>Nama Item</div>
-                            <div>Kelompok</div>
-                            <div>Family</div>
-                            <div>Quantity</div>
-                            <div>Material</div>
-                            <div>Actions</div>
-                          </div>
+                        <div className="grid gap-4">
                           {filteredStock.map((stock: any) => (
-                            <div key={stock.itemId} className="grid grid-cols-8 gap-4 p-4 border-b hover:bg-muted/50">
-                              <div className="truncate">{stock.sn || '-'}</div>
-                              <div className="truncate">{stock.kodeItem || '-'}</div>
-                              <div className="truncate">{stock.namaItem || '-'}</div>
-                              <div className="truncate">{stock.kelompok || '-'}</div>
-                              <div className="truncate">{stock.family || '-'}</div>
-                              <div>
-                                <Badge variant="secondary">
-                                  {stock.qty || 0}
-                                </Badge>
-                              </div>
-                              <div className="truncate">{stock.deskripsiMaterial || '-'}</div>
-                              <div className="flex gap-2">
-                                {canUpdateOpeningStock && (
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    onClick={() => handleEdit(stock)}
-                                    data-testid={`button-edit-${stock.itemId}`}
-                                  >
-                                    <Edit3 className="h-4 w-4" />
-                                  </Button>
-                                )}
-                                {canDeleteOpeningStock && (
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    onClick={() => handleDelete(stock)}
-                                    className="hover:bg-destructive hover:text-destructive-foreground"
-                                    data-testid={`button-delete-${stock.itemId}`}
-                                  >
-                                    <Trash2 className="h-4 w-4" />
-                                  </Button>
-                                )}
-                              </div>
-                            </div>
+                            <Card key={stock.itemId} className="bg-white/30 dark:bg-black/30 backdrop-blur-sm border border-white/20 dark:border-gray-800/50 hover:bg-white/40 dark:hover:bg-black/40 transition-all duration-200">
+                              <CardContent className="p-6">
+                                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 flex-1">
+                                    <div className="space-y-1">
+                                      <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Item Code</p>
+                                      <p className="font-semibold text-gray-900 dark:text-white">{stock.kodeItem || '-'}</p>
+                                    </div>
+                                    <div className="space-y-1">
+                                      <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Item Name</p>
+                                      <p className="font-medium text-gray-900 dark:text-white truncate">{stock.namaItem || '-'}</p>
+                                    </div>
+                                    <div className="space-y-1">
+                                      <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Quantity</p>
+                                      <Badge variant="secondary" className="w-fit">
+                                        {stock.qty || 0} pcs
+                                      </Badge>
+                                    </div>
+                                    <div className="space-y-1">
+                                      <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Serial Number</p>
+                                      <p className="text-sm text-gray-700 dark:text-gray-300">{stock.sn || '-'}</p>
+                                    </div>
+                                    <div className="space-y-1">
+                                      <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Group / Family</p>
+                                      <p className="text-sm text-gray-700 dark:text-gray-300">{stock.kelompok || '-'} / {stock.family || '-'}</p>
+                                    </div>
+                                    <div className="space-y-1">
+                                      <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Material</p>
+                                      <p className="text-sm text-gray-700 dark:text-gray-300 truncate">{stock.deskripsiMaterial || '-'}</p>
+                                    </div>
+                                  </div>
+                                  <div className="flex gap-2 lg:ml-4">
+                                    {canUpdateOpeningStock && (
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => handleEdit(stock)}
+                                        className="bg-white/20 dark:bg-black/20 backdrop-blur-sm border-white/30 dark:border-gray-700/30 hover:bg-blue-500/20 dark:hover:bg-blue-400/20"
+                                        data-testid={`button-edit-${stock.itemId}`}
+                                      >
+                                        <Edit3 className="h-4 w-4" />
+                                      </Button>
+                                    )}
+                                    {canDeleteOpeningStock && (
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => handleDelete(stock)}
+                                        className="bg-white/20 dark:bg-black/20 backdrop-blur-sm border-white/30 dark:border-gray-700/30 hover:bg-red-500/20 dark:hover:bg-red-400/20 hover:border-red-300 dark:hover:border-red-600"
+                                        data-testid={`button-delete-${stock.itemId}`}
+                                      >
+                                        <Trash2 className="h-4 w-4" />
+                                      </Button>
+                                    )}
+                                  </div>
+                                </div>
+                              </CardContent>
+                            </Card>
                           ))}
                         </div>
                       )}
@@ -511,7 +538,7 @@ export default function OpeningStock() {
               </Tabs>
             </CardContent>
           </Card>
-        </div>
+        </main>
       </div>
 
       {/* Add/Edit Stock Modal */}
