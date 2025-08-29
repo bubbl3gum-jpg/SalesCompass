@@ -430,6 +430,65 @@ export default function AdminSettings() {
     setShowImportModal(false);
   };
 
+  // Render field value based on field type
+  const renderFieldValue = (value: any, field: TableConfig['fields'][0]) => {
+    // Handle null/undefined values
+    if (value === null || value === undefined) {
+      return <span className="text-gray-500 italic">N/A</span>;
+    }
+
+    switch (field.type) {
+      case 'checkbox':
+        return (
+          <Badge 
+            variant={value ? "default" : "secondary"} 
+            className={`text-xs ${value ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' : ''}`}
+          >
+            {value ? "✓ Yes" : "✗ No"}
+          </Badge>
+        );
+      
+      case 'password':
+        return (
+          <span className="text-gray-500 italic font-mono">
+            ••••••••
+          </span>
+        );
+      
+      case 'date':
+        if (typeof value === 'string' || value instanceof Date) {
+          try {
+            const date = new Date(value);
+            return date.toLocaleDateString();
+          } catch {
+            return value;
+          }
+        }
+        return value;
+      
+      case 'number':
+        return typeof value === 'number' ? value.toLocaleString() : value;
+      
+      default:
+        // Handle objects
+        if (typeof value === 'object' && value !== null) {
+          // If it's an array, join with commas
+          if (Array.isArray(value)) {
+            return value.join(', ');
+          }
+          // For other objects, try to display in a readable format
+          return (
+            <span className="text-xs text-gray-600 dark:text-gray-400 font-mono">
+              {JSON.stringify(value, null, 2)}
+            </span>
+          );
+        }
+        
+        // Regular string/text values
+        return value?.toString() || 'N/A';
+    }
+  };
+
   const renderTableContent = (config: TableConfig) => {
     // Only fetch data for the active tab
     const isActiveTab = config.name === activeTab;
@@ -588,10 +647,7 @@ export default function AdminSettings() {
                                         {field.label}:
                                       </span>
                                       <div className="text-gray-900 dark:text-white break-words">
-                                        {typeof item[field.key] === 'object' && item[field.key] !== null 
-                                          ? JSON.stringify(item[field.key])
-                                          : (item[field.key] || 'N/A')
-                                        }
+                                        {renderFieldValue(item[field.key], field)}
                                       </div>
                                     </div>
                                   ))}
@@ -612,7 +668,7 @@ export default function AdminSettings() {
                                   <Button
                                     variant="ghost"
                                     size="sm"
-                                    onClick={() => handleDelete(config.endpoint, item[config.keyField], item[config.displayField || config.keyField])}
+                                    onClick={() => handleDelete(config.endpoint, item[config.keyField], item[config.fields[0]?.key] || item[config.keyField])}
                                     data-testid={`button-delete-${item[config.keyField]}`}
                                   >
                                     <Trash2 className="h-4 w-4 text-red-500" />
@@ -726,7 +782,7 @@ export default function AdminSettings() {
                   <div className="flex items-center space-x-2">
                     <Checkbox
                       id={field.key}
-                      checked={formData[field.key] === 'true' || formData[field.key] === true}
+                      checked={Boolean(formData[field.key]) && formData[field.key] !== 'false'}
                       onCheckedChange={(checked) => setFormData({ ...formData, [field.key]: checked ? 'true' : 'false' })}
                       data-testid={`checkbox-${field.key}`}
                     />

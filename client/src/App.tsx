@@ -21,7 +21,7 @@ const StoresOverview = lazy(() => import("@/pages/stores-overview"));
 const Transfers = lazy(() => import("@/pages/transfers"));
 const PriceLists = lazy(() => import("@/pages/price-lists"));
 const Discounts = lazy(() => import("@/pages/discounts"));
-const AdminSettings = lazy(() => import("@/pages/admin-settings-ultra-optimized"));
+const AdminSettings = lazy(() => import("@/pages/admin-settings"));
 const NotFound = lazy(() => import("@/pages/not-found"));
 
 // Loading component for page transitions
