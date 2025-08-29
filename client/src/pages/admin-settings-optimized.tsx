@@ -58,7 +58,7 @@ export default function AdminSettingsOptimized() {
         variant: "destructive",
       });
       setTimeout(() => {
-        window.location.href = "/api/login";
+        window.location.replace("/api/login");
       }, 500);
     }
   }, [isAuthenticated, authLoading, toast]);

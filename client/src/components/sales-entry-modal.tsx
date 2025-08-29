@@ -137,7 +137,7 @@ export function SalesEntryModal({ isOpen, onClose, selectedStore }: SalesEntryMo
           variant: "destructive",
         });
         setTimeout(() => {
-          window.location.href = "/api/login";
+          window.location.replace("/api/login");
         }, 500);
         return;
       }
@@ -174,7 +174,7 @@ export function SalesEntryModal({ isOpen, onClose, selectedStore }: SalesEntryMo
           variant: "destructive",
         });
         setTimeout(() => {
-          window.location.href = "/api/login";
+          window.location.replace("/api/login");
         }, 500);
         return;
       }

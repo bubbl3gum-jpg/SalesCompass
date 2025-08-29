@@ -117,7 +117,7 @@ export default function Transfers() {
           variant: "destructive",
         });
         setTimeout(() => {
-          window.location.href = "/api/login";
+          window.location.replace("/api/login");
         }, 500);
         return;
       }
