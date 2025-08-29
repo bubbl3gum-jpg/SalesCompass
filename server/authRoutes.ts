@@ -132,9 +132,9 @@ authRouter.post("/api/auth/refresh", async (req, res) => {
   }
 });
 
-// Logout endpoint
-authRouter.post("/api/auth/logout", authenticate, (req, res) => {
-  // Clear refresh token cookie
+// Logout endpoint (doesn't require valid authentication - allows graceful logout even with expired tokens)
+authRouter.post("/api/auth/logout", (req, res) => {
+  // Clear refresh token cookie regardless of authentication status
   res.clearCookie("refreshToken");
   
   // Could also blacklist the token here if needed

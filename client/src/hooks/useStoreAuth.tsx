@@ -153,15 +153,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const token = localStorage.getItem("accessToken");
       if (!token) return;
 
-      await fetch("/api/auth/logout", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${token}`,
-        },
-        credentials: "include",
-      });
+      // Always try to call the logout endpoint, but don't fail if it errors
+      try {
+        await fetch("/api/auth/logout", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${token}`,
+          },
+          credentials: "include",
+        });
+      } catch {
+        // Ignore logout API errors - we still want to clear local state
+      }
     },
     onSuccess: () => {
+      // Always clear local state regardless of API response
       localStorage.removeItem("accessToken");
       setAccessToken(null);
       queryClient.setQueryData(["/api/auth/me"], null);
@@ -171,11 +177,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         description: "You have been logged out successfully.",
       });
     },
-    onError: (error: Error) => {
+    onError: () => {
+      // Even on API error, clear the local state to ensure proper logout
+      localStorage.removeItem("accessToken");
+      setAccessToken(null);
+      queryClient.setQueryData(["/api/auth/me"], null);
+      queryClient.clear();
       toast({
-        title: "Logout failed",
-        description: error.message,
-        variant: "destructive",
+        title: "Logged out",
+        description: "You have been logged out successfully.",
       });
     },
   });

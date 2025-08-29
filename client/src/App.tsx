@@ -45,10 +45,18 @@ function Router() {
   return (
     <Suspense fallback={<PageLoader />}>
       <Switch>
-        {isLoading || !user ? (
-          <Route path="/" component={Login} />
+        {isLoading ? (
+          // Show loading for any route while authentication is loading
+          <Route><PageLoader /></Route>
+        ) : !user ? (
+          <>
+            {/* When not authenticated, show login for all routes */}
+            <Route path="/" component={Login} />
+            <Route component={Login} />
+          </>
         ) : (
           <>
+            {/* Authenticated user routes */}
             <Route path="/" component={Dashboard} />
             <Route path="/sales-entry" component={SalesEntry} />
             <Route path="/settlements" component={Settlements} />
@@ -64,9 +72,9 @@ function Router() {
             <Route path="/price-lists" component={PriceLists} />
             <Route path="/discounts" component={Discounts} />
             <Route path="/admin-settings" component={AdminSettings} />
+            <Route component={NotFound} />
           </>
         )}
-        <Route component={NotFound} />
       </Switch>
     </Suspense>
   );
