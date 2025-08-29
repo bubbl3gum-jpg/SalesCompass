@@ -39,6 +39,25 @@ const PageLoader = () => (
   </div>
 );
 
+// Permission-based route protection component
+const ProtectedRoute = ({ 
+  component: Component, 
+  permission, 
+  ...props 
+}: { 
+  component: React.ComponentType; 
+  permission: string; 
+  [key: string]: any; 
+}) => {
+  const { hasPermission } = useStoreAuth();
+  
+  if (!hasPermission(permission)) {
+    return <NotFound />;
+  }
+  
+  return <Component {...props} />;
+};
+
 function Router() {
   const { user, isLoading } = useStoreAuth();
 
@@ -68,8 +87,12 @@ function Router() {
             <Route path="/stock-opname" component={StockOpname} />
             <Route path="/stores-overview" component={StoresOverview} />
             <Route path="/transfers" component={Transfers} />
-            <Route path="/price-lists" component={PriceLists} />
-            <Route path="/discounts" component={Discounts} />
+            <Route path="/price-lists">
+              {(params) => <ProtectedRoute component={PriceLists} permission="pricelist:read" {...params} />}
+            </Route>
+            <Route path="/discounts">
+              {(params) => <ProtectedRoute component={Discounts} permission="discount:read" {...params} />}
+            </Route>
             <Route path="/admin-settings" component={AdminSettings} />
             <Route component={NotFound} />
           </>

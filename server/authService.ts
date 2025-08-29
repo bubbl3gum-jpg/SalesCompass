@@ -39,9 +39,7 @@ const ROLE_PERMISSIONS = {
       "sales:create", "sales:read",
       "settlement:create", "settlement:read",
       "transfer:create", "transfer:read",
-      "pricelist:read",
-      "stock:opname",
-      "discount:read"
+      "stock:opname"
     ],
     canAccessAllStores: false
   },
