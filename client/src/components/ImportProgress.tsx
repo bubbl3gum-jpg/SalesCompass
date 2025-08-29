@@ -18,44 +18,92 @@ export function ImportProgress({ importId, onComplete }: ImportProgressProps) {
   const [progress, setProgress] = useState<ProgressData | null>(null);
   const [isComplete, setIsComplete] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [intervalRef, setIntervalRef] = useState<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     if (!importId) return;
 
+    let consecutiveErrors = 0;
+    const maxConsecutiveErrors = 3;
+
     const pollProgress = async () => {
       try {
-        const response = await fetch(`/api/import/progress/${importId}`);
+        const response = await fetch(`/api/import/progress/${importId}`, {
+          credentials: 'include',
+        });
+        
         if (response.ok) {
+          consecutiveErrors = 0; // Reset error count on success
           const data = await response.json();
           setProgress(data);
+          setError(null); // Clear any previous errors
           
           if (data.status === 'Completed!' || data.status.includes('Completed')) {
             setIsComplete(true);
+            if (intervalRef) {
+              clearInterval(intervalRef);
+              setIntervalRef(null);
+            }
             if (onComplete) {
               setTimeout(onComplete, 1000); // Wait 1 second before calling onComplete
             }
           }
         } else if (response.status === 404) {
-          // Import completed and cleaned up
+          // Import completed and cleaned up - this is normal
           setIsComplete(true);
+          if (intervalRef) {
+            clearInterval(intervalRef);
+            setIntervalRef(null);
+          }
           if (onComplete) {
             onComplete();
           }
+        } else if (response.status === 401) {
+          // Authentication error - stop polling silently
+          if (intervalRef) {
+            clearInterval(intervalRef);
+            setIntervalRef(null);
+          }
+          console.log('Import progress polling stopped due to authentication error');
+        } else {
+          consecutiveErrors++;
+          if (consecutiveErrors >= maxConsecutiveErrors) {
+            // Stop polling after too many errors
+            if (intervalRef) {
+              clearInterval(intervalRef);
+              setIntervalRef(null);
+            }
+            setError('Unable to fetch import progress');
+          }
         }
-      } catch (error) {
-        console.error('Failed to fetch progress:', error);
-        setError('Failed to fetch progress');
+      } catch (networkError) {
+        consecutiveErrors++;
+        console.log('Import progress fetch error (handled silently):', networkError);
+        
+        if (consecutiveErrors >= maxConsecutiveErrors) {
+          // Stop polling after too many errors
+          if (intervalRef) {
+            clearInterval(intervalRef);
+            setIntervalRef(null);
+          }
+          setError('Unable to fetch import progress');
+        }
       }
     };
 
     // Poll every 500ms
     const interval = setInterval(pollProgress, 500);
+    setIntervalRef(interval);
 
     // Initial poll
     pollProgress();
 
-    return () => clearInterval(interval);
-  }, [importId, onComplete]);
+    return () => {
+      if (interval) {
+        clearInterval(interval);
+      }
+    };
+  }, [importId, onComplete, intervalRef]);
 
   if (!importId || !progress) {
     return null;
