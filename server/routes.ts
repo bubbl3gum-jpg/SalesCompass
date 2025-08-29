@@ -26,6 +26,7 @@ import {
   insertStaffSchema,
   insertPositionSchema,
   insertToItemListSchema,
+  insertOpeningStockSchema,
   toItemList,
   type Pricelist 
 } from "@shared/schema";
@@ -1934,6 +1935,110 @@ export async function registerRoutes(app: Express): Promise<Server> {
     req.on('close', () => {
       pricelistImportProcessor.removeListener('progress', progressListener);
     });
+  });
+
+  // Opening Stock endpoints
+  app.get('/api/opening-stock', authenticate, async (req, res) => {
+    try {
+      const openingStock = await storage.getOpeningStock();
+      res.json(openingStock);
+    } catch (error) {
+      console.error('Get opening stock error:', error);
+      res.status(500).json({ message: 'Failed to get opening stock' });
+    }
+  });
+
+  app.post('/api/opening-stock', authenticate, async (req, res) => {
+    try {
+      const validatedData = insertOpeningStockSchema.parse(req.body);
+      const openingStockItem = await storage.createOpeningStock(validatedData);
+      res.json(openingStockItem);
+    } catch (error) {
+      console.error('Opening stock creation error:', error);
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ message: 'Validation error', errors: error.errors });
+      } else {
+        res.status(500).json({ message: 'Failed to create opening stock item' });
+      }
+    }
+  });
+
+  app.get('/api/opening-stock/:itemId', authenticate, async (req, res) => {
+    try {
+      const { itemId } = req.params;
+      const openingStockItem = await storage.getOpeningStockByItemId(parseInt(itemId));
+      if (!openingStockItem) {
+        return res.status(404).json({ message: 'Opening stock item not found' });
+      }
+      res.json(openingStockItem);
+    } catch (error) {
+      console.error('Get opening stock item error:', error);
+      res.status(500).json({ message: 'Failed to get opening stock item' });
+    }
+  });
+
+  app.put('/api/opening-stock/:itemId', authenticate, async (req, res) => {
+    try {
+      const { itemId } = req.params;
+      const validatedData = insertOpeningStockSchema.partial().parse(req.body);
+      const openingStockItem = await storage.updateOpeningStock(parseInt(itemId), validatedData);
+      res.json(openingStockItem);
+    } catch (error) {
+      console.error('Opening stock update error:', error);
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ message: 'Validation error', errors: error.errors });
+      } else {
+        res.status(500).json({ message: 'Failed to update opening stock item' });
+      }
+    }
+  });
+
+  app.delete('/api/opening-stock/:itemId', authenticate, async (req, res) => {
+    try {
+      const { itemId } = req.params;
+      await storage.deleteOpeningStock(parseInt(itemId));
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Opening stock deletion error:', error);
+      res.status(500).json({ message: 'Failed to delete opening stock item' });
+    }
+  });
+
+  // Opening Stock bulk import endpoint
+  app.post('/api/opening-stock/import', authenticate, async (req, res) => {
+    try {
+      const { data, mode } = req.body;
+      
+      if (!data || !Array.isArray(data)) {
+        return res.status(400).json({ message: 'Data array is required' });
+      }
+      
+      if (!mode || !['amend', 'replace'].includes(mode)) {
+        return res.status(400).json({ message: 'Mode must be either "amend" or "replace"' });
+      }
+
+      // Validate each item in the data array
+      const validatedData = data.map((item, index) => {
+        try {
+          return insertOpeningStockSchema.parse(item);
+        } catch (error) {
+          throw new Error(`Item ${index + 1}: ${error instanceof z.ZodError ? error.errors.map(e => e.message).join(', ') : 'Invalid data'}`);
+        }
+      });
+
+      const result = await storage.bulkInsertOpeningStock(validatedData, mode);
+      res.json(result);
+    } catch (error) {
+      console.error('Opening stock import error:', error);
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ message: 'Validation error', errors: error.errors });
+      } else {
+        res.status(500).json({ 
+          message: 'Failed to import opening stock', 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        });
+      }
+    }
   });
 
   app.get('/api/edc', authenticate, async (req, res) => {

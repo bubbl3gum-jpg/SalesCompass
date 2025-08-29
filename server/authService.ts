@@ -53,7 +53,8 @@ const ROLE_PERMISSIONS = {
       "pricelist:read",
       "stock:opname",
       "discount:read",
-      "store:overview"
+      "store:overview",
+      "opening_stock:read", "opening_stock:create", "opening_stock:update", "opening_stock:delete"
     ],
     canAccessAllStores: false
   },

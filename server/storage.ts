@@ -114,6 +114,21 @@ export interface IStorage {
   // Opening Stock operations
   getOpeningStock(): Promise<OpeningStock[]>;
   createOpeningStock(data: InsertOpeningStock): Promise<OpeningStock>;
+  updateOpeningStock(itemId: number, data: Partial<InsertOpeningStock>): Promise<OpeningStock>;
+  deleteOpeningStock(itemId: number): Promise<void>;
+  getOpeningStockByItemId(itemId: number): Promise<OpeningStock | undefined>;
+  bulkInsertOpeningStock(data: InsertOpeningStock[], mode: 'amend' | 'replace'): Promise<{ 
+    success: number; 
+    errors: Array<{ row: number; error: string; data: any }>;
+    duplicatesInBatch: Array<{ row: number; kodeItem: string; duplicateRows: number[] }>;
+    summary: {
+      totalRecords: number;
+      newRecords: number;
+      updatedRecords: number;
+      duplicatesRemoved: number;
+      errorRecords: number;
+    }
+  }>;
   
   // Stock Opname operations
   getStockOpname(): Promise<StockOpname[]>;
@@ -550,6 +565,158 @@ export class DatabaseStorage implements IStorage {
   async createOpeningStock(data: InsertOpeningStock): Promise<OpeningStock> {
     const [result] = await db.insert(openingStock).values(data).returning();
     return result;
+  }
+
+  async updateOpeningStock(itemId: number, data: Partial<InsertOpeningStock>): Promise<OpeningStock> {
+    const [result] = await db.update(openingStock)
+      .set(data)
+      .where(eq(openingStock.itemId, itemId))
+      .returning();
+    return result;
+  }
+
+  async deleteOpeningStock(itemId: number): Promise<void> {
+    await db.delete(openingStock).where(eq(openingStock.itemId, itemId));
+  }
+
+  async getOpeningStockByItemId(itemId: number): Promise<OpeningStock | undefined> {
+    const [result] = await db.select().from(openingStock).where(eq(openingStock.itemId, itemId));
+    return result;
+  }
+
+  async bulkInsertOpeningStock(data: InsertOpeningStock[], mode: 'amend' | 'replace'): Promise<{ 
+    success: number; 
+    errors: Array<{ row: number; error: string; data: any }>;
+    duplicatesInBatch: Array<{ row: number; kodeItem: string; duplicateRows: number[] }>;
+    summary: {
+      totalRecords: number;
+      newRecords: number;
+      updatedRecords: number;
+      duplicatesRemoved: number;
+      errorRecords: number;
+    }
+  }> {
+    const errors: Array<{ row: number; error: string; data: any }> = [];
+    const duplicatesInBatch: Array<{ row: number; kodeItem: string; duplicateRows: number[] }> = [];
+    let success = 0;
+    let newRecords = 0;
+    let updatedRecords = 0;
+
+    console.log(`\n=== OPENING STOCK BULK INSERT DEBUG ===`);
+    console.log(`Total records to process: ${data.length}`);
+    console.log(`Mode: ${mode}`);
+
+    // If replace mode, clear all existing opening stock first
+    if (mode === 'replace') {
+      console.log('Replace mode: clearing existing opening stock...');
+      await db.delete(openingStock);
+      console.log('Existing opening stock cleared');
+    }
+
+    // Step 1: Remove duplicates within the same batch and track them
+    const uniqueData = [];
+    const seenKeys = new Map<string, number>();
+    
+    for (let i = 0; i < data.length; i++) {
+      const kodeItem = data[i].kodeItem;
+      if (!kodeItem) {
+        errors.push({
+          row: i + 1,
+          error: "Missing kodeItem",
+          data: data[i]
+        });
+        continue;
+      }
+      
+      if (seenKeys.has(kodeItem)) {
+        const originalRow = seenKeys.get(kodeItem)!;
+        let existingDuplicate = duplicatesInBatch.find(d => d.kodeItem === kodeItem);
+        if (existingDuplicate) {
+          existingDuplicate.duplicateRows.push(i + 1);
+        } else {
+          duplicatesInBatch.push({
+            row: originalRow,
+            kodeItem: kodeItem,
+            duplicateRows: [i + 1]
+          });
+        }
+        console.log(`Duplicate found in batch: "${kodeItem}" at rows ${originalRow} and ${i + 1}`);
+      } else {
+        seenKeys.set(kodeItem, i + 1);
+        uniqueData.push(data[i]);
+      }
+    }
+
+    console.log(`After removing duplicates: ${uniqueData.length} unique records`);
+    console.log(`Duplicates in batch: ${duplicatesInBatch.length} sets`);
+
+    // Step 2: Check which records already exist in database (only for amend mode)
+    const existingRecords = new Set();
+    if (mode === 'amend' && uniqueData.length > 0) {
+      const kodeItems = uniqueData.map(item => item.kodeItem).filter(Boolean);
+      const existing = await db
+        .select({ kodeItem: openingStock.kodeItem })
+        .from(openingStock)
+        .where(inArray(openingStock.kodeItem, kodeItems));
+      
+      existing.forEach(record => existingRecords.add(record.kodeItem));
+      console.log(`Existing records in database: ${existingRecords.size}`);
+      console.log(`New records to insert: ${uniqueData.length - existingRecords.size}`);
+    }
+
+    // Step 3: Process in smaller batches to avoid timeout
+    const batchSize = 50;
+    for (let i = 0; i < uniqueData.length; i += batchSize) {
+      const batch = uniqueData.slice(i, i + batchSize);
+      console.log(`Processing batch ${Math.floor(i/batchSize) + 1}/${Math.ceil(uniqueData.length/batchSize)} (${batch.length} records)`);
+
+      for (const record of batch) {
+        try {
+          if (mode === 'amend' && record.kodeItem && existingRecords.has(record.kodeItem)) {
+            // Update existing record
+            await db.update(openingStock)
+              .set(record)
+              .where(eq(openingStock.kodeItem, record.kodeItem));
+            updatedRecords++;
+          } else {
+            // Insert new record
+            await db.insert(openingStock).values(record);
+            newRecords++;
+          }
+          success++;
+        } catch (error) {
+          const currentIndex = uniqueData.indexOf(record) + 1;
+          console.error(`Error processing record ${currentIndex}:`, error);
+          errors.push({
+            row: currentIndex,
+            error: error instanceof Error ? error.message : String(error),
+            data: record
+          });
+        }
+      }
+    }
+
+    const summary = {
+      totalRecords: data.length,
+      newRecords,
+      updatedRecords,
+      duplicatesRemoved: duplicatesInBatch.reduce((sum, dup) => sum + dup.duplicateRows.length, 0),
+      errorRecords: errors.length
+    };
+
+    console.log(`\n=== BULK INSERT SUMMARY ===`);
+    console.log(`Total processed: ${success}`);
+    console.log(`New records: ${newRecords}`);
+    console.log(`Updated records: ${updatedRecords}`);
+    console.log(`Errors: ${errors.length}`);
+    console.log(`Duplicates removed: ${summary.duplicatesRemoved}`);
+
+    return {
+      success,
+      errors,
+      duplicatesInBatch,
+      summary
+    };
   }
   
   // Stock Opname operations
