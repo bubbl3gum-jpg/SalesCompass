@@ -61,7 +61,7 @@ interface PriceQuote {
 
 export function SalesEntryModal({ isOpen, onClose, selectedStore }: SalesEntryModalProps) {
   const { toast } = useToast();
-  const { user } = useStoreAuth();
+  const { user, hasPermission } = useStoreAuth();
   const queryClient = useQueryClient();
   const [priceQuote, setPriceQuote] = useState<PriceQuote | null>(null);
 
@@ -108,9 +108,10 @@ export function SalesEntryModal({ isOpen, onClose, selectedStore }: SalesEntryMo
   // Ensure payment methods is an array
   const paymentMethodsArray = Array.isArray(paymentMethods) ? paymentMethods : [];
 
-  // Get discounts
+  // Get discounts (only if user has permission)
   const { data: discounts } = useQuery({
     queryKey: ["/api/discounts"],
+    enabled: hasPermission ? hasPermission("discount:read") : false,
     retry: false,
   });
 
@@ -377,24 +378,27 @@ export function SalesEntryModal({ isOpen, onClose, selectedStore }: SalesEntryMo
                 )}
               />
 
-              <FormField
-                control={form.control}
-                name="discByAmount"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Discount Amount</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="number"
-                        placeholder="0"
-                        {...field}
-                        data-testid="input-discount-amount"
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              {/* Only show discount field if user has permission */}
+              {hasPermission && hasPermission("discount:read") && (
+                <FormField
+                  control={form.control}
+                  name="discByAmount"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Discount Amount</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          placeholder="0"
+                          {...field}
+                          data-testid="input-discount-amount"
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
             </div>
 
             {/* Notes */}

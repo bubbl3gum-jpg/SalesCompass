@@ -74,7 +74,7 @@ interface ImportJob {
 
 export default function Dashboard() {
   const { toast } = useToast();
-  const { user, isLoading } = useStoreAuth(); // Get user for permissions
+  const { user, isLoading, hasPermission } = useStoreAuth(); // Get user for permissions
   const { isExpanded } = useSidebar();
   const [selectedStore, setSelectedStore] = useState<string>('');
   const [showSalesModal, setShowSalesModal] = useState(false);
@@ -142,10 +142,10 @@ export default function Dashboard() {
     retry: false,
   });
 
-  // Price search query
+  // Price search query (only if user has permission)
   const { data: priceResults = [], isLoading: priceLoading } = useQuery<any[]>({
     queryKey: ["/api/pricelist/search", priceSearchTerm],
-    enabled: !!priceSearchTerm && priceSearchTerm.length > 2,
+    enabled: !!priceSearchTerm && priceSearchTerm.length > 2 && hasPermission("pricelist:read"),
     retry: false,
   });
 
@@ -587,30 +587,32 @@ export default function Dashboard() {
                       </DialogContent>
                     </Dialog>
 
-                    {/* Quick Pricelist Search */}
-                    <div className="space-y-2">
-                      <div className="relative">
-                        <Input
-                          placeholder="Find Price..."
-                          value={priceSearchTerm}
-                          onChange={(e) => setPriceSearchTerm(e.target.value)}
-                          className="pr-10"
-                        />
-                        <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    {/* Quick Pricelist Search - Only show if user has permission */}
+                    {hasPermission && hasPermission("pricelist:read") && (
+                      <div className="space-y-2">
+                        <div className="relative">
+                          <Input
+                            placeholder="Find Price..."
+                            value={priceSearchTerm}
+                            onChange={(e) => setPriceSearchTerm(e.target.value)}
+                            className="pr-10"
+                          />
+                          <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                        </div>
+                        {priceSearchTerm && priceResults.length > 0 && (
+                          <Card className="absolute z-10 w-64 max-h-48 overflow-y-auto">
+                            <CardContent className="p-2">
+                              {priceResults.slice(0, 5).map((item: any, index: number) => (
+                                <div key={index} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded text-sm">
+                                  <div className="font-medium">{item.kodeItem}</div>
+                                  <div className="text-green-600 dark:text-green-400">Rp {item.harga?.toLocaleString()}</div>
+                                </div>
+                              ))}
+                            </CardContent>
+                          </Card>
+                        )}
                       </div>
-                      {priceSearchTerm && priceResults.length > 0 && (
-                        <Card className="absolute z-10 w-64 max-h-48 overflow-y-auto">
-                          <CardContent className="p-2">
-                            {priceResults.slice(0, 5).map((item: any, index: number) => (
-                              <div key={index} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded text-sm">
-                                <div className="font-medium">{item.kodeItem}</div>
-                                <div className="text-green-600 dark:text-green-400">Rp {item.harga?.toLocaleString()}</div>
-                              </div>
-                            ))}
-                          </CardContent>
-                        </Card>
-                      )}
-                    </div>
+                    )}
 
                     {/* Quick Stock Search */}
                     <div className="space-y-2">
