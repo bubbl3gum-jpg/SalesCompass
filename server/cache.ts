@@ -15,6 +15,7 @@ export const CACHE_KEYS = {
   DISCOUNTS: 'discounts',
   POSITIONS: 'positions',
   DASHBOARD_METRICS: 'dashboard_metrics',
+  PRICELIST: 'pricelist',
 } as const;
 
 export const CACHE_TTL = {
@@ -24,6 +25,7 @@ export const CACHE_TTL = {
   DISCOUNTS: 300, // 5 minutes - discounts may change more frequently
   POSITIONS: 1800, // 30 minutes - positions are relatively static
   DASHBOARD_METRICS: 60, // 1 minute - metrics should be relatively fresh
+  PRICELIST: 1800, // 30 minutes - pricelist data is relatively static
 } as const;
 
 // Generic cache wrapper function

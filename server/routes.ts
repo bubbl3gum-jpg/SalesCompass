@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-// import { setupAuth, authenticate } from "./replitAuth"; // Deprecated - using new auth system
+import { setupAuth } from "./replitAuth";
 import { authRouter } from "./authRoutes";
 import { authenticate, requireAuth, requireStoreAuth, scopeToStore } from "./authMiddleware";
 import crypto from 'crypto';
@@ -403,8 +403,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Use new auth router
   app.use(authRouter);
   
-  // Keep Replit Auth for backward compatibility (optional)
-  // await setupAuth(app);
+  // Initialize session middleware for store authentication
+  await setupAuth(app);
 
   // Initialize simple import system
   console.log('🚀 Simple import system initialized');
@@ -1600,10 +1600,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { discountId } = req.params;
       const validatedData = insertDiscountTypeSchema.partial().parse(req.body);
       // Convert number to string for storage if discountAmount exists
+      const { discountAmount, ...restData } = validatedData;
       const storageData = {
-        ...validatedData,
-        ...(validatedData.discountAmount !== undefined && {
-          discountAmount: String(validatedData.discountAmount)
+        ...restData,
+        ...(discountAmount !== undefined && {
+          discountAmount: String(discountAmount)
         })
       };
       const discount = await storage.updateDiscountType(parseInt(discountId), storageData);
@@ -1646,12 +1647,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const searchTerm = search as string;
 
       // Clear cache first to ensure fresh data
-      cache.del(CACHE_KEYS.PRICELIST || 'pricelist');
+      cache.del(CACHE_KEYS.PRICELIST);
       
       // Use cache for pricelist data
       const allPricelist = await withCache(
-        CACHE_KEYS.PRICELIST || 'pricelist',
-        CACHE_TTL.PRICELIST || 1800, // 30 minutes
+        CACHE_KEYS.PRICELIST,
+        CACHE_TTL.PRICELIST, // 30 minutes
         () => storage.getPricelist()
       );
 
@@ -1695,7 +1696,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const pricelistItem = await storage.createPricelist(validatedData);
       
       // Clear cache after creating pricelist item
-      cache.del(CACHE_KEYS.PRICELIST || 'pricelist');
+      cache.del(CACHE_KEYS.PRICELIST);
       
       res.json(pricelistItem);
     } catch (error) {
@@ -1712,17 +1713,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { pricelistId } = req.params;
       const validatedData = insertPricelistSchema.partial().parse(req.body);
-      // Note: Update method would need to be added to storage interface
-      const pricelistItem = await storage.updatePricelist ? 
-        await storage.updatePricelist(parseInt(pricelistId), validatedData) :
-        null;
-      
-      if (!pricelistItem) {
-        return res.status(404).json({ message: 'Pricelist item not found or update not implemented' });
-      }
+      const pricelistItem = await storage.updatePricelist(parseInt(pricelistId), validatedData);
       
       // Clear cache after updating pricelist item
-      cache.del(CACHE_KEYS.PRICELIST || 'pricelist');
+      cache.del(CACHE_KEYS.PRICELIST);
       
       res.json(pricelistItem);
     } catch (error) {
@@ -1738,17 +1732,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete('/api/pricelist/:pricelistId', authenticate, checkRole(['System Administrator']), async (req, res) => {
     try {
       const { pricelistId } = req.params;
-      // Note: Delete method would need to be added to storage interface
-      const success = await storage.deletePricelist ? 
-        await storage.deletePricelist(parseInt(pricelistId)) :
-        false;
-      
-      if (!success) {
-        return res.status(404).json({ message: 'Pricelist item not found or delete not implemented' });
-      }
+      await storage.deletePricelist(parseInt(pricelistId));
       
       // Clear cache after deleting pricelist item
-      cache.del(CACHE_KEYS.PRICELIST || 'pricelist');
+      cache.del(CACHE_KEYS.PRICELIST);
       
       res.json({ success: true });
     } catch (error) {

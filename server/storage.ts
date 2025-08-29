@@ -95,6 +95,8 @@ export interface IStorage {
   // Pricelist operations
   getPricelist(): Promise<Pricelist[]>;
   createPricelist(data: InsertPricelist): Promise<Pricelist>;
+  updatePricelist(pricelistId: number, data: Partial<InsertPricelist>): Promise<Pricelist>;
+  deletePricelist(pricelistId: number): Promise<void>;
   getPriceBySerial(serialNumber: string): Promise<Pricelist | undefined>;
   getPriceByKodeItem(kodeItem: string): Promise<Pricelist | undefined>;
   getPricesByFamilyAndMaterial(family: string, deskripsiMaterial: string): Promise<Pricelist[]>;
@@ -464,6 +466,18 @@ export class DatabaseStorage implements IStorage {
         eq(pricelist.deskripsiMaterial, deskripsiMaterial)
       )
     );
+  }
+
+  async updatePricelist(pricelistId: number, data: Partial<InsertPricelist>): Promise<Pricelist> {
+    const [result] = await db.update(pricelist)
+      .set(data)
+      .where(eq(pricelist.pricelistId, pricelistId))
+      .returning();
+    return result;
+  }
+
+  async deletePricelist(pricelistId: number): Promise<void> {
+    await db.delete(pricelist).where(eq(pricelist.pricelistId, pricelistId));
   }
 
   // Sales operations
