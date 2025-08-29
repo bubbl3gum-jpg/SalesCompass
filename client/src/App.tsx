@@ -51,7 +51,6 @@ function Router() {
         ) : !user ? (
           <>
             {/* When not authenticated, show login for all routes */}
-            <Route path="/" component={Login} />
             <Route component={Login} />
           </>
         ) : (
