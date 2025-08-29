@@ -6,6 +6,7 @@ import { z } from "zod";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { isUnauthorizedError } from "@/lib/authUtils";
+import { useStoreAuth } from "@/hooks/useStoreAuth";
 
 import { Sidebar } from "@/components/sidebar";
 import { PricelistImportModal } from "@/components/PricelistImportModal";
@@ -66,6 +67,10 @@ type PricelistFormData = z.infer<typeof pricelistFormSchema>;
 export default function PriceLists() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { hasPermission } = useStoreAuth();
+  
+  // Check if user can update pricelists
+  const canUpdatePricelists = hasPermission("pricelist:update");
   
   const [showPriceModal, setShowPriceModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
@@ -215,23 +220,32 @@ export default function PriceLists() {
                 <i className="fas fa-sync-alt mr-2"></i>
                 Refresh
               </Button>
-              <Button
-                variant="outline"
-                onClick={() => setShowImportModal(true)}
-                className="dark:bg-black/20 backdrop-blur-xl border border-white/20 dark:border-gray-800/50 text-[#000000] bg-[#96e683de]"
-                data-testid="button-import-prices"
-              >
-                <i className="fas fa-upload mr-2"></i>
-                Import
-              </Button>
-              <Button
-                onClick={() => setShowPriceModal(true)}
-                className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700"
-                data-testid="button-new-price"
-              >
-                <i className="fas fa-plus mr-2"></i>
-                Add Price
-              </Button>
+              {canUpdatePricelists && (
+                <>
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowImportModal(true)}
+                    className="dark:bg-black/20 backdrop-blur-xl border border-white/20 dark:border-gray-800/50 text-[#000000] bg-[#96e683de]"
+                    data-testid="button-import-prices"
+                  >
+                    <i className="fas fa-upload mr-2"></i>
+                    Import
+                  </Button>
+                  <Button
+                    onClick={() => setShowPriceModal(true)}
+                    className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700"
+                    data-testid="button-new-price"
+                  >
+                    <i className="fas fa-plus mr-2"></i>
+                    Add Price
+                  </Button>
+                </>
+              )}
+              {!canUpdatePricelists && (
+                <Badge variant="secondary" className="px-3 py-1">
+                  Read Only Access
+                </Badge>
+              )}
             </div>
           </div>
         </header>
@@ -342,14 +356,18 @@ export default function PriceLists() {
                             {price.sp ? formatPrice(price.sp) : '-'}
                           </TableCell>
                           <TableCell className="text-right">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
-                              data-testid={`button-edit-price-${price.pricelistId}`}
-                            >
-                              Edit
-                            </Button>
+                            {canUpdatePricelists ? (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
+                                data-testid={`button-edit-price-${price.pricelistId}`}
+                              >
+                                Edit
+                              </Button>
+                            ) : (
+                              <Badge variant="secondary" className="text-xs">Read Only</Badge>
+                            )}
                           </TableCell>
                         </TableRow>
                       ))}
@@ -441,15 +459,17 @@ export default function PriceLists() {
                     {searchTerm ? 'No matching prices' : 'No prices configured'}
                   </h3>
                   <p className="text-gray-500 dark:text-gray-400 mb-6">
-                    {searchTerm ? 'No price list items match your search criteria.' : 'Start by adding price list items for your products.'}
+                    {searchTerm ? 'No price list items match your search criteria.' : canUpdatePricelists ? 'Start by adding price list items for your products.' : 'No price list items have been configured yet.'}
                   </p>
-                  <Button
-                    onClick={() => setShowPriceModal(true)}
-                    className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700"
-                    data-testid="button-add-first-price"
-                  >
-                    Add First Price
-                  </Button>
+                  {canUpdatePricelists && (
+                    <Button
+                      onClick={() => setShowPriceModal(true)}
+                      className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700"
+                      data-testid="button-add-first-price"
+                    >
+                      Add First Price
+                    </Button>
+                  )}
                 </div>
               )}
             </CardContent>

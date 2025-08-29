@@ -6,6 +6,7 @@ import { z } from "zod";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { isUnauthorizedError } from "@/lib/authUtils";
+import { useStoreAuth } from "@/hooks/useStoreAuth";
 
 import { Sidebar } from "@/components/sidebar";
 import { ImportModal } from "@/components/import-modal";
@@ -55,6 +56,10 @@ type DiscountFormData = z.infer<typeof discountFormSchema>;
 export default function Discounts() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { hasPermission } = useStoreAuth();
+  
+  // Check if user can update discounts
+  const canUpdateDiscounts = hasPermission("discount:update");
   const [showDiscountModal, setShowDiscountModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
   const [searchTerm, setSearchTerm] = useState<string>('');
@@ -253,24 +258,33 @@ export default function Discounts() {
               <p className="text-gray-600 dark:text-gray-400 mt-1">Create and manage discount types and promotions</p>
             </div>
             <div className="flex space-x-3">
-              <Button
-                variant="outline"
-                onClick={() => setShowImportModal(true)}
-                className="border-emerald-600 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20"
-                data-testid="button-import-discounts"
-              >
-                <i className="fas fa-upload mr-2"></i>
-                Import
-              </Button>
-              
-              <Button
-                onClick={() => setShowDiscountModal(true)}
-                className="bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700"
-                data-testid="button-new-discount"
-              >
-                <i className="fas fa-plus mr-2"></i>
-                New Discount
-              </Button>
+              {canUpdateDiscounts && (
+                <>
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowImportModal(true)}
+                    className="border-emerald-600 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20"
+                    data-testid="button-import-discounts"
+                  >
+                    <i className="fas fa-upload mr-2"></i>
+                    Import
+                  </Button>
+                  
+                  <Button
+                    onClick={() => setShowDiscountModal(true)}
+                    className="bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700"
+                    data-testid="button-new-discount"
+                  >
+                    <i className="fas fa-plus mr-2"></i>
+                    New Discount
+                  </Button>
+                </>
+              )}
+              {!canUpdateDiscounts && (
+                <Badge variant="secondary" className="px-3 py-1">
+                  Read Only Access
+                </Badge>
+              )}
             </div>
           </div>
         </header>
@@ -362,24 +376,30 @@ export default function Discounts() {
                           <Badge className={`${status.color} border-0`}>
                             {status.status}
                           </Badge>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleEditDiscount(discount)}
-                            className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
-                            data-testid={`button-edit-discount-${discount.discountId}`}
-                          >
-                            Edit
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleDeleteDiscount(discount)}
-                            className="text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300"
-                            data-testid={`button-delete-discount-${discount.discountId}`}
-                          >
-                            Delete
-                          </Button>
+                          {canUpdateDiscounts ? (
+                            <>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleEditDiscount(discount)}
+                                className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
+                                data-testid={`button-edit-discount-${discount.discountId}`}
+                              >
+                                Edit
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleDeleteDiscount(discount)}
+                                className="text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300"
+                                data-testid={`button-delete-discount-${discount.discountId}`}
+                              >
+                                Delete
+                              </Button>
+                            </>
+                          ) : (
+                            <Badge variant="secondary" className="text-xs">Read Only</Badge>
+                          )}
                         </div>
                       </div>
                     );
@@ -394,15 +414,17 @@ export default function Discounts() {
                     {searchTerm ? 'No matching discounts' : 'No discounts configured'}
                   </h3>
                   <p className="text-gray-500 dark:text-gray-400 mb-6">
-                    {searchTerm ? 'No discounts match your search criteria.' : 'Start by creating discount types for your promotions.'}
+                    {searchTerm ? 'No discounts match your search criteria.' : canUpdateDiscounts ? 'Start by creating discount types for your promotions.' : 'No discount types have been configured yet.'}
                   </p>
-                  <Button
-                    onClick={() => setShowDiscountModal(true)}
-                    className="bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700"
-                    data-testid="button-create-first-discount"
-                  >
-                    Create First Discount
-                  </Button>
+                  {canUpdateDiscounts && (
+                    <Button
+                      onClick={() => setShowDiscountModal(true)}
+                      className="bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700"
+                      data-testid="button-create-first-discount"
+                    >
+                      Create First Discount
+                    </Button>
+                  )}
                 </div>
               )}
             </CardContent>
