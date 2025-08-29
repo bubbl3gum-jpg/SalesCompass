@@ -159,23 +159,15 @@ export default function AdminSettings() {
 
   const [activeTab, setActiveTab] = useState('reference-sheet');
 
-  // Fetch positions for staff form - only when needed
-  const { data: positions = [] } = useQuery({
-    queryKey: ['/api/positions'],
-    queryFn: async () => {
-      const response = await fetch('/api/positions', {
-        credentials: 'include',
-      });
-      if (!response.ok) {
-        throw new Error(`${response.status}: ${response.statusText}`);
-      }
-      return response.json();
-    },
-    retry: false,
-    enabled: activeTab === 'staff' || activeTab === 'positions',
-    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
-    gcTime: 10 * 60 * 1000, // Keep in memory for 10 minutes
-  });
+  // Fetch data for all tables at top level - always enabled to avoid hook rule violations
+  const referenceSheetQuery = useTableData('/api/reference-sheets', true);
+  const storesQuery = useTableData('/api/stores', true);
+  const positionsQuery = useTableData('/api/positions', true);
+  const staffQuery = useTableData('/api/staff', true);
+  const edcQuery = useTableData('/api/edc', true);
+
+  // Get positions data for staff form
+  const positions = positionsQuery.data || [];
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
@@ -430,8 +422,8 @@ export default function AdminSettings() {
     setShowImportModal(false);
   };
 
-  // Render field value based on field type
-  const renderFieldValue = (value: any, field: TableConfig['fields'][0]) => {
+  // Render field value based on field type  
+  const renderFieldValue = useCallback((value: any, field: TableConfig['fields'][0]) => {
     // Handle null/undefined values
     if (value === null || value === undefined) {
       return <span className="text-gray-500 italic">N/A</span>;
@@ -487,12 +479,32 @@ export default function AdminSettings() {
         // Regular string/text values
         return value?.toString() || 'N/A';
     }
-  };
+  }, []);
 
-  const renderTableContent = (config: TableConfig) => {
-    // Only fetch data for the active tab
-    const isActiveTab = config.name === activeTab;
-    const { data: rawData, isLoading, error } = useTableData(config.endpoint, isActiveTab);
+  const renderTableContent = useCallback((config: TableConfig) => {
+    // Get the appropriate query data based on table name
+    let queryResult;
+    switch (config.name) {
+      case 'reference-sheet':
+        queryResult = referenceSheetQuery;
+        break;
+      case 'stores':
+        queryResult = storesQuery;
+        break;
+      case 'positions':
+        queryResult = positionsQuery;
+        break;
+      case 'staff':
+        queryResult = staffQuery;
+        break;
+      case 'edc':
+        queryResult = edcQuery;
+        break;
+      default:
+        queryResult = { data: null, isLoading: false, error: null };
+    }
+
+    const { data: rawData, isLoading, error } = queryResult;
     
     // Filter data based on search query
     const searchQuery = searchQueries[config.name] || '';
@@ -510,15 +522,19 @@ export default function AdminSettings() {
     }) : [];
 
     if (error && isUnauthorizedError(error)) {
-      toast({
-        title: "Unauthorized",
-        description: "You are logged out. Logging in again...",
-        variant: "destructive",
-      });
-      setTimeout(() => {
-        window.location.href = "/api/login";
-      }, 500);
-      return null;
+      // Handle unauthorized error with useEffect to avoid infinite renders
+      console.error("Unauthorized access detected:", error);
+      return (
+        <div className="text-center py-8">
+          <p className="text-red-600 dark:text-red-400">Unauthorized access. Please log in again.</p>
+          <button 
+            onClick={() => window.location.href = "/api/login"}
+            className="mt-2 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+          >
+            Log In
+          </button>
+        </div>
+      );
     }
 
     return (
@@ -692,7 +708,7 @@ export default function AdminSettings() {
         </Card>
       </div>
     );
-  };
+  }, [selectedItems, searchQueries, referenceSheetQuery, storesQuery, positionsQuery, staffQuery, edcQuery, handleSelectAll, handleSelectItem]);
 
   if (!user) {
     return <div>Please log in to access admin settings.</div>;
