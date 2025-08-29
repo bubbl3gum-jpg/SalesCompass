@@ -150,10 +150,12 @@ export default function Dashboard() {
   });
 
   // Get recent import jobs
-  const { data: importJobs = [], isLoading: importsLoading, refetch: refetchImports } = useQuery<ImportJob[]>({
+  const { data: importJobs = [], isLoading: importsLoading, error: importsError, refetch: refetchImports } = useQuery<ImportJob[]>({
     queryKey: ["/api/import/jobs"],
     retry: false,
     refetchInterval: 5000, // Refetch every 5 seconds for updates
+    refetchIntervalInBackground: false, // Don't refetch when window is not focused
+    staleTime: 30000, // Consider data fresh for 30 seconds
   });
 
   useEffect(() => {
@@ -169,6 +171,15 @@ export default function Dashboard() {
       return;
     }
   }, [metricsError, toast]);
+
+  // Handle import jobs errors silently to prevent confusing 404 messages
+  useEffect(() => {
+    if (importsError && isUnauthorizedError(importsError as Error)) {
+      // Don't show toast for import jobs errors - handle silently
+      // The metrics error handler above will already redirect if needed
+      console.log('Import jobs authentication error - handled silently');
+    }
+  }, [importsError]);
 
   // Set default store when stores load - prioritize user's authenticated store
   useEffect(() => {
@@ -759,6 +770,11 @@ export default function Dashboard() {
                             <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded"></div>
                           </div>
                         ))}
+                      </div>
+                    ) : importsError ? (
+                      <div className="text-center py-6">
+                        <FileText className="w-12 h-12 text-gray-500 dark:text-gray-400 mx-auto mb-3" />
+                        <p className="text-sm text-gray-700 dark:text-gray-300">Import activity unavailable</p>
                       </div>
                     ) : importJobs.length > 0 ? (
                       <div className="space-y-4 max-h-80 overflow-y-auto">
