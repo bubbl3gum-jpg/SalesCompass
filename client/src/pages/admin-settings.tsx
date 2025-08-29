@@ -648,7 +648,7 @@ export default function AdminSettings() {
                               ? 'bg-blue-50 dark:bg-blue-900/20 border-2 border-blue-200 dark:border-blue-700' 
                               : 'bg-white/5 dark:bg-black/5 border border-transparent'
                           }`}>
-                            <div className="flex items-start space-x-3">
+                            <div className="flex items-start space-x-3 bg-[#e3eeff]"></div>
                               <Checkbox
                                 checked={isSelected}
                                 onCheckedChange={(checked) => handleSelectItem(itemId, !!checked)}
