@@ -24,6 +24,7 @@ const PriceLists = lazy(() => import("@/pages/price-lists"));
 const Discounts = lazy(() => import("@/pages/discounts"));
 const AdminSettings = lazy(() => import("@/pages/admin-settings"));
 const NotFound = lazy(() => import("@/pages/not-found"));
+const AccessDenied = lazy(() => import("@/pages/access-denied"));
 
 // Loading component for page transitions
 const PageLoader = () => (
@@ -53,7 +54,7 @@ const ProtectedRoute = ({
   const { hasPermission } = useStoreAuth();
   
   if (!hasPermission(permission)) {
-    return <NotFound />;
+    return <AccessDenied />;
   }
   
   return <Component {...props} />;
@@ -86,7 +87,9 @@ function Router() {
               }}
             </Route>
             <Route path="/stock-opname" component={StockOpname} />
-            <Route path="/stores-overview" component={StoresOverview} />
+            <Route path="/stores-overview">
+              {(params) => <ProtectedRoute component={StoresOverview} permission="store:overview" {...params} />}
+            </Route>
             <Route path="/transfers" component={Transfers} />
             <Route path="/opening-stock">
               {(params) => <ProtectedRoute component={OpeningStock} permission="opening_stock:read" {...params} />}
@@ -97,7 +100,9 @@ function Router() {
             <Route path="/discounts">
               {(params) => <ProtectedRoute component={Discounts} permission="discount:read" {...params} />}
             </Route>
-            <Route path="/admin-settings" component={AdminSettings} />
+            <Route path="/admin-settings">
+              {(params) => <ProtectedRoute component={AdminSettings} permission="admin:settings" {...params} />}
+            </Route>
             <Route component={NotFound} />
           </>
         )}
