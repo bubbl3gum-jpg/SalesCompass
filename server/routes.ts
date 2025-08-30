@@ -31,6 +31,8 @@ import {
   type Pricelist 
 } from "@shared/schema";
 import { db } from "./db";
+import { transferImportStorage } from "./objectStorage";
+import { ExcelProcessor } from "./excelProcessor";
 
 // Progress tracking for imports
 const importProgress = new Map<string, { current: number; total: number; status: string }>();
@@ -2320,6 +2322,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('SO item creation error:', error);
       res.status(400).json({ message: 'Failed to create SO item' });
+    }
+  });
+
+  // Object Storage routes
+  app.post('/api/objects/upload', authenticate, async (req, res) => {
+    try {
+      const uploadURL = await transferImportStorage.getObjectEntityUploadURL();
+      res.json({ uploadURL });
+    } catch (error) {
+      console.error('Upload URL generation error:', error);
+      res.status(500).json({ message: 'Failed to generate upload URL' });
+    }
+  });
+
+  // Excel/ODS file processing for opening stock
+  app.post('/api/opening-stock/import-excel', authenticate, checkRole(['Stockist', 'Supervisor', 'System Administrator']), async (req, res) => {
+    try {
+      const { fileUrl, mode } = req.body;
+      
+      if (!fileUrl) {
+        return res.status(400).json({ message: 'File URL is required' });
+      }
+
+      if (!mode || !['amend', 'replace'].includes(mode)) {
+        return res.status(400).json({ message: 'Valid mode (amend/replace) is required' });
+      }
+
+      const result = await ExcelProcessor.importOpeningStockFromExcel(fileUrl, mode, storage);
+      
+      // Invalidate cache after successful import
+      invalidateCachePattern('opening-stock');
+      
+      res.json({
+        importedCount: result.importedCount,
+        errors: result.errors,
+        message: `Successfully imported ${result.importedCount} items`
+      });
+
+    } catch (error) {
+      console.error('Excel import error:', error);
+      res.status(500).json({ 
+        message: error instanceof Error ? error.message : 'Failed to import Excel file'
+      });
     }
   });
 

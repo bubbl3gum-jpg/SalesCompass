@@ -653,7 +653,7 @@ export class DatabaseStorage implements IStorage {
     // Step 2: Check which records already exist in database (only for amend mode)
     const existingRecords = new Set();
     if (mode === 'amend' && uniqueData.length > 0) {
-      const kodeItems = uniqueData.map(item => item.kodeItem).filter(Boolean);
+      const kodeItems = uniqueData.map(item => item.kodeItem).filter((item): item is string => Boolean(item));
       const existing = await db
         .select({ kodeItem: openingStock.kodeItem })
         .from(openingStock)

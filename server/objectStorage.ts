@@ -92,7 +92,53 @@ export class TransferImportStorage {
   async getFileSize(fileKey: string): Promise<number> {
     const file = await this.getImportFile(fileKey);
     const [metadata] = await file.getMetadata();
-    return parseInt(metadata.size || '0');
+    return parseInt(String(metadata.size || '0'));
+  }
+
+  // Generate presigned URL for general object uploads (e.g., Excel/ODS files)
+  async getObjectEntityUploadURL(): Promise<string> {
+    const uploadId = `upload_${randomUUID().replace(/-/g, '')}`;
+    const privateDir = this.getPrivateObjectDir();
+    const fileKey = `${privateDir}/uploads/${uploadId}`;
+    
+    const { bucketName, objectName } = parseObjectPath(fileKey);
+    
+    return signObjectURL({
+      bucketName,
+      objectName,
+      method: "PUT",
+      ttlSec: 900, // 15 minutes
+    });
+  }
+
+  // Get file content as buffer for processing
+  async getFileContent(fileUrl: string): Promise<Buffer> {
+    try {
+      let objectPath: string;
+      
+      // Handle both direct paths and URLs
+      if (fileUrl.startsWith('https://storage.googleapis.com/')) {
+        const url = new URL(fileUrl);
+        objectPath = url.pathname;
+      } else {
+        objectPath = fileUrl;
+      }
+      
+      const { bucketName, objectName } = parseObjectPath(objectPath);
+      const bucket = objectStorageClient.bucket(bucketName);
+      const file = bucket.file(objectName);
+      
+      const [exists] = await file.exists();
+      if (!exists) {
+        throw new ObjectNotFoundError();
+      }
+      
+      const [content] = await file.download();
+      return content;
+    } catch (error) {
+      console.error('Error downloading file content:', error);
+      throw new Error('Failed to download file content');
+    }
   }
 }
 
