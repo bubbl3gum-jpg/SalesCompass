@@ -775,7 +775,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/opening-stock', authenticate, async (req, res) => {
     try {
       const openingStock = await storage.getOpeningStock();
-      res.json(openingStock);
+      
+      // Get reference sheet data for enrichment
+      const referenceSheet = await storage.getReferenceSheets();
+      const referenceMap = new Map();
+      referenceSheet.forEach((ref: any) => {
+        if (ref.kodeItem) {
+          referenceMap.set(ref.kodeItem, ref);
+        }
+        if (ref.sn) {
+          referenceMap.set(ref.sn, ref);
+        }
+      });
+
+      // Enrich opening stock data with reference sheet information
+      const enrichedOpeningStock = openingStock.map((stock: any) => {
+        let referenceData = referenceMap.get(stock.kodeItem);
+        if (!referenceData && stock.sn) {
+          referenceData = referenceMap.get(stock.sn);
+        }
+
+        return {
+          ...stock,
+          // Fill missing fields from reference sheet
+          sn: stock.sn || referenceData?.sn || null,
+          kelompok: stock.kelompok || referenceData?.kelompok || null,
+          family: stock.family || referenceData?.family || null,
+          deskripsiMaterial: stock.deskripsiMaterial || referenceData?.deskripsiMaterial || null,
+          kodeMotif: stock.kodeMotif || referenceData?.kodeMotif || null,
+          namaItem: stock.namaItem || referenceData?.namaItem || stock.kodeItem,
+        };
+      });
+
+      res.json(enrichedOpeningStock);
     } catch (error) {
       console.error('Opening stock query error:', error);
       res.status(500).json({ message: 'Failed to get opening stock information' });
@@ -2004,7 +2036,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Opening Stock bulk import endpoint
+  // Opening Stock bulk import endpoint with simplified format
   app.post('/api/opening-stock/import', authenticate, async (req, res) => {
     try {
       const { data, mode } = req.body;
@@ -2017,14 +2049,72 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: 'Mode must be either "amend" or "replace"' });
       }
 
-      // Validate each item in the data array
-      const validatedData = data.map((item, index) => {
+      console.log(`🔄 Processing opening stock import with ${data.length} items in ${mode} mode`);
+
+      // Get reference sheet data for enrichment
+      const referenceSheet = await storage.getReferenceSheets();
+      const referenceMap = new Map();
+      referenceSheet.forEach((ref: any) => {
+        if (ref.kodeItem) {
+          referenceMap.set(ref.kodeItem, ref);
+        }
+        if (ref.sn) {
+          referenceMap.set(ref.sn, ref);
+        }
+      });
+
+      console.log(`📚 Loaded ${referenceSheet.length} reference items for enrichment`);
+
+      // Process simplified data format (sn, kodeItem, namaItem, qty) and enrich with reference data
+      const enrichedData = data.map((item, index) => {
+        // Simplified validation - only require kodeItem and qty
+        if (!item.kodeItem) {
+          throw new Error(`Item ${index + 1}: kodeItem is required`);
+        }
+        
+        const qty = parseInt(item.qty) || 0;
+        if (qty < 0) {
+          throw new Error(`Item ${index + 1}: qty must be 0 or greater`);
+        }
+
+        // Look up reference data by item code or serial number
+        let referenceData = referenceMap.get(item.kodeItem);
+        if (!referenceData && item.sn) {
+          referenceData = referenceMap.get(item.sn);
+        }
+
+        // Create enriched opening stock record
+        const enrichedItem = {
+          sn: item.sn || referenceData?.sn || null,
+          kodeItem: item.kodeItem,
+          kelompok: referenceData?.kelompok || null,
+          family: referenceData?.family || null,
+          deskripsiMaterial: referenceData?.deskripsiMaterial || null,
+          kodeMotif: referenceData?.kodeMotif || null,
+          namaItem: item.namaItem || referenceData?.namaItem || item.kodeItem,
+          qty: qty,
+          kodeGudang: item.kodeGudang || referenceData?.kodeGudang || null,
+        };
+
+        console.log(`📝 Enriched item ${index + 1}:`, { 
+          original: item, 
+          reference: referenceData ? 'found' : 'not found',
+          enriched: enrichedItem 
+        });
+
+        return enrichedItem;
+      });
+
+      // Validate enriched data
+      const validatedData = enrichedData.map((item, index) => {
         try {
           return insertOpeningStockSchema.parse(item);
         } catch (error) {
           throw new Error(`Item ${index + 1}: ${error instanceof z.ZodError ? error.errors.map(e => e.message).join(', ') : 'Invalid data'}`);
         }
       });
+
+      console.log(`✅ Successfully validated ${validatedData.length} enriched items`);
 
       const result = await storage.bulkInsertOpeningStock(validatedData, mode);
       res.json(result);

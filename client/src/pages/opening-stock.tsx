@@ -283,21 +283,51 @@ export default function OpeningStock() {
 
   const handleImport = (data: ImportModalFormData) => {
     try {
-      // Parse CSV-like data
+      // Parse CSV-like data with simplified format (sn, kodeItem, namaItem, qty)
       const lines = data.importData.split('\n').filter(line => line.trim());
-      const headers = lines[0].split(',').map(h => h.trim());
+      const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+      
+      // Map common header variations to standard names
+      const headerMap: { [key: string]: string } = {
+        'sn': 'sn',
+        's/n': 'sn',
+        'serial_number': 'sn',
+        'serial number': 'sn',
+        'serial': 'sn',
+        'kode_item': 'kodeItem',
+        'kode item': 'kodeItem',
+        'item_code': 'kodeItem',
+        'item code': 'kodeItem',
+        'itemcode': 'kodeItem',
+        'code': 'kodeItem',
+        'nama_item': 'namaItem',
+        'nama item': 'namaItem',
+        'item_name': 'namaItem',
+        'item name': 'namaItem',
+        'itemname': 'namaItem',
+        'name': 'namaItem',
+        'qty': 'qty',
+        'quantity': 'qty',
+        'jumlah': 'qty'
+      };
+
       const importData = lines.slice(1).map(line => {
         const values = line.split(',').map(v => v.trim());
         const item: any = {};
+        
         headers.forEach((header, index) => {
-          if (header === 'qty') {
-            item[header] = parseInt(values[index]) || 0;
-          } else {
-            item[header] = values[index] || null;
+          const mappedHeader = headerMap[header] || header;
+          if (mappedHeader === 'qty') {
+            item[mappedHeader] = parseInt(values[index]) || 0;
+          } else if (values[index] && values[index] !== '') {
+            item[mappedHeader] = values[index];
           }
         });
+        
         return item;
-      });
+      }).filter(item => item.kodeItem); // Only include items with kodeItem
+
+      console.log('Parsed import data:', importData);
 
       importStockMutation.mutate({ data: importData, mode: data.mode });
     } catch (error) {
@@ -512,7 +542,7 @@ export default function OpeningStock() {
                                 <FormLabel>CSV Data</FormLabel>
                                 <FormControl>
                                   <Textarea
-                                    placeholder="Paste CSV data here (kodeItem,namaItem,qty,sn,kelompok,family,deskripsiMaterial,kodeMotif)&#10;ITEM001,Item Name 1,10,SN001,Group1,Family1,Material1,Motif1&#10;ITEM002,Item Name 2,5,SN002,Group2,Family2,Material2,Motif2"
+                                    placeholder="Paste CSV data here (simplified format like transfer orders)&#10;sn,kodeItem,namaItem,qty&#10;SN001,ITEM001,Item Name 1,10&#10;SN002,ITEM002,Item Name 2,5&#10;&#10;Additional fields (kelompok, family, deskripsi_material, kode_motif) will be automatically filled from reference sheet."
                                     className="min-h-40"
                                     {...field}
                                     data-testid="textarea-import-data"
