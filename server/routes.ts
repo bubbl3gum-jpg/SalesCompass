@@ -2188,11 +2188,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const filterHeaderRows = (records: any[]): any[] => {
         console.log(`🔍 Filtering header rows from ${records.length} records...`);
         
+        // Debug: Log first few records to see structure
+        console.log('📊 First 3 records for debugging:');
+        records.slice(0, 3).forEach((record, index) => {
+          console.log(`Record ${index}:`, record);
+          console.log(`Record ${index} values:`, Object.values(record));
+        });
+        
         const headerPatterns = [
           'no.baris', 'no baris', 'nobaris',
           'sn', 's/n',
           'kode item', 'kodeitem', 'item code',
-          'qty', 'quantity', 'jumlah', 'qty transfer'
+          'qty', 'quantity', 'jumlah', 'qty transfer', 'qtytransfer',
+          'nama item', 'namaitem', 'nama'
         ];
         
         let headerRowIndex = -1;
@@ -2203,13 +2211,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
             (v?.toString() || '').toLowerCase().trim().replace(/[\s_-]/g, '')
           );
           
+          console.log(`🔍 Checking row ${i}:`, recordValues);
+          
           let headerMatches = 0;
+          const matchedPatterns = [];
           for (const pattern of headerPatterns) {
             const normalizedPattern = pattern.toLowerCase().replace(/[\s_-]/g, '');
             if (recordValues.some(value => value === normalizedPattern || value.includes(normalizedPattern))) {
               headerMatches++;
+              matchedPatterns.push(pattern);
             }
           }
+          
+          console.log(`🎯 Row ${i} matched ${headerMatches} patterns:`, matchedPatterns);
           
           if (headerMatches >= 3) {
             headerRowIndex = i;
