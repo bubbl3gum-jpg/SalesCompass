@@ -2192,7 +2192,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           'no.baris', 'no baris', 'nobaris',
           'sn', 's/n',
           'kode item', 'kodeitem', 'item code',
-          'qty', 'quantity', 'jumlah'
+          'qty', 'quantity', 'jumlah', 'qty transfer'
         ];
         
         let headerRowIndex = -1;
@@ -2247,8 +2247,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return {
           sn: normalizeKey(record, ['s/n', 'sn', 'serial_number', 'serial no', 'serial', 'serialno']),
           kodeItem: normalizeKey(record, ['kode_item', 'kode item', 'item_code', 'sku', 'itemcode', 'code']),
-          namaItem: normalizeKey(record, ['nama_item', 'nama item', 'item_name', 'nama', 'itemname', 'product name', 'description']) || null,
-          qty: parseInt(normalizeKey(record, ['qty', 'quantity', 'jumlah']) || '0') || 0
+          namaItem: normalizeKey(record, ['nama_item', 'nama item', 'item_name', 'nama', 'itemname', 'product name', 'description', 'nama item (x)']) || null,
+          qty: parseInt(normalizeKey(record, ['qty', 'quantity', 'jumlah', 'qty transfer', 'qtytransfer']) || '0') || 0
         };
       };
 
