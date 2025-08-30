@@ -44,8 +44,9 @@ export function authorize(...requiredPermissions: string[]) {
     }
 
     // Check if user has any of the required permissions
+    const userPermissions = req.auth.perms || req.auth.permissions || [];
     const hasRequiredPermission = requiredPermissions.some(perm => 
-      hasPermission(req.auth!.perms, perm)
+      hasPermission(userPermissions, perm)
     );
 
     if (!hasRequiredPermission) {
@@ -76,10 +77,11 @@ export function authorizeStore(allowAdminOverride = true) {
     const storeToCheck = requestedStoreId || req.auth.store_id;
 
     // Check store access
+    const userStoreId = req.auth.store_id || req.auth.storeId || '';
     const hasAccess = canAccessStore(
-      req.auth.store_id,
-      storeToCheck,
-      allowAdminOverride && req.auth.can_access_all_stores
+      userStoreId,
+      storeToCheck || '',
+      allowAdminOverride && Boolean(req.auth.can_access_all_stores || req.auth.canAccessAllStores || false)
     );
 
     if (!hasAccess) {

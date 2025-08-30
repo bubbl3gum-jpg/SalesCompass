@@ -151,7 +151,11 @@ export const isAuthenticated: RequestHandler = async (req, res, next) => {
     updateUserSession(user, tokenResponse);
     return next();
   } catch (error) {
-    res.status(401).json({ message: "Unauthorized" });
+    console.error('Token refresh failed:', error);
+    res.status(401).json({ 
+      message: "Unauthorized", 
+      reason: "Token refresh failed" 
+    });
     return;
   }
 };

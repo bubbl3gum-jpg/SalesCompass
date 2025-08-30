@@ -7,8 +7,20 @@ import type { Staff } from "@shared/schema";
 
 const scryptAsync = promisify(scrypt);
 
-// Get JWT secret from environment or use a fallback for development
-const JWT_SECRET = process.env.JWT_SECRET || process.env.SESSION_SECRET || "dev-secret-change-in-production";
+// Get JWT secret from environment with more secure fallback
+const getJWTSecret = () => {
+  const secret = process.env.JWT_SECRET || process.env.SESSION_SECRET;
+  if (!secret) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('JWT_SECRET environment variable must be set in production');
+    }
+    console.warn('⚠️  Using insecure JWT secret in development. Set JWT_SECRET environment variable for production.');
+    return "dev-secret-change-in-production";
+  }
+  return secret;
+};
+
+const JWT_SECRET = getJWTSecret();
 const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || `${JWT_SECRET}-refresh`;
 
 // Token expiration times

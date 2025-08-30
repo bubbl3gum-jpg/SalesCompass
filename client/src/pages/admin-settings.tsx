@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useAuth } from "@/hooks/useAuth";
+import { useStoreAuth } from "@/hooks/useStoreAuth";
 import { useSidebar } from "@/hooks/useSidebar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -152,7 +152,7 @@ function useTableData(endpoint: string, enabled = true) {
 }
 
 export default function AdminSettings() {
-  const { user } = useAuth();
+  const { user } = useStoreAuth();
   const { isExpanded } = useSidebar();
   const { toast } = useToast();
   const queryClient = useQueryClient();
