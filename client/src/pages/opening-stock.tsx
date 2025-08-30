@@ -98,8 +98,6 @@ export default function OpeningStock() {
   const importForm = useForm<ImportModalFormData>({
     resolver: zodResolver(importModalFormSchema),
     defaultValues: {
-      importData: "",
-      importFile: null,
       mode: "amend",
     },
   });
@@ -334,71 +332,44 @@ export default function OpeningStock() {
         return;
       }
       
-      // Handle CSV file upload
+      // Handle CSV file upload using proper CSV parsing (same approach as transfers)
       if (selectedFile) {
-        const csvContent = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = (e) => resolve(e.target?.result as string);
-          reader.onerror = () => reject(new Error('Failed to read file'));
-          reader.readAsText(selectedFile);
-        });
+        const formData = new FormData();
+        formData.append('file', selectedFile);
+        formData.append('mode', data.mode);
 
-        if (!csvContent.trim()) {
+        try {
+          const response = await fetch('/api/opening-stock/import-csv', {
+            method: 'POST',
+            credentials: 'include',
+            body: formData
+          });
+
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+
+          const result = await response.json();
+          
+          queryClient.invalidateQueries({ queryKey: ['/api/opening-stock'] });
+          setShowImportModal(false);
+          setSelectedFile(null);
+          setUploadedFileUrl(null);
+          
+          toast({
+            title: "Import Successful",
+            description: `${result.importedCount || 0} items imported successfully.`,
+          });
+          return;
+        } catch (error) {
+          console.error('CSV import error:', error);
           toast({
             title: "Import Error",
-            description: "The selected file appears to be empty.",
+            description: "Failed to process CSV file. Please check the file format.",
             variant: "destructive",
           });
           return;
         }
-
-        // Parse CSV-like data with simplified format (sn, kodeItem, namaItem, qty)
-        const lines = csvContent.split('\n').filter(line => line.trim());
-        const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
-      
-        // Map common header variations to standard names
-        const headerMap: { [key: string]: string } = {
-          'sn': 'sn',
-          's/n': 'sn',
-          'serial_number': 'sn',
-          'serial number': 'sn',
-          'serial': 'sn',
-          'kode_item': 'kodeItem',
-          'kode item': 'kodeItem',
-          'item_code': 'kodeItem',
-          'item code': 'kodeItem',
-          'itemcode': 'kodeItem',
-          'code': 'kodeItem',
-          'nama_item': 'namaItem',
-          'nama item': 'namaItem',
-          'item_name': 'namaItem',
-          'item name': 'namaItem',
-          'itemname': 'namaItem',
-          'name': 'namaItem',
-          'qty': 'qty',
-          'quantity': 'qty',
-          'jumlah': 'qty'
-        };
-
-        const importData = lines.slice(1).map(line => {
-          const values = line.split(',').map(v => v.trim());
-          const item: any = {};
-          
-          headers.forEach((header, index) => {
-            const mappedHeader = headerMap[header] || header;
-            if (mappedHeader === 'qty') {
-              item[mappedHeader] = parseInt(values[index]) || 0;
-            } else if (values[index] && values[index] !== '') {
-              item[mappedHeader] = values[index];
-            }
-          });
-          
-          return item;
-        }).filter(item => item.kodeItem); // Only include items with kodeItem
-
-        console.log('Parsed import data:', importData);
-
-        importStockMutation.mutate({ data: importData, mode: data.mode });
       } else {
         toast({
           title: "Import Error",

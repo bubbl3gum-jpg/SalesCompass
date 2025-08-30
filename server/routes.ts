@@ -2133,6 +2133,194 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Opening Stock CSV import endpoint with proper CSV parsing (same as transfers)
+  app.post('/api/opening-stock/import-csv', authenticate, upload.single('file'), async (req, res) => {
+    try {
+      const file = req.file;
+      const mode = req.body.mode;
+      
+      if (!file) {
+        return res.status(400).json({ message: 'No file uploaded' });
+      }
+      
+      if (!mode || !['amend', 'replace'].includes(mode)) {
+        return res.status(400).json({ message: 'Mode must be either "amend" or "replace"' });
+      }
+
+      console.log(`🔄 Processing opening stock CSV import: ${file.originalname} in ${mode} mode`);
+
+      // Parse CSV file using csv-parse library (same as transfers)
+      const csvParse = require('csv-parse');
+      const records: any[] = [];
+      
+      const parseCSV = (): Promise<any[]> => {
+        return new Promise((resolve, reject) => {
+          const parser = csvParse({
+            columns: true,
+            skip_empty_lines: true,
+            trim: true,
+            relax_column_count: true
+          });
+
+          parser.on('data', (record: any) => {
+            records.push(record);
+          });
+
+          parser.on('end', () => {
+            console.log(`📊 CSV parsed: ${records.length} records`);
+            resolve(records);
+          });
+
+          parser.on('error', (error: any) => {
+            reject(new Error(`CSV parsing error: ${error.message}`));
+          });
+
+          // Create a readable stream from buffer
+          const { Readable } = require('stream');
+          const stream = new Readable();
+          stream.push(file.buffer);
+          stream.push(null);
+          stream.pipe(parser);
+        });
+      };
+
+      const parsedRecords = await parseCSV();
+
+      // Filter out header rows (same logic as transfers)
+      const filterHeaderRows = (records: any[]): any[] => {
+        console.log(`🔍 Filtering header rows from ${records.length} records...`);
+        
+        const headerPatterns = [
+          'no.baris', 'no baris', 'nobaris',
+          'sn', 's/n',
+          'kode item', 'kodeitem', 'item code',
+          'qty', 'quantity', 'jumlah'
+        ];
+        
+        let headerRowIndex = -1;
+        
+        for (let i = 0; i < records.length; i++) {
+          const record = records[i];
+          const recordValues = Object.values(record).map(v => 
+            (v?.toString() || '').toLowerCase().trim().replace(/[\s_-]/g, '')
+          );
+          
+          let headerMatches = 0;
+          for (const pattern of headerPatterns) {
+            const normalizedPattern = pattern.toLowerCase().replace(/[\s_-]/g, '');
+            if (recordValues.some(value => value === normalizedPattern || value.includes(normalizedPattern))) {
+              headerMatches++;
+            }
+          }
+          
+          if (headerMatches >= 3) {
+            headerRowIndex = i;
+            console.log(`📋 Found header row at index ${i}:`, record);
+            break;
+          }
+        }
+        
+        if (headerRowIndex >= 0) {
+          const dataRecords = records.slice(headerRowIndex + 1);
+          console.log(`✂️ Skipped ${headerRowIndex + 1} rows (including headers), processing ${dataRecords.length} data rows`);
+          return dataRecords;
+        } else {
+          console.log(`📋 No header row detected, processing all ${records.length} rows`);
+          return records;
+        }
+      };
+
+      const dataRecords = filterHeaderRows(parsedRecords);
+
+      // Map and validate records (same logic as transfers)
+      const mapRecord = (record: any): any => {
+        const normalizeKey = (obj: any, aliases: string[]): string => {
+          for (const key of Object.keys(obj)) {
+            const normalizedKey = key.toLowerCase().replace(/[\s_-]/g, '');
+            for (const alias of aliases) {
+              if (normalizedKey === alias.toLowerCase().replace(/[\s_-]/g, '')) {
+                return obj[key]?.toString().trim() || '';
+              }
+            }
+          }
+          return '';
+        };
+
+        return {
+          sn: normalizeKey(record, ['s/n', 'sn', 'serial_number', 'serial no', 'serial', 'serialno']),
+          kodeItem: normalizeKey(record, ['kode_item', 'kode item', 'item_code', 'sku', 'itemcode', 'code']),
+          namaItem: normalizeKey(record, ['nama_item', 'nama item', 'item_name', 'nama', 'itemname', 'product name', 'description']) || null,
+          qty: parseInt(normalizeKey(record, ['qty', 'quantity', 'jumlah']) || '0') || 0
+        };
+      };
+
+      const mappedData = dataRecords
+        .map(mapRecord)
+        .filter(item => item.kodeItem && item.kodeItem.trim() !== ''); // Only include items with kodeItem
+
+      console.log(`✅ Mapped ${mappedData.length} valid records for import`);
+
+      if (mappedData.length === 0) {
+        return res.status(400).json({ 
+          message: 'No valid records found. Please ensure your CSV has columns: sn, kodeItem, namaItem, qty' 
+        });
+      }
+
+      // Get reference sheet data for enrichment
+      const referenceSheet = await storage.getReferenceSheets();
+      const referenceMap = new Map();
+      referenceSheet.forEach((ref: any) => {
+        if (ref.kodeItem) {
+          referenceMap.set(ref.kodeItem, ref);
+        }
+        if (ref.sn) {
+          referenceMap.set(ref.sn, ref);
+        }
+      });
+
+      console.log(`📚 Loaded ${referenceSheet.length} reference items for enrichment`);
+
+      // Enrich with reference data
+      const enrichedData = mappedData.map((item, index) => {
+        let referenceData = referenceMap.get(item.kodeItem);
+        if (!referenceData && item.sn) {
+          referenceData = referenceMap.get(item.sn);
+        }
+
+        return {
+          sn: item.sn || referenceData?.sn || null,
+          kodeItem: item.kodeItem,
+          kelompok: referenceData?.kelompok || null,
+          family: referenceData?.family || null,
+          deskripsiMaterial: referenceData?.deskripsiMaterial || null,
+          kodeMotif: referenceData?.kodeMotif || null,
+          namaItem: item.namaItem || referenceData?.namaItem || item.kodeItem,
+          qty: item.qty,
+          kodeGudang: referenceData?.kodeGudang || null,
+        };
+      });
+
+      console.log(`✅ Successfully enriched ${enrichedData.length} items`);
+
+      // Bulk insert using existing storage method
+      const result = await storage.bulkInsertOpeningStock(enrichedData, mode);
+
+      res.json({
+        importedCount: result.success,
+        errors: result.errors,
+        duplicates: result.duplicatesRemoved,
+        message: `Successfully imported ${result.success} items`
+      });
+
+    } catch (error) {
+      console.error('Opening stock CSV import error:', error);
+      res.status(500).json({ 
+        message: 'Failed to import CSV file', 
+        error: error instanceof Error ? error.message : 'Unknown error' 
+      });
+    }
+  });
+
   app.get('/api/edc', authenticate, async (req, res) => {
     try {
       const edcList = await storage.getEdc();
