@@ -751,8 +751,6 @@ export default function OpeningStock() {
               )}
               
               <div className="flex justify-end gap-2">
-              
-              <div className="flex justify-end gap-2">
                 <Button 
                   type="button" 
                   variant="outline" 
