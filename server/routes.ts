@@ -2150,7 +2150,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log(`🔄 Processing opening stock CSV import: ${file.originalname} in ${mode} mode`);
 
       // Parse CSV file using csv-parse library (same as transfers)
-      const csvParse = require('csv-parse');
       const records: any[] = [];
       
       const parseCSV = (): Promise<any[]> => {
@@ -2176,7 +2175,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
 
           // Create a readable stream from buffer
-          const { Readable } = require('stream');
           const stream = new Readable();
           stream.push(file.buffer);
           stream.push(null);
@@ -2308,7 +2306,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({
         importedCount: result.success,
         errors: result.errors,
-        duplicates: result.duplicatesRemoved,
+        duplicates: result.summary?.duplicatesRemoved || 0,
         message: `Successfully imported ${result.success} items`
       });
 

@@ -300,77 +300,7 @@ export default function OpeningStock() {
     try {
       setIsProcessingFile(true);
       
-      // Check if Excel/ODS file was uploaded via object storage
-      if (uploadedFileUrl) {
-        const response = await fetch('/api/opening-stock/import-excel', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          credentials: 'include',
-          body: JSON.stringify({
-            fileUrl: uploadedFileUrl,
-            mode: data.mode
-          })
-        });
-
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
-        const result = await response.json();
-        
-        queryClient.invalidateQueries({ queryKey: ['/api/opening-stock'] });
-        setShowImportModal(false);
-        setUploadedFileUrl(null);
-        setSelectedFile(null);
-        
-        toast({
-          title: "Import Successful",
-          description: `${result.importedCount || 0} items imported successfully.`,
-        });
-        return;
-      }
-      
-      // Handle CSV file upload using proper CSV parsing (same approach as transfers)
-      if (selectedFile) {
-        const formData = new FormData();
-        formData.append('file', selectedFile);
-        formData.append('mode', data.mode);
-
-        try {
-          const response = await fetch('/api/opening-stock/import-csv', {
-            method: 'POST',
-            credentials: 'include',
-            body: formData
-          });
-
-          if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-          }
-
-          const result = await response.json();
-          
-          queryClient.invalidateQueries({ queryKey: ['/api/opening-stock'] });
-          setShowImportModal(false);
-          setSelectedFile(null);
-          setUploadedFileUrl(null);
-          
-          toast({
-            title: "Import Successful",
-            description: `${result.importedCount || 0} items imported successfully.`,
-          });
-          return;
-        } catch (error) {
-          console.error('CSV import error:', error);
-          toast({
-            title: "Import Error",
-            description: "Failed to process CSV file. Please check the file format.",
-            variant: "destructive",
-          });
-          return;
-        }
-      } else {
+      if (!selectedFile) {
         toast({
           title: "Import Error",
           description: "Please select a file to import.",
@@ -378,10 +308,54 @@ export default function OpeningStock() {
         });
         return;
       }
+
+      const fileName = selectedFile.name.toLowerCase();
+      const isCSVFile = fileName.endsWith('.csv') || fileName.endsWith('.txt');
+      const isExcelFile = fileName.endsWith('.xlsx') || fileName.endsWith('.xls') || fileName.endsWith('.ods');
+
+      if (!isCSVFile && !isExcelFile) {
+        toast({
+          title: "Import Error",
+          description: "Please select a valid CSV, Excel (.xlsx, .xls), or OpenDocument (.ods) file.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append('file', selectedFile);
+      formData.append('mode', data.mode);
+
+      // Route to appropriate endpoint based on file type
+      const endpoint = isCSVFile ? '/api/opening-stock/import-csv' : '/api/opening-stock/import-excel';
+      
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        credentials: 'include',
+        body: formData
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      
+      queryClient.invalidateQueries({ queryKey: ['/api/opening-stock'] });
+      setShowImportModal(false);
+      setSelectedFile(null);
+      setUploadedFileUrl(null);
+      
+      toast({
+        title: "Import Successful",
+        description: `${result.importedCount || 0} items imported successfully.`,
+      });
+
     } catch (error) {
+      console.error('Import error:', error);
       toast({
         title: "Import Error",
-        description: "Failed to process file or invalid data format.",
+        description: "Failed to process file. Please check the file format and try again.",
         variant: "destructive",
       });
     } finally {
@@ -593,68 +567,42 @@ export default function OpeningStock() {
                               <p className="text-sm text-muted-foreground mb-3">
                                 Upload CSV, Excel (.xlsx, .xls), or OpenDocument Spreadsheet (.ods) files with columns: sn, kodeItem, namaItem, qty
                               </p>
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                {/* CSV File Upload */}
-                                <div>
-                                  <label className="text-xs font-medium text-muted-foreground mb-2 block">
-                                    CSV File
-                                  </label>
-                                  <input
-                                    type="file"
-                                    accept=".csv,.txt"
-                                    onChange={(e) => {
-                                      const file = e.target.files?.[0];
-                                      setSelectedFile(file || null);
-                                      setUploadedFileUrl(null); // Clear Excel upload if CSV is selected
-                                    }}
-                                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                                    data-testid="input-csv-file-upload"
-                                  />
+                              
+                              {/* Unified File Upload */}
+                              <div className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-6 text-center bg-white/10 dark:bg-black/10 backdrop-blur-sm">
+                                <div className="space-y-4">
+                                  <Upload className="mx-auto h-12 w-12 text-gray-400 dark:text-gray-500" />
+                                  <div>
+                                    <label className="cursor-pointer">
+                                      <span className="text-sm font-medium text-blue-600 dark:text-blue-400 hover:text-blue-500 dark:hover:text-blue-300">
+                                        Choose a file
+                                      </span>
+                                      <input
+                                        type="file"
+                                        accept=".csv,.xlsx,.xls,.ods"
+                                        onChange={(e) => {
+                                          const file = e.target.files?.[0];
+                                          setSelectedFile(file || null);
+                                          setUploadedFileUrl(null);
+                                        }}
+                                        className="sr-only"
+                                        data-testid="input-file-upload"
+                                      />
+                                    </label>
+                                    <span className="text-sm text-gray-500 dark:text-gray-400"> or drag and drop</span>
+                                  </div>
+                                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                                    CSV, Excel (.xlsx, .xls), or OpenDocument (.ods) files only
+                                  </p>
                                   {selectedFile && (
-                                    <p className="text-sm text-muted-foreground mt-1">
-                                      Selected: {selectedFile.name}
-                                    </p>
-                                  )}
-                                </div>
-                                
-                                {/* Excel/ODS File Upload */}
-                                <div>
-                                  <label className="text-xs font-medium text-muted-foreground mb-2 block">
-                                    Excel/ODS File
-                                  </label>
-                                  <ObjectUploader
-                                    maxNumberOfFiles={1}
-                                    maxFileSize={10485760} // 10MB
-                                    allowedFileTypes={['.xlsx', '.xls', '.ods']}
-                                    onGetUploadParameters={async () => {
-                                      const response = await fetch('/api/objects/upload', {
-                                        method: 'POST',
-                                        credentials: 'include',
-                                      });
-                                      const data = await response.json();
-                                      return {
-                                        method: 'PUT' as const,
-                                        url: data.uploadURL,
-                                      };
-                                    }}
-                                    onComplete={(result) => {
-                                      if (result.successful && result.successful.length > 0) {
-                                        const uploadedFile = result.successful[0];
-                                        setUploadedFileUrl(uploadedFile.uploadURL || null);
-                                        setSelectedFile(null); // Clear CSV file if Excel is uploaded
-                                      }
-                                    }}
-                                    buttonClassName="w-full h-10 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700"
-                                  >
-                                    <div className="flex items-center gap-2">
-                                      <FileSpreadsheet className="h-4 w-4" />
-                                      <span>Upload Excel/ODS</span>
+                                    <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-md p-3">
+                                      <p className="text-sm font-medium text-green-800 dark:text-green-200">
+                                        📄 {selectedFile.name}
+                                      </p>
+                                      <p className="text-xs text-green-600 dark:text-green-400">
+                                        {(selectedFile.size / 1024).toFixed(1)} KB • Ready to import
+                                      </p>
                                     </div>
-                                  </ObjectUploader>
-                                  {uploadedFileUrl && (
-                                    <p className="text-sm text-emerald-600 dark:text-emerald-400 mt-2">
-                                      ✓ File uploaded successfully
-                                    </p>
                                   )}
                                 </div>
                               </div>
