@@ -56,14 +56,9 @@ const openingStockFormSchema = z.object({
 type OpeningStockFormData = z.infer<typeof openingStockFormSchema>;
 
 const importModalFormSchema = z.object({
-  importData: z.string().optional(),
-  importFile: z.any().optional(),
   mode: z.enum(["amend", "replace"], {
     required_error: "Please select an import mode",
   }),
-}).refine(data => data.importData || data.importFile, {
-  message: "Either paste CSV data or select a file",
-  path: ["importData"],
 });
 
 type ImportModalFormData = z.infer<typeof importModalFormSchema>;
@@ -88,6 +83,7 @@ export default function OpeningStock() {
   const [enrichedItemData, setEnrichedItemData] = useState<any>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploadedFileUrl, setUploadedFileUrl] = useState<string | null>(null);
+  const [isProcessingFile, setIsProcessingFile] = useState(false);
 
   const form = useForm<OpeningStockFormData>({
     resolver: zodResolver(openingStockFormSchema),
@@ -304,105 +300,121 @@ export default function OpeningStock() {
 
   const handleImport = async (data: ImportModalFormData) => {
     try {
-      let csvContent = data.importData || '';
+      setIsProcessingFile(true);
       
-      // Check if Excel/ODS file was uploaded
+      // Check if Excel/ODS file was uploaded via object storage
       if (uploadedFileUrl) {
-        // Call backend to process uploaded Excel/ODS file
-        const response = await apiRequest(`/api/opening-stock/import-excel`, {
+        const response = await fetch('/api/opening-stock/import-excel', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
+          credentials: 'include',
           body: JSON.stringify({
             fileUrl: uploadedFileUrl,
             mode: data.mode
           })
         });
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const result = await response.json();
         
         queryClient.invalidateQueries({ queryKey: ['/api/opening-stock'] });
         setShowImportModal(false);
         setUploadedFileUrl(null);
+        setSelectedFile(null);
         
         toast({
           title: "Import Successful",
-          description: `${(response as any).importedCount || 0} items imported successfully.`,
+          description: `${result.importedCount || 0} items imported successfully.`,
         });
         return;
       }
       
-      // If file is selected, read its content
+      // Handle CSV file upload
       if (selectedFile) {
-        csvContent = await new Promise<string>((resolve, reject) => {
+        const csvContent = await new Promise<string>((resolve, reject) => {
           const reader = new FileReader();
           reader.onload = (e) => resolve(e.target?.result as string);
           reader.onerror = () => reject(new Error('Failed to read file'));
           reader.readAsText(selectedFile);
         });
-      }
 
-      if (!csvContent.trim()) {
+        if (!csvContent.trim()) {
+          toast({
+            title: "Import Error",
+            description: "The selected file appears to be empty.",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        // Parse CSV-like data with simplified format (sn, kodeItem, namaItem, qty)
+        const lines = csvContent.split('\n').filter(line => line.trim());
+        const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+      
+        // Map common header variations to standard names
+        const headerMap: { [key: string]: string } = {
+          'sn': 'sn',
+          's/n': 'sn',
+          'serial_number': 'sn',
+          'serial number': 'sn',
+          'serial': 'sn',
+          'kode_item': 'kodeItem',
+          'kode item': 'kodeItem',
+          'item_code': 'kodeItem',
+          'item code': 'kodeItem',
+          'itemcode': 'kodeItem',
+          'code': 'kodeItem',
+          'nama_item': 'namaItem',
+          'nama item': 'namaItem',
+          'item_name': 'namaItem',
+          'item name': 'namaItem',
+          'itemname': 'namaItem',
+          'name': 'namaItem',
+          'qty': 'qty',
+          'quantity': 'qty',
+          'jumlah': 'qty'
+        };
+
+        const importData = lines.slice(1).map(line => {
+          const values = line.split(',').map(v => v.trim());
+          const item: any = {};
+          
+          headers.forEach((header, index) => {
+            const mappedHeader = headerMap[header] || header;
+            if (mappedHeader === 'qty') {
+              item[mappedHeader] = parseInt(values[index]) || 0;
+            } else if (values[index] && values[index] !== '') {
+              item[mappedHeader] = values[index];
+            }
+          });
+          
+          return item;
+        }).filter(item => item.kodeItem); // Only include items with kodeItem
+
+        console.log('Parsed import data:', importData);
+
+        importStockMutation.mutate({ data: importData, mode: data.mode });
+      } else {
         toast({
           title: "Import Error",
-          description: "Please provide CSV data, select a file, or upload an Excel/ODS file.",
+          description: "Please select a file to import.",
           variant: "destructive",
         });
         return;
       }
-
-      // Parse CSV-like data with simplified format (sn, kodeItem, namaItem, qty)
-      const lines = csvContent.split('\n').filter(line => line.trim());
-      const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
-      
-      // Map common header variations to standard names
-      const headerMap: { [key: string]: string } = {
-        'sn': 'sn',
-        's/n': 'sn',
-        'serial_number': 'sn',
-        'serial number': 'sn',
-        'serial': 'sn',
-        'kode_item': 'kodeItem',
-        'kode item': 'kodeItem',
-        'item_code': 'kodeItem',
-        'item code': 'kodeItem',
-        'itemcode': 'kodeItem',
-        'code': 'kodeItem',
-        'nama_item': 'namaItem',
-        'nama item': 'namaItem',
-        'item_name': 'namaItem',
-        'item name': 'namaItem',
-        'itemname': 'namaItem',
-        'name': 'namaItem',
-        'qty': 'qty',
-        'quantity': 'qty',
-        'jumlah': 'qty'
-      };
-
-      const importData = lines.slice(1).map(line => {
-        const values = line.split(',').map(v => v.trim());
-        const item: any = {};
-        
-        headers.forEach((header, index) => {
-          const mappedHeader = headerMap[header] || header;
-          if (mappedHeader === 'qty') {
-            item[mappedHeader] = parseInt(values[index]) || 0;
-          } else if (values[index] && values[index] !== '') {
-            item[mappedHeader] = values[index];
-          }
-        });
-        
-        return item;
-      }).filter(item => item.kodeItem); // Only include items with kodeItem
-
-      console.log('Parsed import data:', importData);
-
-      importStockMutation.mutate({ data: importData, mode: data.mode });
     } catch (error) {
       toast({
         title: "Import Error",
         description: "Failed to process file or invalid data format.",
         variant: "destructive",
       });
+    } finally {
+      setIsProcessingFile(false);
     }
   };
 
@@ -602,32 +614,20 @@ export default function OpeningStock() {
                             )}
                           />
                           
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            <FormField
-                              control={importForm.control}
-                              name="importData"
-                              render={({ field }) => (
-                                <FormItem>
-                                  <FormLabel>CSV Data (Option 1: Paste)</FormLabel>
-                                  <FormControl>
-                                    <Textarea
-                                      placeholder="Paste CSV data here (simplified format like transfer orders)&#10;sn,kodeItem,namaItem,qty&#10;SN001,ITEM001,Item Name 1,10&#10;SN002,ITEM002,Item Name 2,5&#10;&#10;Additional fields will be auto-filled from reference sheet."
-                                      className="min-h-40"
-                                      {...field}
-                                      data-testid="textarea-import-data"
-                                    />
-                                  </FormControl>
-                                  <FormMessage />
-                                </FormItem>
-                              )}
-                            />
-                            
-                            <div className="space-y-4">
-                              <div>
-                                <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                                  CSV File (Option 2: Upload)
-                                </label>
-                                <div className="mt-2">
+                          <div className="space-y-4">
+                            <div>
+                              <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                                Upload File
+                              </label>
+                              <p className="text-sm text-muted-foreground mb-3">
+                                Upload CSV, Excel (.xlsx, .xls), or OpenDocument Spreadsheet (.ods) files with columns: sn, kodeItem, namaItem, qty
+                              </p>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {/* CSV File Upload */}
+                                <div>
+                                  <label className="text-xs font-medium text-muted-foreground mb-2 block">
+                                    CSV File
+                                  </label>
                                   <input
                                     type="file"
                                     accept=".csv,.txt"
@@ -637,7 +637,7 @@ export default function OpeningStock() {
                                       setUploadedFileUrl(null); // Clear Excel upload if CSV is selected
                                     }}
                                     className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                                    data-testid="input-file-upload"
+                                    data-testid="input-csv-file-upload"
                                   />
                                   {selectedFile && (
                                     <p className="text-sm text-muted-foreground mt-1">
@@ -645,15 +645,12 @@ export default function OpeningStock() {
                                     </p>
                                   )}
                                 </div>
-                              </div>
-                            </div>
-                            
-                            <div className="space-y-4">
-                              <div>
-                                <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                                  Excel/ODS File (Option 3: Upload)
-                                </label>
-                                <div className="mt-2">
+                                
+                                {/* Excel/ODS File Upload */}
+                                <div>
+                                  <label className="text-xs font-medium text-muted-foreground mb-2 block">
+                                    Excel/ODS File
+                                  </label>
                                   <ObjectUploader
                                     maxNumberOfFiles={1}
                                     maxFileSize={10485760} // 10MB
@@ -676,14 +673,16 @@ export default function OpeningStock() {
                                         setSelectedFile(null); // Clear CSV file if Excel is uploaded
                                       }
                                     }}
-                                    buttonClassName="w-full bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700"
+                                    buttonClassName="w-full h-10 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700"
                                   >
-                                    <FileSpreadsheet className="h-4 w-4 mr-2" />
-                                    Upload Excel/ODS File
+                                    <div className="flex items-center gap-2">
+                                      <FileSpreadsheet className="h-4 w-4" />
+                                      <span>Upload Excel/ODS</span>
+                                    </div>
                                   </ObjectUploader>
                                   {uploadedFileUrl && (
                                     <p className="text-sm text-emerald-600 dark:text-emerald-400 mt-2">
-                                      ✓ Excel/ODS file uploaded successfully
+                                      ✓ File uploaded successfully
                                     </p>
                                   )}
                                 </div>
@@ -693,20 +692,23 @@ export default function OpeningStock() {
                           
                           <Button 
                             type="submit" 
-                            disabled={importStockMutation.isPending}
+                            disabled={importStockMutation.isPending || isProcessingFile}
                             data-testid="button-submit-import"
                           >
-                            {importStockMutation.isPending ? "Importing..." : "Import Data"}
+                            {importStockMutation.isPending || isProcessingFile ? "Processing..." : "Import Data"}
                           </Button>
                           
-                          {selectedFile && (
+                          {(selectedFile || uploadedFileUrl) && (
                             <Button 
                               type="button" 
                               variant="outline"
-                              onClick={() => setSelectedFile(null)}
+                              onClick={() => {
+                                setSelectedFile(null);
+                                setUploadedFileUrl(null);
+                              }}
                               data-testid="button-clear-file"
                             >
-                              Clear File
+                              Clear Files
                             </Button>
                           )}
                         </form>
