@@ -117,7 +117,7 @@ export default function OpeningStock() {
   const { data: referenceSheet } = useQuery({
     queryKey: ['/api/reference-sheet'],
     staleTime: 5 * 60 * 1000, // Cache for 5 minutes
-  });
+  }) as { data: any[] | undefined };
 
   // Filter opening stock based on search
   const filteredStock = Array.isArray(openingStock) ? openingStock.filter((stock: any) => {
@@ -272,10 +272,6 @@ export default function OpeningStock() {
     form.reset({
       sn: stock.sn || "",
       kodeItem: stock.kodeItem || "",
-      kelompok: stock.kelompok || "",
-      family: stock.family || "",
-      deskripsiMaterial: stock.deskripsiMaterial || "",
-      kodeMotif: stock.kodeMotif || "",
       namaItem: stock.namaItem || "",
       qty: stock.qty || 0,
     });
@@ -288,7 +284,7 @@ export default function OpeningStock() {
 
   // Auto-lookup reference data when kodeItem changes
   const handleItemCodeChange = (kodeItem: string) => {
-    if (kodeItem && referenceSheet) {
+    if (kodeItem && Array.isArray(referenceSheet)) {
       const referenceData = referenceSheet.find((ref: any) => 
         ref.kodeItem === kodeItem || ref.sn === kodeItem
       );
@@ -753,7 +749,8 @@ export default function OpeningStock() {
                   </div>
                 </div>
               )}
-              </div>
+              
+              <div className="flex justify-end gap-2">
               
               <div className="flex justify-end gap-2">
                 <Button 
