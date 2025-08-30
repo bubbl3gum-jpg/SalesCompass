@@ -31,16 +31,14 @@ import { Card, CardContent } from "@/components/ui/card";
 const salesFormSchema = z.object({
   kodeGudang: z.string().min(1, "Store is required"),
   tanggal: z.string().min(1, "Date is required"),
+  serialNumber: z.string().min(1, "Serial number is required"),
   kodeItem: z.string().min(1, "Item code is required"),
-  serialNumber: z.string().optional(),
-  discountId: z.string().optional(),
-  discByAmount: z.string().optional(),
-  paymentMethodId: z.string().min(1, "Payment method is required"),
-  notes: z.string().optional(),
-  preOrder: z.boolean().default(false),
+  namaItem: z.string().min(1, "Item name is required"),
+  quantity: z.string().min(1, "Quantity is required"),
   normalPrice: z.string(),
-  unitPrice: z.string(),
+  discountType: z.string().optional(),
   finalPrice: z.string(),
+  notes: z.string().optional(),
 });
 
 type SalesFormData = z.infer<typeof salesFormSchema>;
@@ -51,35 +49,47 @@ interface SalesEntryModalProps {
   selectedStore?: string;
 }
 
-interface PriceQuote {
-  normal_price: number;
-  unit_price: number;
-  discount_amount: number;
-  final_price: number;
-  source: string;
+interface ItemLookup {
+  kodeItem: string;
+  namaItem: string;
+  normalPrice: number;
+  sp?: number;
+  availableQuantity: number;
+}
+
+interface DiscountOption {
+  discountId: number;
+  discountName: string;
+  discountType: string;
+  percentage?: number;
+  amount?: number;
 }
 
 export function SalesEntryModal({ isOpen, onClose, selectedStore }: SalesEntryModalProps) {
   const { toast } = useToast();
   const { user, hasPermission } = useStoreAuth();
   const queryClient = useQueryClient();
-  const [priceQuote, setPriceQuote] = useState<PriceQuote | null>(null);
+  
+  // State for the new flow
+  const [itemOptions, setItemOptions] = useState<ItemLookup[]>([]);
+  const [selectedItemData, setSelectedItemData] = useState<ItemLookup | null>(null);
+  const [availableQuantities, setAvailableQuantities] = useState<number[]>([]);
+  const [applicableDiscounts, setApplicableDiscounts] = useState<DiscountOption[]>([]);
+  const [isLoadingItems, setIsLoadingItems] = useState(false);
 
   const form = useForm<SalesFormData>({
     resolver: zodResolver(salesFormSchema),
     defaultValues: {
       kodeGudang: selectedStore || "",
       tanggal: new Date().toISOString().split('T')[0],
-      kodeItem: "",
       serialNumber: "",
-      discountId: "",
-      discByAmount: "",
-      paymentMethodId: "",
-      notes: "",
-      preOrder: false,
+      kodeItem: "",
+      namaItem: "",
+      quantity: "",
       normalPrice: "0",
-      unitPrice: "0", 
+      discountType: "",
       finalPrice: "0",
+      notes: "",
     },
   });
 
@@ -90,6 +100,28 @@ export function SalesEntryModal({ isOpen, onClose, selectedStore }: SalesEntryMo
     }
   }, [selectedStore, form]);
 
+  // Reset form when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      form.reset({
+        kodeGudang: selectedStore || "",
+        tanggal: new Date().toISOString().split('T')[0],
+        serialNumber: "",
+        kodeItem: "",
+        namaItem: "",
+        quantity: "",
+        normalPrice: "0",
+        discountType: "",
+        finalPrice: "0",
+        notes: "",
+      });
+      setItemOptions([]);
+      setSelectedItemData(null);
+      setAvailableQuantities([]);
+      setApplicableDiscounts([]);
+    }
+  }, [isOpen, selectedStore, form]);
+
   // Get stores
   const { data: stores } = useQuery({
     queryKey: ["/api/stores"],
@@ -99,55 +131,142 @@ export function SalesEntryModal({ isOpen, onClose, selectedStore }: SalesEntryMo
   // Ensure stores is an array
   const storesArray = Array.isArray(stores) ? stores : [];
 
-  // Get payment methods
-  const { data: paymentMethods } = useQuery({
-    queryKey: ["/api/payment-methods"],
-    retry: false,
-  });
-
-  // Ensure payment methods is an array
-  const paymentMethodsArray = Array.isArray(paymentMethods) ? paymentMethods : [];
-
-  // Get discounts (only if user has permission)
-  const { data: discounts } = useQuery({
+  // Get all discounts for filtering
+  const { data: allDiscounts } = useQuery({
     queryKey: ["/api/discounts"],
     enabled: hasPermission ? hasPermission("discount:read") : false,
     retry: false,
   });
 
-  // Price quote mutation
-  const priceQuoteMutation = useMutation({
-    mutationFn: async (params: any) => {
-      const queryString = new URLSearchParams(params).toString();
-      const response = await fetch(`/api/price/quote?${queryString}`);
-      if (!response.ok) throw new Error('Failed to fetch price quote');
-      return response.json();
-    },
-    onSuccess: (data: PriceQuote) => {
-      setPriceQuote(data);
-      form.setValue('normalPrice', data.normal_price.toString());
-      form.setValue('unitPrice', data.unit_price.toString());
-      form.setValue('finalPrice', data.final_price.toString());
-    },
-    onError: (error) => {
-      if (isUnauthorizedError(error as Error)) {
+  // Serial number lookup function
+  const lookupItemsBySerial = async (serialNumber: string, storeCode: string) => {
+    if (!serialNumber.trim() || !storeCode) return;
+    
+    setIsLoadingItems(true);
+    try {
+      // Get items with this serial number from reference sheet
+      const referenceResponse = await fetch(`/api/reference-sheets?search=${encodeURIComponent(serialNumber)}`);
+      if (!referenceResponse.ok) throw new Error('Failed to lookup items');
+      
+      const referenceItems = await referenceResponse.json();
+      const matchingItems = referenceItems.filter((item: any) => 
+        item.sn === serialNumber || item.kodeItem?.includes(serialNumber)
+      );
+
+      if (matchingItems.length === 0) {
         toast({
-          title: "Unauthorized",
-          description: "You are logged out. Logging in again...",
+          title: "Item Not Found",
+          description: "No items found with this serial number",
           variant: "destructive",
         });
-        setTimeout(() => {
-          window.location.replace("/api/login");
-        }, 500);
         return;
       }
+
+      // Get opening stock quantities for each matching item
+      const openingStockResponse = await fetch(`/api/opening-stock`);
+      const openingStock = openingStockResponse.ok ? await openingStockResponse.json() : [];
+      
+      // Get price information
+      const priceResponse = await fetch(`/api/pricelist`);
+      const priceList = priceResponse.ok ? await priceResponse.json() : [];
+
+      const itemsWithStock = matchingItems.map((item: any) => {
+        const stockItem = openingStock.find((stock: any) => 
+          stock.kodeItem === item.kodeItem && stock.kodeGudang === storeCode
+        );
+        
+        const priceItem = priceList.find((price: any) => 
+          price.kodeItem === item.kodeItem || price.sn === serialNumber
+        );
+
+        return {
+          kodeItem: item.kodeItem,
+          namaItem: item.namaItem,
+          normalPrice: priceItem?.normalPrice || 0,
+          sp: priceItem?.sp,
+          availableQuantity: stockItem?.qty || 0,
+        };
+      }).filter((item: ItemLookup) => item.availableQuantity > 0);
+
+      if (itemsWithStock.length === 0) {
+        toast({
+          title: "No Stock Available",
+          description: "No stock available for items with this serial number",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      setItemOptions(itemsWithStock);
+      
+      // If only one item, auto-select it
+      if (itemsWithStock.length === 1) {
+        selectItem(itemsWithStock[0]);
+      }
+      
+    } catch (error) {
+      console.error('Error looking up items:', error);
       toast({
         title: "Error",
-        description: "Failed to get price quote",
+        description: "Failed to lookup items",
         variant: "destructive",
       });
-    },
-  });
+    } finally {
+      setIsLoadingItems(false);
+    }
+  };
+
+  // Select an item and auto-fill form
+  const selectItem = (item: ItemLookup) => {
+    setSelectedItemData(item);
+    form.setValue('kodeItem', item.kodeItem);
+    form.setValue('namaItem', item.namaItem);
+    form.setValue('normalPrice', item.normalPrice.toString());
+    form.setValue('finalPrice', item.normalPrice.toString()); // Default to normal price
+    
+    // Generate quantity options (1 to available quantity)
+    const quantities = Array.from({ length: item.availableQuantity }, (_, i) => i + 1);
+    setAvailableQuantities(quantities);
+    
+    // Load applicable discounts for this item/store
+    loadApplicableDiscounts(item.kodeItem, form.getValues('kodeGudang'));
+  };
+
+  // Load applicable discounts
+  const loadApplicableDiscounts = (kodeItem: string, storeCode: string) => {
+    if (!hasPermission || !hasPermission("discount:read") || !allDiscounts) {
+      setApplicableDiscounts([]);
+      return;
+    }
+
+    // For now, show all discounts - in a real system, you'd filter by store/product
+    const discountOptions = allDiscounts.map((discount: any) => ({
+      discountId: discount.discountId,
+      discountName: discount.discountName || `Discount ${discount.discountId}`,
+      discountType: discount.discountType || '0',
+      percentage: parseFloat(discount.discountType || '0'),
+    }));
+    
+    setApplicableDiscounts(discountOptions);
+  };
+
+  // Calculate final price based on discount selection
+  const calculateFinalPrice = (discountType: string) => {
+    if (!selectedItemData) return;
+    
+    let finalPrice = selectedItemData.normalPrice;
+    
+    if (discountType === 'SP' && selectedItemData.sp) {
+      // Use SP price
+      finalPrice = selectedItemData.sp;
+    } else if (discountType && discountType !== 'SP') {
+      // Apply percentage discount
+      const discountPercent = parseFloat(discountType) || 0;
+      finalPrice = selectedItemData.normalPrice * (1 - discountPercent / 100);
+    }
+    
+    form.setValue('finalPrice', finalPrice.toString());
+  };
 
   // Sales creation mutation
   const createSaleMutation = useMutation({
@@ -162,8 +281,7 @@ export function SalesEntryModal({ isOpen, onClose, selectedStore }: SalesEntryMo
       });
       queryClient.invalidateQueries({ queryKey: ["/api/sales"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/metrics"] });
-      form.reset();
-      setPriceQuote(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/opening-stock"] });
       onClose();
     },
     onError: (error) => {
@@ -187,33 +305,57 @@ export function SalesEntryModal({ isOpen, onClose, selectedStore }: SalesEntryMo
   });
 
   const onSubmit = (data: SalesFormData) => {
+    if (!selectedItemData) {
+      toast({
+        title: "Error",
+        description: "Please select an item first",
+        variant: "destructive",
+      });
+      return;
+    }
+
     const submitData = {
-      ...data,
-      discByAmount: data.discByAmount ? parseFloat(data.discByAmount) : null,
+      kodeGudang: data.kodeGudang,
+      tanggal: data.tanggal,
+      kodeItem: data.kodeItem,
+      serialNumber: data.serialNumber,
+      quantity: parseInt(data.quantity),
       normalPrice: parseFloat(data.normalPrice),
-      unitPrice: parseFloat(data.unitPrice),
       finalPrice: parseFloat(data.finalPrice),
-      paymentMethodId: parseInt(data.paymentMethodId),
-      discountId: data.discountId ? parseInt(data.discountId) : null,
+      discountType: data.discountType || null,
+      notes: data.notes || null,
+      paymentMethodId: 1, // Default payment method - adjust as needed
     };
 
     createSaleMutation.mutate(submitData);
   };
 
-  const handleItemCodeBlur = () => {
-    const kodeItem = form.getValues('kodeItem');
-    const serialNumber = form.getValues('serialNumber');
-    const discountId = form.getValues('discountId');
-    const discByAmount = form.getValues('discByAmount');
-
-    if (kodeItem) {
-      priceQuoteMutation.mutate({
-        kode_item: kodeItem,
-        serial_number: serialNumber || undefined,
-        discount_id: discountId || undefined,
-        disc_by_amount: discByAmount || undefined,
-      });
+  // Handle serial number input
+  const handleSerialNumberChange = (serialNumber: string) => {
+    form.setValue('serialNumber', serialNumber);
+    
+    // Clear previous selections
+    setItemOptions([]);
+    setSelectedItemData(null);
+    setAvailableQuantities([]);
+    setApplicableDiscounts([]);
+    form.setValue('kodeItem', '');
+    form.setValue('namaItem', '');
+    form.setValue('quantity', '');
+    form.setValue('normalPrice', '0');
+    form.setValue('finalPrice', '0');
+    form.setValue('discountType', '');
+    
+    // Lookup items if serial number is provided
+    if (serialNumber.trim() && form.getValues('kodeGudang')) {
+      lookupItemsBySerial(serialNumber, form.getValues('kodeGudang'));
     }
+  };
+
+  // Handle discount type change
+  const handleDiscountChange = (discountType: string) => {
+    form.setValue('discountType', discountType);
+    calculateFinalPrice(discountType);
   };
 
   return (
@@ -282,93 +424,61 @@ export function SalesEntryModal({ isOpen, onClose, selectedStore }: SalesEntryMo
               />
             </div>
 
-            {/* Item Code and Serial Number */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Serial Number - First Field */}
+            <FormField
+              control={form.control}
+              name="serialNumber"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Serial Number</FormLabel>
+                  <FormControl>
+                    <Input
+                      placeholder="Enter serial number"
+                      {...field}
+                      onChange={(e) => {
+                        field.onChange(e);
+                        handleSerialNumberChange(e.target.value);
+                      }}
+                      disabled={isLoadingItems}
+                      data-testid="input-serial-number"
+                    />
+                  </FormControl>
+                  {isLoadingItems && (
+                    <p className="text-xs text-blue-600 dark:text-blue-400">
+                      Looking up items...
+                    </p>
+                  )}
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            {/* Item Selection - Show when multiple items found */}
+            {itemOptions.length > 1 && (
               <FormField
                 control={form.control}
                 name="kodeItem"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Item Code</FormLabel>
-                    <FormControl>
-                      <Input
-                        placeholder="Enter item code"
-                        {...field}
-                        onBlur={handleItemCodeBlur}
-                        data-testid="input-item-code"
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="serialNumber"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Serial Number (Optional)</FormLabel>
-                    <FormControl>
-                      <Input
-                        placeholder="Enter serial number"
-                        {...field}
-                        data-testid="input-serial-number"
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-
-            {/* Price Resolution Display */}
-            {priceQuote && (
-              <Card className="bg-blue-50/50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
-                <CardContent className="p-4">
-                  <h4 className="font-medium text-blue-900 dark:text-blue-100 mb-3">Price Resolution</h4>
-                  <div className="grid grid-cols-3 gap-4 text-sm">
-                    <div>
-                      <span className="text-gray-600 dark:text-gray-400">Normal Price:</span>
-                      <p className="font-semibold text-gray-900 dark:text-white" data-testid="text-normal-price">
-                        Rp {priceQuote.normal_price.toLocaleString()}
-                      </p>
-                    </div>
-                    <div>
-                      <span className="text-gray-600 dark:text-gray-400">Unit Price:</span>
-                      <p className="font-semibold text-gray-900 dark:text-white" data-testid="text-unit-price">
-                        Rp {priceQuote.unit_price.toLocaleString()}
-                      </p>
-                    </div>
-                    <div>
-                      <span className="text-gray-600 dark:text-gray-400">Final Price:</span>
-                      <p className="font-semibold text-emerald-600 dark:text-emerald-400" data-testid="text-final-price">
-                        Rp {priceQuote.final_price.toLocaleString()}
-                      </p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Payment Method and Discount */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <FormField
-                control={form.control}
-                name="paymentMethodId"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Payment Method</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
+                    <FormLabel>Select Item</FormLabel>
+                    <Select 
+                      onValueChange={(value) => {
+                        const selectedItem = itemOptions.find(item => item.kodeItem === value);
+                        if (selectedItem) {
+                          selectItem(selectedItem);
+                        }
+                      }} 
+                      value={field.value}
+                    >
                       <FormControl>
-                        <SelectTrigger data-testid="select-payment-method">
-                          <SelectValue placeholder="Select Payment Method" />
+                        <SelectTrigger data-testid="select-item">
+                          <SelectValue placeholder="Choose the correct item" />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        {paymentMethodsArray?.map((method: any) => (
-                          <SelectItem key={method.paymentMethodId} value={method.paymentMethodId.toString()}>
-                            {method.methodName}
+                        {itemOptions.map((item) => (
+                          <SelectItem key={item.kodeItem} value={item.kodeItem}>
+                            {item.kodeItem} - {item.namaItem}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -377,29 +487,189 @@ export function SalesEntryModal({ isOpen, onClose, selectedStore }: SalesEntryMo
                   </FormItem>
                 )}
               />
+            )}
 
-              {/* Only show discount field if user has permission */}
-              {hasPermission && hasPermission("discount:read") && (
+            {/* Auto-filled Item Information */}
+            {selectedItemData && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <FormField
                   control={form.control}
-                  name="discByAmount"
+                  name="kodeItem"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Discount Amount</FormLabel>
+                      <FormLabel>Item Code</FormLabel>
                       <FormControl>
                         <Input
-                          type="number"
-                          placeholder="0"
                           {...field}
-                          data-testid="input-discount-amount"
+                          readOnly
+                          className="bg-gray-50 dark:bg-gray-800"
+                          data-testid="input-item-code"
                         />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
-              )}
-            </div>
+
+                <FormField
+                  control={form.control}
+                  name="namaItem"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Item Name</FormLabel>
+                      <FormControl>
+                        <Input
+                          {...field}
+                          readOnly
+                          className="bg-gray-50 dark:bg-gray-800"
+                          data-testid="input-item-name"
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            )}
+
+            {/* Quantity and Normal Price */}
+            {selectedItemData && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <FormField
+                  control={form.control}
+                  name="quantity"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Quantity</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger data-testid="select-quantity">
+                            <SelectValue placeholder="Select quantity" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {availableQuantities.map((qty) => (
+                            <SelectItem key={qty} value={qty.toString()}>
+                              {qty} {qty === 1 ? 'unit' : 'units'}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="normalPrice"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Normal Price</FormLabel>
+                      <FormControl>
+                        <Input
+                          {...field}
+                          readOnly
+                          className="bg-gray-50 dark:bg-gray-800"
+                          data-testid="input-normal-price"
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            )}
+
+            {/* Discount Type and Final Price */}
+            {selectedItemData && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <FormField
+                  control={form.control}
+                  name="discountType"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Discount Type</FormLabel>
+                      <Select onValueChange={handleDiscountChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger data-testid="select-discount-type">
+                            <SelectValue placeholder="No discount" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="">No discount</SelectItem>
+                          {selectedItemData.sp && (
+                            <SelectItem value="SP">SP Price</SelectItem>
+                          )}
+                          {applicableDiscounts.map((discount) => (
+                            <SelectItem key={discount.discountId} value={discount.discountType}>
+                              {discount.discountName} ({discount.percentage}%)
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="finalPrice"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Final Price</FormLabel>
+                      <FormControl>
+                        <Input
+                          {...field}
+                          readOnly
+                          className="bg-green-50 dark:bg-green-900/20 font-semibold"
+                          data-testid="input-final-price"
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            )}
+
+            {/* Selected Item Display */}
+            {selectedItemData && (
+              <Card className="bg-blue-50/50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
+                <CardContent className="p-4">
+                  <h4 className="font-medium text-blue-900 dark:text-blue-100 mb-3">Selected Item Summary</h4>
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <span className="text-gray-600 dark:text-gray-400">Normal Price:</span>
+                      <p className="font-semibold text-gray-900 dark:text-white" data-testid="text-normal-price-display">
+                        Rp {selectedItemData.normalPrice.toLocaleString()}
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-gray-600 dark:text-gray-400">Available Stock:</span>
+                      <p className="font-semibold text-gray-900 dark:text-white" data-testid="text-available-stock">
+                        {selectedItemData.availableQuantity} units
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-gray-600 dark:text-gray-400">Final Price:</span>
+                      <p className="font-semibold text-emerald-600 dark:text-emerald-400" data-testid="text-final-price-display">
+                        Rp {parseFloat(form.getValues('finalPrice') || '0').toLocaleString()}
+                      </p>
+                    </div>
+                    {selectedItemData.sp && (
+                      <div>
+                        <span className="text-gray-600 dark:text-gray-400">SP Price:</span>
+                        <p className="font-semibold text-purple-600 dark:text-purple-400">
+                          Rp {selectedItemData.sp.toLocaleString()}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
             {/* Notes */}
             <FormField
