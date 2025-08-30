@@ -48,21 +48,21 @@ import { Edit3, Trash2, Plus, Upload, Download } from "lucide-react";
 const openingStockFormSchema = z.object({
   sn: z.string().optional(),
   kodeItem: z.string().min(1, "Kode Item is required"),
-  kelompok: z.string().optional(),
-  family: z.string().optional(),
-  deskripsiMaterial: z.string().optional(),
-  kodeMotif: z.string().optional(),
-  namaItem: z.string().min(1, "Nama Item is required"),
+  namaItem: z.string().optional(),
   qty: z.coerce.number().min(0, "Quantity must be 0 or greater"),
 });
 
 type OpeningStockFormData = z.infer<typeof openingStockFormSchema>;
 
 const importModalFormSchema = z.object({
-  importData: z.string().min(1, "Import data is required"),
+  importData: z.string().optional(),
+  importFile: z.any().optional(),
   mode: z.enum(["amend", "replace"], {
     required_error: "Please select an import mode",
   }),
+}).refine(data => data.importData || data.importFile, {
+  message: "Either paste CSV data or select a file",
+  path: ["importData"],
 });
 
 type ImportModalFormData = z.infer<typeof importModalFormSchema>;
@@ -84,16 +84,14 @@ export default function OpeningStock() {
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [editingStock, setEditingStock] = useState<any>(null);
   const [deletingStock, setDeletingStock] = useState<any>(null);
+  const [enrichedItemData, setEnrichedItemData] = useState<any>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
   const form = useForm<OpeningStockFormData>({
     resolver: zodResolver(openingStockFormSchema),
     defaultValues: {
       sn: "",
       kodeItem: "",
-      kelompok: "",
-      family: "",
-      deskripsiMaterial: "",
-      kodeMotif: "",
       namaItem: "",
       qty: 0,
     },
@@ -103,6 +101,7 @@ export default function OpeningStock() {
     resolver: zodResolver(importModalFormSchema),
     defaultValues: {
       importData: "",
+      importFile: null,
       mode: "amend",
     },
   });
@@ -112,6 +111,12 @@ export default function OpeningStock() {
     queryKey: ["/api/opening-stock"],
     retry: false,
     enabled: canReadOpeningStock,
+  });
+
+  // Get reference sheet for auto-enrichment
+  const { data: referenceSheet } = useQuery({
+    queryKey: ['/api/reference-sheet'],
+    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
   });
 
   // Filter opening stock based on search
@@ -281,10 +286,49 @@ export default function OpeningStock() {
     setDeletingStock(stock);
   };
 
-  const handleImport = (data: ImportModalFormData) => {
+  // Auto-lookup reference data when kodeItem changes
+  const handleItemCodeChange = (kodeItem: string) => {
+    if (kodeItem && referenceSheet) {
+      const referenceData = referenceSheet.find((ref: any) => 
+        ref.kodeItem === kodeItem || ref.sn === kodeItem
+      );
+      if (referenceData) {
+        setEnrichedItemData(referenceData);
+        // Auto-fill name if not provided
+        if (!form.getValues('namaItem')) {
+          form.setValue('namaItem', referenceData.namaItem || kodeItem);
+        }
+      } else {
+        setEnrichedItemData(null);
+      }
+    }
+  };
+
+  const handleImport = async (data: ImportModalFormData) => {
     try {
+      let csvContent = data.importData || '';
+      
+      // If file is selected, read its content
+      if (selectedFile) {
+        csvContent = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = (e) => resolve(e.target?.result as string);
+          reader.onerror = () => reject(new Error('Failed to read file'));
+          reader.readAsText(selectedFile);
+        });
+      }
+
+      if (!csvContent.trim()) {
+        toast({
+          title: "Import Error",
+          description: "Please provide CSV data or select a file.",
+          variant: "destructive",
+        });
+        return;
+      }
+
       // Parse CSV-like data with simplified format (sn, kodeItem, namaItem, qty)
-      const lines = data.importData.split('\n').filter(line => line.trim());
+      const lines = csvContent.split('\n').filter(line => line.trim());
       const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
       
       // Map common header variations to standard names
@@ -333,7 +377,7 @@ export default function OpeningStock() {
     } catch (error) {
       toast({
         title: "Import Error",
-        description: "Invalid data format. Please check your input.",
+        description: "Failed to process file or invalid data format.",
         variant: "destructive",
       });
     }
@@ -401,6 +445,7 @@ export default function OpeningStock() {
                           onClick={() => {
                             setEditingStock(null);
                             form.reset();
+                            setEnrichedItemData(null);
                             setShowStockModal(true);
                           }}
                           className="bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700"
@@ -534,24 +579,51 @@ export default function OpeningStock() {
                             )}
                           />
                           
-                          <FormField
-                            control={importForm.control}
-                            name="importData"
-                            render={({ field }) => (
-                              <FormItem>
-                                <FormLabel>CSV Data</FormLabel>
-                                <FormControl>
-                                  <Textarea
-                                    placeholder="Paste CSV data here (simplified format like transfer orders)&#10;sn,kodeItem,namaItem,qty&#10;SN001,ITEM001,Item Name 1,10&#10;SN002,ITEM002,Item Name 2,5&#10;&#10;Additional fields (kelompok, family, deskripsi_material, kode_motif) will be automatically filled from reference sheet."
-                                    className="min-h-40"
-                                    {...field}
-                                    data-testid="textarea-import-data"
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <FormField
+                              control={importForm.control}
+                              name="importData"
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>CSV Data (Option 1: Paste)</FormLabel>
+                                  <FormControl>
+                                    <Textarea
+                                      placeholder="Paste CSV data here (simplified format like transfer orders)&#10;sn,kodeItem,namaItem,qty&#10;SN001,ITEM001,Item Name 1,10&#10;SN002,ITEM002,Item Name 2,5&#10;&#10;Additional fields will be auto-filled from reference sheet."
+                                      className="min-h-40"
+                                      {...field}
+                                      data-testid="textarea-import-data"
+                                    />
+                                  </FormControl>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                            
+                            <div className="space-y-4">
+                              <div>
+                                <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                                  CSV File (Option 2: Upload)
+                                </label>
+                                <div className="mt-2">
+                                  <input
+                                    type="file"
+                                    accept=".csv,.txt"
+                                    onChange={(e) => {
+                                      const file = e.target.files?.[0];
+                                      setSelectedFile(file || null);
+                                    }}
+                                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                                    data-testid="input-file-upload"
                                   />
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
+                                  {selectedFile && (
+                                    <p className="text-sm text-muted-foreground mt-1">
+                                      Selected: {selectedFile.name}
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
                           
                           <Button 
                             type="submit" 
@@ -560,6 +632,17 @@ export default function OpeningStock() {
                           >
                             {importStockMutation.isPending ? "Importing..." : "Import Data"}
                           </Button>
+                          
+                          {selectedFile && (
+                            <Button 
+                              type="button" 
+                              variant="outline"
+                              onClick={() => setSelectedFile(null)}
+                              data-testid="button-clear-file"
+                            >
+                              Clear File
+                            </Button>
+                          )}
                         </form>
                       </Form>
                     </CardContent>
@@ -589,7 +672,14 @@ export default function OpeningStock() {
                     <FormItem>
                       <FormLabel>Kode Item *</FormLabel>
                       <FormControl>
-                        <Input {...field} data-testid="input-kode-item" />
+                        <Input 
+                          {...field} 
+                          onChange={(e) => {
+                            field.onChange(e);
+                            handleItemCodeChange(e.target.value);
+                          }}
+                          data-testid="input-kode-item" 
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -601,7 +691,7 @@ export default function OpeningStock() {
                   name="namaItem"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Nama Item *</FormLabel>
+                      <FormLabel>Nama Item</FormLabel>
                       <FormControl>
                         <Input {...field} data-testid="input-nama-item" />
                       </FormControl>
@@ -637,71 +727,42 @@ export default function OpeningStock() {
                     </FormItem>
                   )}
                 />
-                
-                <FormField
-                  control={form.control}
-                  name="kelompok"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Kelompok</FormLabel>
-                      <FormControl>
-                        <Input {...field} data-testid="input-kelompok" />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                
-                <FormField
-                  control={form.control}
-                  name="family"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Family</FormLabel>
-                      <FormControl>
-                        <Input {...field} data-testid="input-family" />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
               </div>
               
-              <div className="grid grid-cols-2 gap-4">
-                <FormField
-                  control={form.control}
-                  name="deskripsiMaterial"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Deskripsi Material</FormLabel>
-                      <FormControl>
-                        <Input {...field} data-testid="input-deskripsi-material" />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                
-                <FormField
-                  control={form.control}
-                  name="kodeMotif"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Kode Motif</FormLabel>
-                      <FormControl>
-                        <Input {...field} data-testid="input-kode-motif" />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+              {/* Show enriched data from reference sheet */}
+              {enrichedItemData && (
+                <div className="bg-blue-50 dark:bg-blue-950 p-4 rounded-lg border border-blue-200 dark:border-blue-800">
+                  <h4 className="font-medium text-blue-900 dark:text-blue-100 mb-2">Auto-filled from Reference Sheet:</h4>
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <span className="font-medium text-blue-800 dark:text-blue-200">Kelompok:</span>
+                      <span className="ml-2 text-blue-700 dark:text-blue-300">{enrichedItemData.kelompok || '-'}</span>
+                    </div>
+                    <div>
+                      <span className="font-medium text-blue-800 dark:text-blue-200">Family:</span>
+                      <span className="ml-2 text-blue-700 dark:text-blue-300">{enrichedItemData.family || '-'}</span>
+                    </div>
+                    <div className="col-span-2">
+                      <span className="font-medium text-blue-800 dark:text-blue-200">Material:</span>
+                      <span className="ml-2 text-blue-700 dark:text-blue-300">{enrichedItemData.deskripsiMaterial || '-'}</span>
+                    </div>
+                    <div>
+                      <span className="font-medium text-blue-800 dark:text-blue-200">Motif:</span>
+                      <span className="ml-2 text-blue-700 dark:text-blue-300">{enrichedItemData.kodeMotif || '-'}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
               </div>
               
               <div className="flex justify-end gap-2">
                 <Button 
                   type="button" 
                   variant="outline" 
-                  onClick={() => setShowStockModal(false)}
+                  onClick={() => {
+                    setShowStockModal(false);
+                    setEnrichedItemData(null);
+                  }}
                   data-testid="button-cancel"
                 >
                   Cancel
