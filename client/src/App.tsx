@@ -81,12 +81,7 @@ function Router() {
             <Route path="/" component={Dashboard} />
             <Route path="/sales-entry" component={SalesEntry} />
             <Route path="/settlements" component={Settlements} />
-            <Route path="/stock-dashboard">
-              {() => {
-                window.location.href = "/#stock-overview";
-                return null;
-              }}
-            </Route>
+            <Route path="/stock-dashboard" component={Dashboard} />
             <Route path="/stock-opname" component={StockOpname} />
             <Route path="/stores-overview">
               {(params) => <ProtectedRoute component={StoresOverview} permission="store:overview" {...params} />}
