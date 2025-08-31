@@ -1,0 +1,59 @@
+
+> rest-express@1.0.0 dev
+> NODE_ENV=development tsx server/index.ts
+
+🚀 Simple import system initialized
+6:39:42 AM [express] serving on port 5000
+Browserslist: browsers data (caniuse-lite) is 10 months old. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme
+6:39:52 AM [express] GET /api/auth/me 200 in 5ms :: {"sub":"SYS001","username":"Lee Stephen Abraham"…
+6:39:55 AM [express] GET /api/store/current 304 in 119ms :: {"store":null,"loginType":null,"canSwitc…
+6:39:55 AM [express] GET /api/import/jobs 304 in 119ms
+6:39:55 AM [express] GET /api/stores 304 in 386ms :: [{"kodeGudang":"B-C.SC","namaGudang":"BAZAAR CO…
+6:39:55 AM [express] GET /api/discounts 304 in 378ms :: [{"discountId":1,"discountName":null,"discou…
+6:39:56 AM [express] GET /api/dashboard/metrics/ALL_STORE 200 in 125ms
+6:39:56 AM [express] GET /api/sales/ALL_STORE 200 in 125ms
+6:39:56 AM [express] GET /api/stock/onhand/ALL_STORE 200 in 121ms
+6:40:21 AM [express] GET /api/reference-sheet 200 in 118ms
+6:40:22 AM [express] GET /api/opening-stock 304 in 708ms :: []
+6:40:39 AM [express] POST /api/opening-stock/import-excel 400 in 479ms :: {"message":"File URL is re…
+🔄 Processing opening stock CSV import: Realisasi Kirim Toko.csv in amend mode
+📊 CSV parsed: 13 records
+🔍 Filtering header rows from 13 records...
+📊 First 3 records for debugging:
+Record 0: { 'PT. RANCANG INDAH SENTOSA': 'Jl Soekarno-Hatta 714 Bdg', '': '' }
+Record 0 values: [ 'Jl Soekarno-Hatta 714 Bdg', '' ]
+Record 1: { 'PT. RANCANG INDAH SENTOSA': '(022)7800480 - 481', '': '' }
+Record 1 values: [ '(022)7800480 - 481', '' ]
+Record 2: { 'PT. RANCANG INDAH SENTOSA': '', '': '' }
+Record 2 values: [ '', '' ]
+🔍 Checking row 0: [ 'jlsoekarnohatta714bdg', '' ]
+🎯 Row 0 matched 0 patterns: []
+🔍 Checking row 1: [ '(022)7800480481', '' ]
+🎯 Row 1 matched 0 patterns: []
+🔍 Checking row 2: [ '', '' ]
+🎯 Row 2 matched 0 patterns: []
+🔍 Checking row 3: [ 'hist.realisasitransfer', '' ]
+🎯 Row 3 matched 0 patterns: []
+🔍 Checking row 4: [ 'untuknomorto|seq:250809101', '' ]
+🎯 Row 4 matched 0 patterns: []
+🔍 Checking row 5: [ 'nobaris', 'satuan' ]
+🎯 Row 5 matched 2 patterns: [ 'no baris', 'nobaris' ]
+🔍 Checking row 6: [ '1', 'pcs' ]
+🎯 Row 6 matched 0 patterns: []
+🔍 Checking row 7: [ '2', 'pcs' ]
+🎯 Row 7 matched 0 patterns: []
+🔍 Checking row 8: [ '3', 'pcs' ]
+🎯 Row 8 matched 0 patterns: []
+🔍 Checking row 9: [ '4', 'pcs' ]
+🎯 Row 9 matched 0 patterns: []
+🔍 Checking row 10: [ '5', 'pcs' ]
+🎯 Row 10 matched 0 patterns: []
+🔍 Checking row 11: [ '', '' ]
+🎯 Row 11 matched 0 patterns: []
+🔍 Checking row 12: [ 'printed:11/08/202515:07:35', '' ]
+🎯 Row 12 matched 0 patterns: []
+📋 No header row detected, processing all 13 rows
+✅ Mapped 0 valid records for import
+6:40:56 AM [express] POST /api/opening-stock/import-csv 400 in 479ms :: {"message":"No valid records…
