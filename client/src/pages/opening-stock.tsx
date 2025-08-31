@@ -338,9 +338,17 @@ export default function OpeningStock() {
       
       console.log('🎯 Routing to endpoint:', endpoint);
       
+      // Get the access token for authorization
+      const token = localStorage.getItem('accessToken');
+      const headers: HeadersInit = {};
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
       const response = await fetch(endpoint, {
         method: 'POST',
         credentials: 'include',
+        headers,
         body: formData
       });
 
