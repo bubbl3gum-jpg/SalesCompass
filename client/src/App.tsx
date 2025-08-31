@@ -8,6 +8,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { useStoreAuth } from "@/hooks/useStoreAuth";
 import { AuthProvider } from "@/hooks/useStoreAuth";
 import { SidebarProvider } from "@/hooks/useSidebar";
+import { GlobalStoreProvider } from "@/hooks/useGlobalStore";
 import { Skeleton } from "@/components/ui/skeleton";
 
 // Lazy load all page components for code splitting
@@ -116,12 +117,14 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
         <AuthProvider>
-          <SidebarProvider>
-            <TooltipProvider>
-              <Toaster />
-              <Router />
-            </TooltipProvider>
-          </SidebarProvider>
+          <GlobalStoreProvider>
+            <SidebarProvider>
+              <TooltipProvider>
+                <Toaster />
+                <Router />
+              </TooltipProvider>
+            </SidebarProvider>
+          </GlobalStoreProvider>
         </AuthProvider>
       </ThemeProvider>
     </QueryClientProvider>

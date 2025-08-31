@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useStoreAuth } from "@/hooks/useStoreAuth";
 import { useSidebar } from "@/hooks/useSidebar";
+import { useGlobalStore } from "@/hooks/useGlobalStore";
 import { useToast } from "@/hooks/use-toast";
 import { isUnauthorizedError } from "@/lib/authUtils";
 import { Sidebar } from "@/components/sidebar";
@@ -76,7 +77,12 @@ export default function Dashboard() {
   const { toast } = useToast();
   const { user, isLoading, hasPermission } = useStoreAuth(); // Get user for permissions
   const { isExpanded } = useSidebar();
-  const [selectedStore, setSelectedStore] = useState<string>('');
+  const { selectedStore: globalSelectedStore, setSelectedStore: setGlobalSelectedStore, shouldUseGlobalStore } = useGlobalStore();
+  const [localSelectedStore, setLocalSelectedStore] = useState<string>('');
+  
+  // Use global store for all-store users, local state for individual store users
+  const selectedStore = shouldUseGlobalStore ? globalSelectedStore : localSelectedStore;
+  const setSelectedStore = shouldUseGlobalStore ? setGlobalSelectedStore : setLocalSelectedStore;
   const [showSalesModal, setShowSalesModal] = useState(false);
   const [showTransferModal, setShowTransferModal] = useState(false);
   const [showSettlementModal, setShowSettlementModal] = useState(false);
@@ -197,7 +203,7 @@ export default function Dashboard() {
         setSelectedStore(stores[0].kodeGudang);
       }
     }
-  }, [stores, selectedStore, user]);
+  }, [stores, selectedStore, user, setSelectedStore]);
 
   // Update settlement form store when selectedStore changes
   useEffect(() => {

@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Sidebar } from "@/components/sidebar";
 import { useSidebar } from "@/hooks/useSidebar";
 import { useStoreAuth } from "@/hooks/useStoreAuth";
+import { useGlobalStore } from "@/hooks/useGlobalStore";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,9 +17,14 @@ import { cn } from "@/lib/utils";
 export default function StockDashboard() {
   const { isExpanded } = useSidebar();
   const { user } = useStoreAuth(); // Get user for permissions
-  const [selectedStore, setSelectedStore] = useState<string>('');
+  const { selectedStore: globalSelectedStore, setSelectedStore: setGlobalSelectedStore, shouldUseGlobalStore } = useGlobalStore();
+  const [localSelectedStore, setLocalSelectedStore] = useState<string>('');
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [storeDropdownOpen, setStoreDropdownOpen] = useState(false);
+
+  // Use global store for all-store users, local state for individual store users
+  const selectedStore = shouldUseGlobalStore ? globalSelectedStore : localSelectedStore;
+  const setSelectedStore = shouldUseGlobalStore ? setGlobalSelectedStore : setLocalSelectedStore;
 
   // Get stores
   const { data: stores = [] } = useQuery<any[]>({
@@ -33,11 +39,16 @@ export default function StockDashboard() {
     retry: false,
   });
 
-  // Filter stock data based on search
-  const filteredStock = stockData.filter((item: any) => 
-    item.kodeItem.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (item.serialNumber && item.serialNumber.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
+  // Filter stock data based on search (only for non-all-store users)
+  const filteredStock = stockData.filter((item: any) => {
+    if (shouldUseGlobalStore) {
+      // For all-store users, don't filter by search term
+      return true;
+    }
+    // For individual store users, apply search filter
+    return item.kodeItem.toLowerCase().includes(searchTerm.toLowerCase()) ||
+           (item.serialNumber && item.serialNumber.toLowerCase().includes(searchTerm.toLowerCase()));
+  });
 
   const getStockStatus = (qty: number) => {
     if (qty === 0) return { status: 'Out of Stock', color: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300' };
@@ -138,17 +149,20 @@ export default function StockDashboard() {
                   </div>
                 )}
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Search Items
-                  </label>
-                  <Input
-                    placeholder="Search by item code or serial..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    data-testid="input-search-items"
-                  />
-                </div>
+                {/* Hide search for users with all-store permission, show for individual store users */}
+                {!shouldUseGlobalStore && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Search Items
+                    </label>
+                    <Input
+                      placeholder="Search by item code or serial..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      data-testid="input-search-items"
+                    />
+                  </div>
+                )}
 
                 <div className="flex items-end">
                   <Button
@@ -157,7 +171,9 @@ export default function StockDashboard() {
                     data-testid="button-reset-filters"
                     onClick={() => {
                       setSelectedStore('');
-                      setSearchTerm('');
+                      if (!shouldUseGlobalStore) {
+                        setSearchTerm('');
+                      }
                     }}
                   >
                     Reset Filters

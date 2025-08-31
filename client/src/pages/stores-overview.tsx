@@ -1,5 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useSidebar } from "@/hooks/useSidebar";
+import { useGlobalStore } from "@/hooks/useGlobalStore";
+import { useStoreAuth } from "@/hooks/useStoreAuth";
 import { Sidebar } from "@/components/sidebar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -32,6 +34,8 @@ interface StoreData {
 
 export default function StoresOverview() {
   const { isExpanded } = useSidebar();
+  const { user } = useStoreAuth();
+  const { selectedStore, shouldUseGlobalStore } = useGlobalStore();
 
   // Fetch aggregated data from all stores
   const { data: storesData, isLoading, error } = useQuery<StoreData[]>({
@@ -39,8 +43,16 @@ export default function StoresOverview() {
     retry: false,
   });
 
-  // Calculate totals across all stores
-  const totals = storesData?.reduce((acc, store) => {
+  // Filter stores based on global store selection for all-store users
+  const filteredStoresData = storesData?.filter(storeData => {
+    if (shouldUseGlobalStore && selectedStore && selectedStore !== 'ALL_STORE') {
+      return storeData.store.kodeGudang === selectedStore;
+    }
+    return true;
+  });
+
+  // Calculate totals across filtered stores (or all stores if showing all)
+  const totals = filteredStoresData?.reduce((acc, store) => {
     return {
       totalSales: acc.totalSales + parseInt(store.metrics.totalSales || '0'),
       totalItems: acc.totalItems + (store.metrics.totalItems || 0),
@@ -53,6 +65,12 @@ export default function StoresOverview() {
     totalRevenue: 0,
     totalRecentSales: 0
   }) || { totalSales: 0, totalItems: 0, totalRevenue: 0, totalRecentSales: 0 };
+
+  // Determine if we're showing a specific store or all stores
+  const isShowingSpecificStore = shouldUseGlobalStore && selectedStore && selectedStore !== 'ALL_STORE';
+  const selectedStoreName = isShowingSpecificStore 
+    ? filteredStoresData?.[0]?.store.namaGudang 
+    : null;
 
   if (isLoading) {
     return (
@@ -108,16 +126,19 @@ export default function StoresOverview() {
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-                Stores Overview
+                {isShowingSpecificStore ? `Store Overview - ${selectedStoreName}` : 'Stores Overview'}
               </h1>
               <p className="text-gray-600 dark:text-gray-400 mt-1">
-                Comprehensive view of all store performance and metrics
+                {isShowingSpecificStore 
+                  ? `Detailed view of ${selectedStoreName} performance and metrics`
+                  : 'Comprehensive view of all store performance and metrics'
+                }
               </p>
             </div>
             <div className="flex items-center space-x-2">
               <Store className="w-8 h-8 text-blue-600 dark:text-blue-400" />
               <Badge variant="secondary" className="text-lg px-3 py-1">
-                {storesData?.length || 0} Stores
+                {isShowingSpecificStore ? '1 Store' : `${storesData?.length || 0} Stores`}
               </Badge>
             </div>
           </div>
@@ -136,7 +157,7 @@ export default function StoresOverview() {
                   {totals.totalSales.toLocaleString()}
                 </div>
                 <p className="text-xs text-gray-500 dark:text-gray-400">
-                  Across all stores
+                  {isShowingSpecificStore ? `From ${selectedStoreName}` : 'Across all stores'}
                 </p>
               </CardContent>
             </Card>
@@ -153,7 +174,7 @@ export default function StoresOverview() {
                   {totals.totalItems.toLocaleString()}
                 </div>
                 <p className="text-xs text-gray-500 dark:text-gray-400">
-                  Inventory across stores
+                  {isShowingSpecificStore ? `Inventory in ${selectedStoreName}` : 'Inventory across stores'}
                 </p>
               </CardContent>
             </Card>
@@ -170,7 +191,7 @@ export default function StoresOverview() {
                   Rp {totals.totalRevenue.toLocaleString()}
                 </div>
                 <p className="text-xs text-gray-500 dark:text-gray-400">
-                  Combined revenue
+                  {isShowingSpecificStore ? `Revenue from ${selectedStoreName}` : 'Combined revenue'}
                 </p>
               </CardContent>
             </Card>
@@ -187,7 +208,7 @@ export default function StoresOverview() {
                   {totals.totalRecentSales}
                 </div>
                 <p className="text-xs text-gray-500 dark:text-gray-400">
-                  Recent transactions
+                  {isShowingSpecificStore ? `Transactions from ${selectedStoreName}` : 'Recent transactions'}
                 </p>
               </CardContent>
             </Card>
@@ -195,7 +216,7 @@ export default function StoresOverview() {
 
           {/* Individual Store Cards */}
           <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-            {storesData?.map((storeData) => (
+            {filteredStoresData?.map((storeData) => (
               <Card key={storeData.store.kodeGudang} className="bg-white/50 dark:bg-black/20 backdrop-blur-xl border border-white/20 dark:border-gray-800/50">
                 <CardHeader>
                   <div className="flex items-center justify-between">

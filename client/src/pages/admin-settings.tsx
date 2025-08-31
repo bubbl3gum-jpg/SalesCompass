@@ -1,6 +1,7 @@
 import { useState, useCallback, useMemo, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useStoreAuth } from "@/hooks/useStoreAuth";
+import { useGlobalStore } from "@/hooks/useGlobalStore";
 import { useSidebar } from "@/hooks/useSidebar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -156,6 +157,7 @@ export default function AdminSettings() {
   const { isExpanded } = useSidebar();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { shouldUseGlobalStore } = useGlobalStore();
 
   const [activeTab, setActiveTab] = useState('reference-sheet');
 
@@ -506,8 +508,8 @@ export default function AdminSettings() {
 
     const { data: rawData, isLoading, error } = queryResult;
     
-    // Filter data based on search query
-    const searchQuery = searchQueries[config.name] || '';
+    // Filter data based on search query (ignore search for all-store users)
+    const searchQuery = shouldUseGlobalStore ? '' : (searchQueries[config.name] || '');
     const data = rawData ? rawData.filter((item: any) => {
       if (!searchQuery) return true;
       
@@ -588,14 +590,17 @@ export default function AdminSettings() {
 
         {/* Search and Import Progress */}
         <div className="space-y-4 mb-6">
-          <SearchInput
-            placeholder={`Search ${config.displayName.toLowerCase()}...`}
-            onSearch={(query) => {
-              setSearchQueries(prev => ({ ...prev, [config.name]: query }));
-            }}
-            className="max-w-md"
-            data-testid={`search-${config.name}`}
-          />
+          {/* Hide search for users with all-store permission */}
+          {!shouldUseGlobalStore && (
+            <SearchInput
+              placeholder={`Search ${config.displayName.toLowerCase()}...`}
+              onSearch={(query) => {
+                setSearchQueries(prev => ({ ...prev, [config.name]: query }));
+              }}
+              className="max-w-md"
+              data-testid={`search-${config.name}`}
+            />
+          )}
           
           {currentImportId && isImporting && (
             <ImportProgress
