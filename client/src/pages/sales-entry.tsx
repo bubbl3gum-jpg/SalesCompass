@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Sidebar } from "@/components/sidebar";
 import { useSidebar } from "@/hooks/useSidebar";
 import { useStoreAuth } from "@/hooks/useStoreAuth";
+import { useGlobalStore } from "@/hooks/useGlobalStore";
 import { SalesEntryModal } from "@/components/sales-entry-modal";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -14,9 +15,13 @@ import { cn } from "@/lib/utils";
 export default function SalesEntry() {
   const { isExpanded } = useSidebar();
   const { user } = useStoreAuth(); // Get user for permissions
+  const { selectedStore: globalSelectedStore, shouldUseGlobalStore } = useGlobalStore();
   const [showSalesModal, setShowSalesModal] = useState(false);
-  const [selectedStore, setSelectedStore] = useState<string>('');
+  const [localSelectedStore, setLocalSelectedStore] = useState<string>('');
   const [dateFilter, setDateFilter] = useState<string>(new Date().toISOString().split('T')[0]);
+
+  // Determine which store to use - global for all-store users, local for individual store users
+  const effectiveStore = shouldUseGlobalStore ? globalSelectedStore : localSelectedStore;
 
   // Get stores
   const { data: stores = [] } = useQuery<any[]>({
@@ -26,28 +31,24 @@ export default function SalesEntry() {
 
   // Get sales data
   const { data: sales = [], isLoading: salesLoading } = useQuery<any[]>({
-    queryKey: ["/api/sales", selectedStore, dateFilter],
-    enabled: !!selectedStore,
+    queryKey: ["/api/sales", effectiveStore, dateFilter],
+    enabled: !!effectiveStore,
     retry: false,
   });
 
-  // Auto-select store for individual store users - prioritize authenticated store
+  // Auto-select store for individual store users only (all-store users use global selection)
   useEffect(() => {
-    if (stores.length > 0 && !selectedStore && user) {
+    if (stores.length > 0 && !shouldUseGlobalStore && !localSelectedStore && user) {
       // If user has a specific store from authentication, use that
       if (user.store_id && !user.can_access_all_stores) {
-        setSelectedStore(user.store_id);
-      } 
-      // If user can access all stores, default to ALL_STORE for collective data
-      else if (user.can_access_all_stores) {
-        setSelectedStore('ALL_STORE');
+        setLocalSelectedStore(user.store_id);
       }
-      // Fallback to first store
+      // Fallback to first store for individual store users
       else {
-        setSelectedStore(stores[0].kodeGudang);
+        setLocalSelectedStore(stores[0].kodeGudang);
       }
     }
-  }, [user, stores, selectedStore]);
+  }, [user, stores, localSelectedStore, shouldUseGlobalStore]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 dark:from-slate-900 dark:via-slate-800 dark:to-indigo-900">
@@ -63,19 +64,19 @@ export default function SalesEntry() {
             </div>
             <div className="flex items-center space-x-4">
               {/* Store Display - Show for individual store users */}
-              {!user?.can_access_all_stores && selectedStore && (
+              {!shouldUseGlobalStore && effectiveStore && (
                 <div className="text-right">
                   <p className="text-lg font-semibold text-gray-900 dark:text-white">
-                    {stores.find(s => s.kodeGudang === selectedStore)?.namaGudang || selectedStore}
+                    {stores.find(s => s.kodeGudang === effectiveStore)?.namaGudang || effectiveStore}
                   </p>
                   <p className="text-sm text-gray-600 dark:text-gray-400">
-                    {selectedStore}
+                    {effectiveStore}
                   </p>
                 </div>
               )}
               
-              {/* Store Display - Show for all-store users when ALL_STORE is selected */}
-              {user?.can_access_all_stores && selectedStore === 'ALL_STORE' && (
+              {/* Store Display - Show for all-store users using global selection */}
+              {shouldUseGlobalStore && effectiveStore === 'ALL_STORE' && (
                 <div className="text-right">
                   <p className="text-lg font-semibold text-gray-900 dark:text-white">
                     All Store Access
@@ -86,14 +87,14 @@ export default function SalesEntry() {
                 </div>
               )}
               
-              {/* Store Display - Show individual store for all-store users */}
-              {user?.can_access_all_stores && selectedStore !== 'ALL_STORE' && selectedStore && (
+              {/* Store Display - Show individual store for all-store users using global selection */}
+              {shouldUseGlobalStore && effectiveStore !== 'ALL_STORE' && effectiveStore && (
                 <div className="text-right">
                   <p className="text-lg font-semibold text-gray-900 dark:text-white">
-                    {stores.find(s => s.kodeGudang === selectedStore)?.namaGudang || selectedStore}
+                    {stores.find(s => s.kodeGudang === effectiveStore)?.namaGudang || effectiveStore}
                   </p>
                   <p className="text-sm text-gray-600 dark:text-gray-400">
-                    {selectedStore}
+                    {effectiveStore}
                   </p>
                 </div>
               )}
@@ -109,14 +110,14 @@ export default function SalesEntry() {
             </div>
           </div>
           
-          {/* Store Selector - Only show for users with all-store access */}
-          {user?.can_access_all_stores && (
+          {/* Store Selector - Only show for individual store users (all-store users use global selection) */}
+          {!shouldUseGlobalStore && user?.can_access_all_stores && (
             <div className="flex items-center gap-4">
               <label className="text-sm font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap">
                 Select Store:
               </label>
               <div className="flex-1 max-w-sm">
-                <Select value={selectedStore} onValueChange={setSelectedStore}>
+                <Select value={localSelectedStore} onValueChange={setLocalSelectedStore}>
                   <SelectTrigger data-testid="select-store-main">
                     <SelectValue placeholder="Choose your store..." />
                   </SelectTrigger>
@@ -130,11 +131,11 @@ export default function SalesEntry() {
                   </SelectContent>
                 </Select>
               </div>
-              {selectedStore && (
+              {localSelectedStore && (
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => setSelectedStore('')}
+                  onClick={() => setLocalSelectedStore('')}
                   className="text-xs"
                   data-testid="button-clear-store"
                 >
@@ -252,7 +253,7 @@ export default function SalesEntry() {
                     </div>
                   ))}
                 </div>
-              ) : selectedStore ? (
+              ) : effectiveStore ? (
                 <div className="text-center py-12">
                   <div className="w-16 h-16 bg-gradient-to-r from-gray-400 to-gray-500 rounded-full flex items-center justify-center mx-auto mb-4">
                     <i className="fas fa-receipt text-white text-2xl"></i>
@@ -288,7 +289,7 @@ export default function SalesEntry() {
       <SalesEntryModal
         isOpen={showSalesModal}
         onClose={() => setShowSalesModal(false)}
-        selectedStore={selectedStore}
+        selectedStore={effectiveStore}
       />
     </div>
   );
