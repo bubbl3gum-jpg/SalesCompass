@@ -313,6 +313,13 @@ export default function OpeningStock() {
       const isCSVFile = fileName.endsWith('.csv') || fileName.endsWith('.txt');
       const isExcelFile = fileName.endsWith('.xlsx') || fileName.endsWith('.xls') || fileName.endsWith('.ods');
 
+      console.log('🔍 File type detection:', {
+        fileName: selectedFile.name,
+        fileNameLower: fileName,
+        isCSVFile,
+        isExcelFile
+      });
+
       if (!isCSVFile && !isExcelFile) {
         toast({
           title: "Import Error",
@@ -328,6 +335,8 @@ export default function OpeningStock() {
 
       // Route to appropriate endpoint based on file type
       const endpoint = isCSVFile ? '/api/opening-stock/import-csv' : '/api/opening-stock/import-excel';
+      
+      console.log('🎯 Routing to endpoint:', endpoint);
       
       const response = await fetch(endpoint, {
         method: 'POST',
