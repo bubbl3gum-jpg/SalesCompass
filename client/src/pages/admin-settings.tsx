@@ -135,20 +135,32 @@ const tableConfigs: TableConfig[] = [
   }
 ];
 
-function useTableData(endpoint: string, enabled = true) {
+function useTableData(endpoint: string, enabled = true, page = 1, limit = 100) {
   return useQuery({
-    queryKey: [endpoint],
+    queryKey: [endpoint, { page, limit }],
     queryFn: async () => {
-      const response = await fetch(endpoint, {
+      const url = new URL(endpoint, window.location.origin);
+      url.searchParams.set('page', page.toString());
+      url.searchParams.set('limit', limit.toString());
+      
+      const response = await fetch(url.toString(), {
         credentials: 'include',
       });
       if (!response.ok) {
         throw new Error(`${response.status}: ${response.statusText}`);
       }
-      return response.json();
+      const data = await response.json();
+      
+      // Handle both paginated and non-paginated responses
+      if (Array.isArray(data)) {
+        return { data, total: data.length, page, limit };
+      }
+      return data;
     },
     retry: false,
     enabled, // Only fetch when enabled is true
+    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+    gcTime: 10 * 60 * 1000, // Keep in cache for 10 minutes
   });
 }
 
@@ -160,13 +172,15 @@ export default function AdminSettings() {
   const { shouldUseGlobalStore } = useGlobalStore();
 
   const [activeTab, setActiveTab] = useState('reference-sheet');
+  const [currentPage, setCurrentPage] = useState<Record<string, number>>({});
+  const [itemsPerPage] = useState(50); // Reduced from loading everything at once
 
-  // Fetch data for all tables at top level - always enabled to avoid hook rule violations
-  const referenceSheetQuery = useTableData('/api/reference-sheets', true);
-  const storesQuery = useTableData('/api/stores', true);
-  const positionsQuery = useTableData('/api/positions', true);
-  const staffQuery = useTableData('/api/staff', true);
-  const edcQuery = useTableData('/api/edc', true);
+  // Lazy loading with pagination: Only fetch data for the currently active tab
+  const referenceSheetQuery = useTableData('/api/reference-sheets', activeTab === 'reference-sheet', currentPage['reference-sheet'] || 1, itemsPerPage);
+  const storesQuery = useTableData('/api/stores', activeTab === 'stores', currentPage['stores'] || 1, itemsPerPage);
+  const positionsQuery = useTableData('/api/positions', activeTab === 'positions' || activeTab === 'staff', currentPage['positions'] || 1, itemsPerPage); // Positions needed for staff form
+  const staffQuery = useTableData('/api/staff', activeTab === 'staff', currentPage['staff'] || 1, itemsPerPage);
+  const edcQuery = useTableData('/api/edc', activeTab === 'edc', currentPage['edc'] || 1, itemsPerPage);
 
   // Get positions data for staff form
   const positions = positionsQuery.data || [];
@@ -187,6 +201,15 @@ export default function AdminSettings() {
   const [deletingItem, setDeletingItem] = useState<{endpoint: string, id: string, name?: string} | null>(null);
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+
+  // Handle tab changes with cleanup to improve performance
+  const handleTabChange = useCallback((newTab: string) => {
+    // Clear selections and search when switching tabs to prevent memory issues
+    setSelectedItems(new Set());
+    setSelectAll(false);
+    setSearchQueries(prev => ({ ...prev, [activeTab]: '' })); // Clear search for current tab
+    setActiveTab(newTab);
+  }, [activeTab]);
 
   // Selection handlers
   const handleSelectAll = useCallback((checked: boolean, data: any[], config: TableConfig) => {
@@ -508,9 +531,22 @@ export default function AdminSettings() {
 
     const { data: rawData, isLoading, error } = queryResult;
     
+    // Handle both paginated and non-paginated data safely
+    let actualData: any[] = [];
+    
+    if (rawData) {
+      if (Array.isArray(rawData)) {
+        // Direct array response (non-paginated)
+        actualData = rawData;
+      } else if (rawData.data && Array.isArray(rawData.data)) {
+        // Paginated response with data property
+        actualData = rawData.data;
+      }
+    }
+    
     // Filter data based on search query (ignore search for all-store users)
     const searchQuery = shouldUseGlobalStore ? '' : (searchQueries[config.name] || '');
-    const data = rawData ? rawData.filter((item: any) => {
+    const data = actualData.filter((item: any) => {
       if (!searchQuery) return true;
       
       // Search across all text fields
@@ -521,7 +557,7 @@ export default function AdminSettings() {
         }
         return false;
       });
-    }) : [];
+    });
 
     if (error && isUnauthorizedError(error)) {
       // Handle unauthorized error with useEffect to avoid infinite renders
@@ -735,7 +771,7 @@ export default function AdminSettings() {
               </p>
             </div>
 
-            <Tabs value={activeTab} onValueChange={setActiveTab}>
+            <Tabs value={activeTab} onValueChange={handleTabChange}>
               <TabsList className="grid w-full grid-cols-6 bg-white/10 dark:bg-black/10 backdrop-blur-xl border-white/20 dark:border-gray-800/50">
                 <TabsTrigger value="reference-sheet" data-testid="tab-reference-sheet">Reference Sheet</TabsTrigger>
                 <TabsTrigger value="stores" data-testid="tab-stores">Stores</TabsTrigger>
