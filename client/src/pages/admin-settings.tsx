@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useEffect } from "react";
+import { useState, useCallback, useMemo, useEffect, memo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useStoreAuth } from "@/hooks/useStoreAuth";
 import { useGlobalStore } from "@/hooks/useGlobalStore";
@@ -159,8 +159,10 @@ function useTableData(endpoint: string, enabled = true, page = 1, limit = 100) {
     },
     retry: false,
     enabled, // Only fetch when enabled is true
-    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
-    gcTime: 10 * 60 * 1000, // Keep in cache for 10 minutes
+    staleTime: 2 * 60 * 1000, // Cache for 2 minutes
+    gcTime: 5 * 60 * 1000, // Keep in cache for 5 minutes
+    refetchOnWindowFocus: false, // Prevent unnecessary refetches
+    refetchOnMount: false, // Don't refetch if data exists
   });
 }
 
@@ -173,7 +175,8 @@ export default function AdminSettings() {
 
   const [activeTab, setActiveTab] = useState('reference-sheet');
   const [currentPage, setCurrentPage] = useState<Record<string, number>>({});
-  const [itemsPerPage] = useState(50); // Reduced from loading everything at once
+  const [itemsPerPage] = useState(15); // Much smaller chunks for better performance
+  const [maxDisplayItems] = useState(10); // Maximum items to render in DOM at once
 
   // Lazy loading with pagination: Only fetch data for the currently active tab
   const referenceSheetQuery = useTableData('/api/reference-sheets', activeTab === 'reference-sheet', currentPage['reference-sheet'] || 1, itemsPerPage);
@@ -194,8 +197,18 @@ export default function AdminSettings() {
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
   const [selectAll, setSelectAll] = useState(false);
   
-  // Search and Import Progress State
+  // Search and Import Progress State with debouncing
   const [searchQueries, setSearchQueries] = useState<Record<string, string>>({});
+  const [debouncedSearchQueries, setDebouncedSearchQueries] = useState<Record<string, string>>({});
+  
+  // Debounce search to prevent constant filtering
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchQueries(searchQueries);
+    }, 300); // 300ms debounce
+    
+    return () => clearTimeout(timer);
+  }, [searchQueries]);
   const [currentImportId, setCurrentImportId] = useState<string | null>(null);
   const [isImporting, setIsImporting] = useState(false);
   const [deletingItem, setDeletingItem] = useState<{endpoint: string, id: string, name?: string} | null>(null);
@@ -544,20 +557,34 @@ export default function AdminSettings() {
       }
     }
     
-    // Filter data based on search query (ignore search for all-store users)
-    const searchQuery = shouldUseGlobalStore ? '' : (searchQueries[config.name] || '');
-    const data = actualData.filter((item: any) => {
-      if (!searchQuery) return true;
+    // Filter data based on debounced search query (ignore search for all-store users)
+    const searchQuery = shouldUseGlobalStore ? '' : (debouncedSearchQueries[config.name] || '');
+    
+    // Memoize the filtered data to prevent unnecessary recalculations
+    const filteredData = useMemo(() => {
+      if (!actualData.length) return [];
       
-      // Search across all text fields
-      return config.fields.some(field => {
-        const value = item[field.key];
-        if (typeof value === 'string') {
-          return value.toLowerCase().includes(searchQuery.toLowerCase());
-        }
-        return false;
+      if (!searchQuery) return actualData;
+      
+      const query = searchQuery.toLowerCase();
+      return actualData.filter((item: any) => {
+        // Search across only the first 3 text fields for performance
+        return config.fields.slice(0, 3).some(field => {
+          const value = item[field.key];
+          if (typeof value === 'string') {
+            return value.toLowerCase().includes(query);
+          }
+          return false;
+        });
       });
-    });
+    }, [actualData, searchQuery, config.fields]);
+    
+    // Virtual rendering: only show first maxDisplayItems to prevent DOM overload
+    const data = useMemo(() => {
+      return filteredData.slice(0, maxDisplayItems);
+    }, [filteredData, maxDisplayItems]);
+    
+    const remainingCount = Math.max(0, filteredData.length - maxDisplayItems);
 
     if (error && isUnauthorizedError(error)) {
       // Handle unauthorized error with useEffect to avoid infinite renders
@@ -737,6 +764,16 @@ export default function AdminSettings() {
                         );
                       })}
                     </div>
+                    
+                    {/* Show message if there are more items */}
+                    {remainingCount > 0 && (
+                      <div className="text-center py-4 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg border border-yellow-200 dark:border-yellow-700">
+                        <p className="text-yellow-800 dark:text-yellow-200 text-sm">
+                          <strong>Performance Mode:</strong> Showing first {data.length} items. 
+                          {remainingCount} more items available. Use search to narrow results.
+                        </p>
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div className="text-center py-8">
