@@ -2537,19 +2537,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Excel/ODS file processing for opening stock
-  app.post('/api/opening-stock/import-excel', authenticate, checkRole(['Stockist', 'Supervisor', 'System Administrator']), async (req, res) => {
+  app.post('/api/opening-stock/import-excel', authenticate, checkRole(['Stockist', 'Supervisor', 'System Administrator']), upload.single('file'), async (req, res) => {
     try {
-      const { fileUrl, mode } = req.body;
+      const file = req.file;
+      const mode = req.body.mode;
       
-      if (!fileUrl) {
-        return res.status(400).json({ message: 'File URL is required' });
+      if (!file) {
+        return res.status(400).json({ message: 'No file uploaded' });
       }
 
       if (!mode || !['amend', 'replace'].includes(mode)) {
         return res.status(400).json({ message: 'Valid mode (amend/replace) is required' });
       }
 
-      const result = await ExcelProcessor.importOpeningStockFromExcel(fileUrl, mode, storage);
+      console.log(`🔄 Processing opening stock Excel import: ${file.originalname} in ${mode} mode`);
+
+      const result = await ExcelProcessor.importOpeningStockFromBuffer(file.buffer, mode, storage);
       
       // Invalidate cache after successful import
       invalidateCachePattern('opening-stock');

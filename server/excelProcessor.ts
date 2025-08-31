@@ -8,11 +8,9 @@ export interface ExcelImportResult {
 }
 
 export class ExcelProcessor {
-  // Process Excel/ODS file and extract opening stock data
-  static async processExcelFile(fileUrl: string): Promise<any[]> {
+  // Process Excel/ODS file from buffer and extract opening stock data
+  static async processExcelFileFromBuffer(fileBuffer: Buffer): Promise<any[]> {
     try {
-      // Download file content
-      const fileBuffer = await transferImportStorage.getFileContent(fileUrl);
       
       // Parse the Excel/ODS file
       const workbook = XLSX.read(fileBuffer, { type: 'buffer' });
@@ -93,8 +91,87 @@ export class ExcelProcessor {
       throw new Error(`Failed to process Excel file: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
+
+  // Process Excel/ODS file and extract opening stock data (legacy method for URL-based imports)
+  static async processExcelFile(fileUrl: string): Promise<any[]> {
+    try {
+      // Download file content
+      const fileBuffer = await transferImportStorage.getFileContent(fileUrl);
+      return await this.processExcelFileFromBuffer(fileBuffer);
+    } catch (error) {
+      console.error('Error processing Excel file:', error);
+      throw new Error(`Failed to process Excel file: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
   
-  // Import opening stock data from processed Excel data
+  // Import opening stock data from processed Excel data using file buffer
+  static async importOpeningStockFromBuffer(
+    fileBuffer: Buffer, 
+    mode: 'amend' | 'replace',
+    storage: any
+  ): Promise<ExcelImportResult> {
+    try {
+      // Process Excel file to extract data
+      const extractedData = await this.processExcelFileFromBuffer(fileBuffer);
+      
+      if (extractedData.length === 0) {
+        return {
+          importedCount: 0,
+          errors: ['No valid data found in Excel file'],
+          data: []
+        };
+      }
+      
+      const errors: string[] = [];
+      let importedCount = 0;
+      
+      // If replace mode, clear existing opening stock first
+      if (mode === 'replace') {
+        await storage.clearOpeningStock();
+      }
+      
+      // Import each item
+      for (const item of extractedData) {
+        try {
+          // Validate required fields
+          if (!item.kodeItem) {
+            errors.push(`Row ${importedCount + 1}: Missing kodeItem`);
+            continue;
+          }
+          
+          if (!item.qty || item.qty < 0) {
+            errors.push(`Row ${importedCount + 1}: Invalid quantity for ${item.kodeItem}`);
+            continue;
+          }
+          
+          // Create opening stock entry
+          await storage.createOpeningStock({
+            sn: item.sn || null,
+            kodeItem: item.kodeItem,
+            namaItem: item.namaItem || item.kodeItem,
+            qty: item.qty || 0
+          });
+          
+          importedCount++;
+          
+        } catch (error) {
+          errors.push(`Row ${importedCount + 1}: ${error instanceof Error ? error.message : 'Import failed'}`);
+        }
+      }
+      
+      return {
+        importedCount,
+        errors,
+        data: extractedData
+      };
+      
+    } catch (error) {
+      console.error('Error importing from Excel:', error);
+      throw new Error(`Failed to import from Excel: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  // Import opening stock data from processed Excel data (legacy method for URL-based imports)
   static async importOpeningStockFromExcel(
     fileUrl: string, 
     mode: 'amend' | 'replace',
