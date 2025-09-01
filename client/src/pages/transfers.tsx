@@ -16,23 +16,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
-import { Check, ChevronsUpDown } from "lucide-react";
+import { Check, ChevronsUpDown, Trash2, Edit, Plus, Save, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Label } from "@/components/ui/label";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form";
 
 const transferFormSchema = z.object({
   dariGudang: z.string().min(1, "Source store is required"),
@@ -552,64 +546,343 @@ export default function Transfers() {
   );
 }
 
+// Form schemas for editing
+const transferEditSchema = z.object({
+  dariGudang: z.string().min(1, "From store is required"),
+  keGudang: z.string().min(1, "To store is required"),
+  tanggal: z.string().min(1, "Date is required")
+});
+
+const itemEditSchema = z.object({
+  kodeItem: z.string().min(1, "Item code is required"),
+  namaItem: z.string().min(1, "Item name is required"),
+  sn: z.string().optional(),
+  qty: z.number().min(1, "Quantity must be at least 1")
+});
+
 // Transfer Details Content Component
 function TransferDetailsContent({ transfer, stores, onClose }: { 
   transfer: any, 
   stores: any[] | undefined, 
   onClose: () => void 
 }) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editingItemId, setEditingItemId] = useState<number | null>(null);
+  const [showAddItem, setShowAddItem] = useState(false);
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
   const { data: transferItems, isLoading: itemsLoading } = useQuery({
     queryKey: ['/api/transfers', transfer.toNumber, 'items'],
     enabled: !!transfer.toNumber,
   });
 
+  // Form for editing transfer basic info
+  const transferForm = useForm<z.infer<typeof transferEditSchema>>({
+    resolver: zodResolver(transferEditSchema),
+    defaultValues: {
+      dariGudang: transfer.dariGudang,
+      keGudang: transfer.keGudang,
+      tanggal: transfer.tanggal
+    }
+  });
+
+  // Form for editing/adding items
+  const itemForm = useForm<z.infer<typeof itemEditSchema>>({
+    resolver: zodResolver(itemEditSchema),
+    defaultValues: {
+      kodeItem: '',
+      namaItem: '',
+      sn: '',
+      qty: 1
+    }
+  });
+
   const fromStore = stores?.find((s: any) => s.kodeGudang === transfer.dariGudang);
   const toStore = stores?.find((s: any) => s.kodeGudang === transfer.keGudang);
 
+  // Update transfer mutation
+  const updateTransferMutation = useMutation({
+    mutationFn: async (data: z.infer<typeof transferEditSchema>) => {
+      return await apiRequest(`/api/transfers/${transfer.toNumber}`, 'PUT', data);
+    },
+    onSuccess: () => {
+      toast({ title: "Success", description: "Transfer updated successfully" });
+      queryClient.invalidateQueries({ queryKey: ['/api/transfers'] });
+      setIsEditing(false);
+    },
+    onError: (error) => {
+      console.error('Transfer update error:', error);
+      toast({ title: "Error", description: "Failed to update transfer", variant: "destructive" });
+    }
+  });
+
+  // Update item mutation
+  const updateItemMutation = useMutation({
+    mutationFn: async ({ itemId, data }: { itemId: number, data: any }) => {
+      return await apiRequest(`/api/transfers/${transfer.toNumber}/items/${itemId}`, 'PUT', data);
+    },
+    onSuccess: () => {
+      toast({ title: "Success", description: "Item updated successfully" });
+      queryClient.invalidateQueries({ queryKey: ['/api/transfers', transfer.toNumber, 'items'] });
+      setEditingItemId(null);
+      itemForm.reset();
+    },
+    onError: (error) => {
+      console.error('Item update error:', error);
+      toast({ title: "Error", description: "Failed to update item", variant: "destructive" });
+    }
+  });
+
+  // Add item mutation
+  const addItemMutation = useMutation({
+    mutationFn: async (data: any) => {
+      return await apiRequest(`/api/transfers/${transfer.toNumber}/items`, 'POST', data);
+    },
+    onSuccess: () => {
+      toast({ title: "Success", description: "Item added successfully" });
+      queryClient.invalidateQueries({ queryKey: ['/api/transfers', transfer.toNumber, 'items'] });
+      setShowAddItem(false);
+      itemForm.reset();
+    },
+    onError: (error) => {
+      console.error('Item add error:', error);
+      toast({ title: "Error", description: "Failed to add item", variant: "destructive" });
+    }
+  });
+
+  // Delete item mutation
+  const deleteItemMutation = useMutation({
+    mutationFn: async (itemId: number) => {
+      return await apiRequest(`/api/transfers/${transfer.toNumber}/items/${itemId}`, 'DELETE');
+    },
+    onSuccess: () => {
+      toast({ title: "Success", description: "Item deleted successfully" });
+      queryClient.invalidateQueries({ queryKey: ['/api/transfers', transfer.toNumber, 'items'] });
+    },
+    onError: (error) => {
+      console.error('Item delete error:', error);
+      toast({ title: "Error", description: "Failed to delete item", variant: "destructive" });
+    }
+  });
+
+  const handleTransferUpdate = (data: z.infer<typeof transferEditSchema>) => {
+    updateTransferMutation.mutate(data);
+  };
+
+  const handleItemUpdate = (data: z.infer<typeof itemEditSchema>) => {
+    if (editingItemId) {
+      updateItemMutation.mutate({ itemId: editingItemId, data });
+    }
+  };
+
+  const handleItemAdd = (data: z.infer<typeof itemEditSchema>) => {
+    addItemMutation.mutate(data);
+  };
+
+  const startEditingItem = (item: any) => {
+    setEditingItemId(item.toItemListId);
+    itemForm.reset({
+      kodeItem: item.kodeItem,
+      namaItem: item.namaItem,
+      sn: item.sn || '',
+      qty: item.qty
+    });
+  };
+
+  const cancelEditingItem = () => {
+    setEditingItemId(null);
+    itemForm.reset();
+  };
+
+  const startAddingItem = () => {
+    setShowAddItem(true);
+    itemForm.reset({
+      kodeItem: '',
+      namaItem: '',
+      sn: '',
+      qty: 1
+    });
+  };
+
   return (
     <div className="space-y-6">
-      {/* Transfer Info */}
-      <div className="grid grid-cols-2 gap-6">
-        <div className="space-y-4">
-          <div>
-            <label className="text-sm font-medium text-gray-500 dark:text-gray-400">From Store</label>
-            <p className="text-lg font-semibold text-gray-900 dark:text-white">
-              {fromStore?.namaGudang || transfer.dariGudang}
-            </p>
-            <p className="text-sm text-gray-500">{transfer.dariGudang}</p>
-          </div>
-          <div>
-            <label className="text-sm font-medium text-gray-500 dark:text-gray-400">Transfer Date</label>
-            <p className="text-lg font-semibold text-gray-900 dark:text-white">
-              {transfer.tanggal}
-            </p>
-          </div>
-        </div>
-        
-        <div className="space-y-4">
-          <div>
-            <label className="text-sm font-medium text-gray-500 dark:text-gray-400">To Store</label>
-            <p className="text-lg font-semibold text-gray-900 dark:text-white">
-              {toStore?.namaGudang || transfer.keGudang}
-            </p>
-            <p className="text-sm text-gray-500">{transfer.keGudang}</p>
-          </div>
-          {transfer.toNumber && (
-            <div>
-              <label className="text-sm font-medium text-gray-500 dark:text-gray-400">TO Number</label>
-              <p className="text-lg font-semibold text-gray-900 dark:text-white">
-                {transfer.toNumber}
-              </p>
+      {/* Edit Controls */}
+      <div className="flex justify-between items-center">
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+          Transfer Information
+        </h3>
+        <div className="flex space-x-2">
+          {!isEditing ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsEditing(true)}
+              data-testid="button-edit-transfer"
+            >
+              <Edit className="w-4 h-4 mr-2" />
+              Edit Transfer
+            </Button>
+          ) : (
+            <div className="flex space-x-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setIsEditing(false);
+                  transferForm.reset();
+                }}
+                data-testid="button-cancel-edit-transfer"
+              >
+                <X className="w-4 h-4 mr-2" />
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                onClick={transferForm.handleSubmit(handleTransferUpdate)}
+                disabled={updateTransferMutation.isPending}
+                data-testid="button-save-transfer"
+              >
+                <Save className="w-4 h-4 mr-2" />
+                Save
+              </Button>
             </div>
           )}
         </div>
       </div>
 
+      {/* Transfer Info */}
+      {isEditing ? (
+        <Form {...transferForm}>
+          <form className="grid grid-cols-2 gap-6">
+            <div className="space-y-4">
+              <FormField
+                control={transferForm.control}
+                name="dariGudang"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>From Store</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <FormControl>
+                        <SelectTrigger data-testid="select-from-store">
+                          <SelectValue placeholder="Select from store" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {stores?.map((store) => (
+                          <SelectItem key={store.kodeGudang} value={store.kodeGudang}>
+                            {store.namaGudang} ({store.kodeGudang})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={transferForm.control}
+                name="tanggal"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Transfer Date</FormLabel>
+                    <FormControl>
+                      <Input type="date" {...field} data-testid="input-transfer-date" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+            
+            <div className="space-y-4">
+              <FormField
+                control={transferForm.control}
+                name="keGudang"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>To Store</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <FormControl>
+                        <SelectTrigger data-testid="select-to-store">
+                          <SelectValue placeholder="Select to store" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {stores?.map((store) => (
+                          <SelectItem key={store.kodeGudang} value={store.kodeGudang}>
+                            {store.namaGudang} ({store.kodeGudang})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <div>
+                <Label className="text-sm font-medium text-gray-500 dark:text-gray-400">TO Number</Label>
+                <p className="text-lg font-semibold text-gray-900 dark:text-white">
+                  {transfer.toNumber}
+                </p>
+              </div>
+            </div>
+          </form>
+        </Form>
+      ) : (
+        <div className="grid grid-cols-2 gap-6">
+          <div className="space-y-4">
+            <div>
+              <label className="text-sm font-medium text-gray-500 dark:text-gray-400">From Store</label>
+              <p className="text-lg font-semibold text-gray-900 dark:text-white">
+                {fromStore?.namaGudang || transfer.dariGudang}
+              </p>
+              <p className="text-sm text-gray-500">{transfer.dariGudang}</p>
+            </div>
+            <div>
+              <label className="text-sm font-medium text-gray-500 dark:text-gray-400">Transfer Date</label>
+              <p className="text-lg font-semibold text-gray-900 dark:text-white">
+                {transfer.tanggal}
+              </p>
+            </div>
+          </div>
+          
+          <div className="space-y-4">
+            <div>
+              <label className="text-sm font-medium text-gray-500 dark:text-gray-400">To Store</label>
+              <p className="text-lg font-semibold text-gray-900 dark:text-white">
+                {toStore?.namaGudang || transfer.keGudang}
+              </p>
+              <p className="text-sm text-gray-500">{transfer.keGudang}</p>
+            </div>
+            {transfer.toNumber && (
+              <div>
+                <label className="text-sm font-medium text-gray-500 dark:text-gray-400">TO Number</label>
+                <p className="text-lg font-semibold text-gray-900 dark:text-white">
+                  {transfer.toNumber}
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Transfer Items */}
       <div>
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-          Transfer Items {transferItems && Array.isArray(transferItems) ? `(${transferItems.length} items)` : ''}
-        </h3>
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+            Transfer Items {transferItems && Array.isArray(transferItems) ? `(${transferItems.length} items)` : ''}
+          </h3>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={startAddingItem}
+            data-testid="button-add-item"
+          >
+            <Plus className="w-4 h-4 mr-2" />
+            Add Item
+          </Button>
+        </div>
         
         {itemsLoading ? (
           <div className="space-y-3">
@@ -630,28 +903,230 @@ function TransferDetailsContent({ transfer, stores, onClose }: {
             {transferItems.map((item: any, index: number) => (
               <div 
                 key={item.toItemListId || index} 
-                className="flex justify-between items-center p-4 bg-gray-50 dark:bg-gray-800 rounded-lg"
+                className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg"
               >
-                <div className="flex-1">
-                  <p className="font-medium text-gray-900 dark:text-white">
-                    {item.kodeItem}
-                  </p>
-                  <p className="text-sm text-gray-600 dark:text-gray-300">
-                    {item.namaItem}
-                  </p>
-                  {item.sn && (
-                    <p className="text-xs text-gray-500 dark:text-gray-400">
-                      S/N: {item.sn}
-                    </p>
-                  )}
-                </div>
-                <div className="text-right">
-                  <p className="font-semibold text-gray-900 dark:text-white">
-                    Qty: {item.qty}
-                  </p>
-                </div>
+                {editingItemId === item.toItemListId ? (
+                  <Form {...itemForm}>
+                    <form onSubmit={itemForm.handleSubmit(handleItemUpdate)} className="space-y-3">
+                      <div className="grid grid-cols-4 gap-3">
+                        <FormField
+                          control={itemForm.control}
+                          name="kodeItem"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Item Code</FormLabel>
+                              <FormControl>
+                                <Input {...field} data-testid={`input-edit-item-code-${item.toItemListId}`} />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={itemForm.control}
+                          name="namaItem"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Item Name</FormLabel>
+                              <FormControl>
+                                <Input {...field} data-testid={`input-edit-item-name-${item.toItemListId}`} />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={itemForm.control}
+                          name="sn"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Serial Number</FormLabel>
+                              <FormControl>
+                                <Input {...field} data-testid={`input-edit-item-sn-${item.toItemListId}`} />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={itemForm.control}
+                          name="qty"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Quantity</FormLabel>
+                              <FormControl>
+                                <Input 
+                                  type="number" 
+                                  {...field} 
+                                  onChange={(e) => field.onChange(parseInt(e.target.value))}
+                                  data-testid={`input-edit-item-qty-${item.toItemListId}`}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+                      <div className="flex space-x-2">
+                        <Button 
+                          type="submit" 
+                          size="sm"
+                          disabled={updateItemMutation.isPending}
+                          data-testid={`button-save-item-${item.toItemListId}`}
+                        >
+                          <Save className="w-4 h-4 mr-2" />
+                          Save
+                        </Button>
+                        <Button 
+                          type="button" 
+                          variant="outline" 
+                          size="sm" 
+                          onClick={cancelEditingItem}
+                          data-testid={`button-cancel-edit-item-${item.toItemListId}`}
+                        >
+                          <X className="w-4 h-4 mr-2" />
+                          Cancel
+                        </Button>
+                      </div>
+                    </form>
+                  </Form>
+                ) : (
+                  <div className="flex justify-between items-center">
+                    <div className="flex-1">
+                      <p className="font-medium text-gray-900 dark:text-white">
+                        {item.kodeItem}
+                      </p>
+                      <p className="text-sm text-gray-600 dark:text-gray-300">
+                        {item.namaItem}
+                      </p>
+                      {item.sn && (
+                        <p className="text-xs text-gray-500 dark:text-gray-400">
+                          S/N: {item.sn}
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex items-center space-x-3">
+                      <p className="font-semibold text-gray-900 dark:text-white">
+                        Qty: {item.qty}
+                      </p>
+                      <div className="flex space-x-1">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => startEditingItem(item)}
+                          data-testid={`button-edit-item-${item.toItemListId}`}
+                        >
+                          <Edit className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => deleteItemMutation.mutate(item.toItemListId)}
+                          disabled={deleteItemMutation.isPending}
+                          data-testid={`button-delete-item-${item.toItemListId}`}
+                        >
+                          <Trash2 className="w-4 h-4 text-red-500" />
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             ))}
+
+            {/* Add New Item Form */}
+            {showAddItem && (
+              <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border-2 border-blue-200 dark:border-blue-800">
+                <Form {...itemForm}>
+                  <form onSubmit={itemForm.handleSubmit(handleItemAdd)} className="space-y-3">
+                    <h4 className="font-medium text-gray-900 dark:text-white mb-3">Add New Item</h4>
+                    <div className="grid grid-cols-4 gap-3">
+                      <FormField
+                        control={itemForm.control}
+                        name="kodeItem"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Item Code</FormLabel>
+                            <FormControl>
+                              <Input {...field} data-testid="input-new-item-code" />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={itemForm.control}
+                        name="namaItem"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Item Name</FormLabel>
+                            <FormControl>
+                              <Input {...field} data-testid="input-new-item-name" />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={itemForm.control}
+                        name="sn"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Serial Number</FormLabel>
+                            <FormControl>
+                              <Input {...field} data-testid="input-new-item-sn" />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={itemForm.control}
+                        name="qty"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Quantity</FormLabel>
+                            <FormControl>
+                              <Input 
+                                type="number" 
+                                {...field} 
+                                onChange={(e) => field.onChange(parseInt(e.target.value))}
+                                data-testid="input-new-item-qty"
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                    <div className="flex space-x-2">
+                      <Button 
+                        type="submit" 
+                        size="sm"
+                        disabled={addItemMutation.isPending}
+                        data-testid="button-save-new-item"
+                      >
+                        <Save className="w-4 h-4 mr-2" />
+                        Add Item
+                      </Button>
+                      <Button 
+                        type="button" 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={() => {
+                          setShowAddItem(false);
+                          itemForm.reset();
+                        }}
+                        data-testid="button-cancel-new-item"
+                      >
+                        <X className="w-4 h-4 mr-2" />
+                        Cancel
+                      </Button>
+                    </div>
+                  </form>
+                </Form>
+              </div>
+            )}
           </div>
         ) : (
           <div className="text-center py-8 text-gray-500 dark:text-gray-400">

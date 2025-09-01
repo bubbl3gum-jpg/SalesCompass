@@ -118,6 +118,8 @@ export interface IStorage {
   // Transfer operations
   createTransferOrder(data: InsertTransferOrder): Promise<TransferOrder>;
   getTransferOrders(): Promise<TransferOrder[]>;
+  updateTransferOrder(toNumber: string, data: Partial<InsertTransferOrder>): Promise<TransferOrder>;
+  updateTransferItem(toItemListId: number, data: Partial<InsertToItemList>): Promise<ToItemList>;
   deleteTransferItem(toItemListId: number, toNumber: string): Promise<void>;
   deleteAllTransferItems(toNumber: string): Promise<void>;
   deleteTransferOrder(toNumber: string): Promise<void>;
@@ -802,6 +804,24 @@ export class DatabaseStorage implements IStorage {
         eq(toItemList.toItemListId, toItemListId),
         eq(toItemList.toNumber, toNumber)
       ));
+  }
+
+  async updateTransferOrder(toNumber: string, data: Partial<InsertTransferOrder>): Promise<TransferOrder> {
+    const [updatedTransfer] = await db
+      .update(transferOrders)
+      .set(data)
+      .where(eq(transferOrders.toNumber, toNumber))
+      .returning();
+    return updatedTransfer;
+  }
+
+  async updateTransferItem(toItemListId: number, data: Partial<InsertToItemList>): Promise<ToItemList> {
+    const [updatedItem] = await db
+      .update(toItemList)
+      .set(data)
+      .where(eq(toItemList.toItemListId, toItemListId))
+      .returning();
+    return updatedItem;
   }
 
   async deleteAllTransferItems(toNumber: string): Promise<void> {

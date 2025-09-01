@@ -1406,6 +1406,78 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Update transfer order basic info
+  app.put('/api/transfers/:toNumber', authenticate, checkRole(['Supervisor', 'Stockist', 'System Administrator']), async (req, res) => {
+    try {
+      const toNumber = req.params.toNumber;
+      const { dariGudang, keGudang, tanggal } = req.body;
+      
+      if (!toNumber) {
+        return res.status(400).json({ message: 'Invalid transfer number' });
+      }
+
+      const updatedTransfer = await storage.updateTransferOrder(toNumber, {
+        dariGudang,
+        keGudang,
+        tanggal
+      });
+      
+      res.json(updatedTransfer);
+    } catch (error) {
+      console.error('Update transfer error:', error);
+      res.status(500).json({ message: 'Failed to update transfer order' });
+    }
+  });
+
+  // Update transfer item
+  app.put('/api/transfers/:toNumber/items/:toItemListId', authenticate, checkRole(['Supervisor', 'Stockist', 'System Administrator']), async (req, res) => {
+    try {
+      const toItemListId = parseInt(req.params.toItemListId);
+      const { kodeItem, namaItem, sn, qty } = req.body;
+      
+      if (isNaN(toItemListId)) {
+        return res.status(400).json({ message: 'Invalid item ID' });
+      }
+
+      const updatedItem = await storage.updateTransferItem(toItemListId, {
+        kodeItem,
+        namaItem,
+        sn,
+        qty
+      });
+      
+      res.json(updatedItem);
+    } catch (error) {
+      console.error('Update transfer item error:', error);
+      res.status(500).json({ message: 'Failed to update transfer item' });
+    }
+  });
+
+  // Add new transfer item
+  app.post('/api/transfers/:toNumber/items', authenticate, checkRole(['Supervisor', 'Stockist', 'System Administrator']), async (req, res) => {
+    try {
+      const toNumber = req.params.toNumber;
+      const { kodeItem, namaItem, sn, qty } = req.body;
+      
+      if (!toNumber) {
+        return res.status(400).json({ message: 'Invalid transfer number' });
+      }
+
+      const newItem = await storage.createToItemList({
+        toNumber,
+        kodeItem,
+        namaItem,
+        sn,
+        qty: parseInt(qty) || 1
+      });
+      
+      res.json(newItem);
+    } catch (error) {
+      console.error('Create transfer item error:', error);
+      res.status(500).json({ message: 'Failed to create transfer item' });
+    }
+  });
+
   // Delete entire transfer order
   app.delete('/api/transfers/:toNumber', authenticate, checkRole(['Supervisor', 'Stockist', 'System Administrator']), async (req, res) => {
     try {
