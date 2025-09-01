@@ -2122,6 +2122,75 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Store inventory endpoint - get inventory for a specific store
+  app.get('/api/stores/:kodeGudang/inventory', authenticate, async (req, res) => {
+    try {
+      const { kodeGudang } = req.params;
+      
+      if (!kodeGudang) {
+        return res.status(400).json({ message: 'Store code is required' });
+      }
+
+      // Get all transfer orders to calculate inventory
+      const transferOrders = await storage.getTransferOrders();
+      const referenceSheets = await storage.getReferenceSheets();
+      
+      // Calculate inventory based on transfers
+      const inventoryMap = new Map();
+      
+      for (const transfer of transferOrders) {
+        const transferItems = await storage.getToItemListByTransferOrderNumber(transfer.toNumber);
+        
+        for (const item of transferItems) {
+          if (transfer.keGudang === kodeGudang) {
+            // Incoming transfer - add to inventory
+            const key = `${item.kodeItem}-${item.sn || 'no-sn'}`;
+            const current = inventoryMap.get(key) || { 
+              kodeItem: item.kodeItem, 
+              namaItem: item.namaItem, 
+              sn: item.sn, 
+              qty: 0 
+            };
+            current.qty += item.qty || 0;
+            inventoryMap.set(key, current);
+          } else if (transfer.dariGudang === kodeGudang) {
+            // Outgoing transfer - subtract from inventory
+            const key = `${item.kodeItem}-${item.sn || 'no-sn'}`;
+            const current = inventoryMap.get(key) || { 
+              kodeItem: item.kodeItem, 
+              namaItem: item.namaItem, 
+              sn: item.sn, 
+              qty: 0 
+            };
+            current.qty -= item.qty || 0;
+            inventoryMap.set(key, current);
+          }
+        }
+      }
+      
+      // Convert to array and filter out items with 0 or negative quantities
+      const inventory = Array.from(inventoryMap.values())
+        .filter(item => item.qty > 0)
+        .sort((a, b) => a.kodeItem.localeCompare(b.kodeItem));
+
+      // Calculate summary metrics
+      const summary = {
+        totalItems: inventory.length,
+        totalQuantity: inventory.reduce((sum, item) => sum + item.qty, 0),
+        uniqueItemCodes: new Set(inventory.map(item => item.kodeItem)).size
+      };
+
+      res.json({
+        storeCode: kodeGudang,
+        summary,
+        inventory
+      });
+    } catch (error) {
+      console.error('Store inventory error:', error);
+      res.status(500).json({ message: 'Failed to get store inventory' });
+    }
+  });
+
   // Object Storage routes
   app.post('/api/objects/upload', authenticate, async (req, res) => {
     try {

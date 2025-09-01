@@ -1,76 +1,61 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useSidebar } from "@/hooks/useSidebar";
-import { useGlobalStore } from "@/hooks/useGlobalStore";
 import { useStoreAuth } from "@/hooks/useStoreAuth";
 import { Sidebar } from "@/components/sidebar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { 
   Store, 
-  TrendingUp, 
   Package, 
-  DollarSign, 
-  BarChart3,
-  ShoppingCart,
-  Calendar,
-  Eye
+  Box,
+  Boxes
 } from "lucide-react";
 
-interface StoreData {
-  store: {
-    kodeGudang: string;
-    namaGudang: string;
-    jenisGudang: string;
-  };
-  metrics: {
-    totalSales: string;
+interface InventoryItem {
+  kodeItem: string;
+  namaItem: string;
+  sn?: string;
+  qty: number;
+}
+
+interface StoreInventory {
+  storeCode: string;
+  summary: {
     totalItems: number;
-    totalRevenue: string;
-    averageOrderValue: string;
+    totalQuantity: number;
+    uniqueItemCodes: number;
   };
-  recentSales: any[];
+  inventory: InventoryItem[];
 }
 
 export default function StoresOverview() {
   const { isExpanded } = useSidebar();
   const { user } = useStoreAuth();
-  const { selectedStore, shouldUseGlobalStore } = useGlobalStore();
+  const [selectedStoreCode, setSelectedStoreCode] = useState<string>('');
 
-  // Fetch aggregated data from all stores
-  const { data: storesData, isLoading, error } = useQuery<StoreData[]>({
-    queryKey: ['/api/stores/dashboard'],
+  // Fetch all stores for the selector
+  const { data: stores, isLoading: storesLoading } = useQuery<any[]>({
+    queryKey: ['/api/stores'],
     retry: false,
   });
 
-  // Filter stores based on global store selection for all-store users
-  const filteredStoresData = storesData?.filter(storeData => {
-    if (shouldUseGlobalStore && selectedStore && selectedStore !== 'ALL_STORE') {
-      return storeData.store.kodeGudang === selectedStore;
-    }
-    return true;
+  // Fetch inventory for the selected store
+  const { data: storeInventory, isLoading: inventoryLoading, error } = useQuery<StoreInventory>({
+    queryKey: ['/api/stores', selectedStoreCode, 'inventory'],
+    enabled: !!selectedStoreCode,
+    retry: false,
   });
 
-  // Calculate totals across filtered stores (or all stores if showing all)
-  const totals = filteredStoresData?.reduce((acc, store) => {
-    return {
-      totalSales: acc.totalSales + parseInt(store.metrics.totalSales || '0'),
-      totalItems: acc.totalItems + (store.metrics.totalItems || 0),
-      totalRevenue: acc.totalRevenue + parseFloat(store.metrics.totalRevenue || '0'),
-      totalRecentSales: acc.totalRecentSales + (store.recentSales?.length || 0)
-    };
-  }, {
-    totalSales: 0,
-    totalItems: 0,
-    totalRevenue: 0,
-    totalRecentSales: 0
-  }) || { totalSales: 0, totalItems: 0, totalRevenue: 0, totalRecentSales: 0 };
+  // Set default store when stores load
+  if (stores && stores.length > 0 && !selectedStoreCode) {
+    setSelectedStoreCode(stores[0].kodeGudang);
+  }
 
-  // Determine if we're showing a specific store or all stores
-  const isShowingSpecificStore = shouldUseGlobalStore && selectedStore && selectedStore !== 'ALL_STORE';
-  const selectedStoreName = isShowingSpecificStore 
-    ? filteredStoresData?.[0]?.store.namaGudang 
-    : null;
+  const selectedStore = stores?.find(store => store.kodeGudang === selectedStoreCode);
+  const isLoading = storesLoading || inventoryLoading;
 
   if (isLoading) {
     return (
@@ -126,174 +111,156 @@ export default function StoresOverview() {
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-                {isShowingSpecificStore ? `Store Overview - ${selectedStoreName}` : 'Stores Overview'}
+                Store Inventory Overview
               </h1>
               <p className="text-gray-600 dark:text-gray-400 mt-1">
-                {isShowingSpecificStore 
-                  ? `Detailed view of ${selectedStoreName} performance and metrics`
-                  : 'Comprehensive view of all store performance and metrics'
-                }
+                View and manage inventory for individual stores
               </p>
             </div>
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center space-x-4">
               <Store className="w-8 h-8 text-blue-600 dark:text-blue-400" />
-              <Badge variant="secondary" className="text-lg px-3 py-1">
-                {isShowingSpecificStore ? '1 Store' : `${storesData?.length || 0} Stores`}
-              </Badge>
+              {/* Store Selector */}
+              <Select value={selectedStoreCode} onValueChange={setSelectedStoreCode}>
+                <SelectTrigger className="w-64 bg-white/20 dark:bg-black/20 backdrop-blur-xl border border-white/20 dark:border-gray-800/50">
+                  <SelectValue placeholder="Select a store" />
+                </SelectTrigger>
+                <SelectContent>
+                  {stores?.map((store) => (
+                    <SelectItem key={store.kodeGudang} value={store.kodeGudang}>
+                      {store.namaGudang} ({store.kodeGudang})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
 
-          {/* Overall Summary Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            <Card className="bg-white/50 dark:bg-black/20 backdrop-blur-xl border border-white/20 dark:border-gray-800/50">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium text-gray-600 dark:text-gray-400">
-                  Total Sales
-                </CardTitle>
-                <ShoppingCart className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-gray-900 dark:text-white">
-                  {totals.totalSales.toLocaleString()}
-                </div>
-                <p className="text-xs text-gray-500 dark:text-gray-400">
-                  {isShowingSpecificStore ? `From ${selectedStoreName}` : 'Across all stores'}
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card className="bg-white/50 dark:bg-black/20 backdrop-blur-xl border border-white/20 dark:border-gray-800/50">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium text-gray-600 dark:text-gray-400">
-                  Total Items
-                </CardTitle>
-                <Package className="h-4 w-4 text-green-600 dark:text-green-400" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-gray-900 dark:text-white">
-                  {totals.totalItems.toLocaleString()}
-                </div>
-                <p className="text-xs text-gray-500 dark:text-gray-400">
-                  {isShowingSpecificStore ? `Inventory in ${selectedStoreName}` : 'Inventory across stores'}
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card className="bg-white/50 dark:bg-black/20 backdrop-blur-xl border border-white/20 dark:border-gray-800/50">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium text-gray-600 dark:text-gray-400">
-                  Total Revenue
-                </CardTitle>
-                <DollarSign className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-gray-900 dark:text-white">
-                  Rp {totals.totalRevenue.toLocaleString()}
-                </div>
-                <p className="text-xs text-gray-500 dark:text-gray-400">
-                  {isShowingSpecificStore ? `Revenue from ${selectedStoreName}` : 'Combined revenue'}
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card className="bg-white/50 dark:bg-black/20 backdrop-blur-xl border border-white/20 dark:border-gray-800/50">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium text-gray-600 dark:text-gray-400">
-                  Recent Activities
-                </CardTitle>
-                <TrendingUp className="h-4 w-4 text-purple-600 dark:text-purple-400" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-gray-900 dark:text-white">
-                  {totals.totalRecentSales}
-                </div>
-                <p className="text-xs text-gray-500 dark:text-gray-400">
-                  {isShowingSpecificStore ? `Transactions from ${selectedStoreName}` : 'Recent transactions'}
-                </p>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Individual Store Cards */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-            {filteredStoresData?.map((storeData) => (
-              <Card key={storeData.store.kodeGudang} className="bg-white/50 dark:bg-black/20 backdrop-blur-xl border border-white/20 dark:border-gray-800/50">
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <CardTitle className="text-lg font-semibold text-gray-900 dark:text-white">
-                        {storeData.store.namaGudang}
-                      </CardTitle>
-                      <p className="text-sm text-gray-500 dark:text-gray-400">
-                        {storeData.store.kodeGudang}
-                      </p>
-                    </div>
-                    <Badge variant="outline" className="text-xs">
-                      {storeData.store.jenisGudang || 'Store'}
-                    </Badge>
-                  </div>
+          {/* Inventory Summary Cards */}
+          {storeInventory && (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <Card className="bg-white/50 dark:bg-black/20 backdrop-blur-xl border border-white/20 dark:border-gray-800/50">
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium text-gray-600 dark:text-gray-400">
+                    Total Items in Stock
+                  </CardTitle>
+                  <Package className="h-4 w-4 text-blue-600 dark:text-blue-400" />
                 </CardHeader>
-                <CardContent className="space-y-4">
-                  {/* Store Metrics */}
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <div className="flex items-center space-x-2">
-                        <BarChart3 className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-                        <span className="text-sm font-medium text-gray-600 dark:text-gray-400">Sales</span>
-                      </div>
-                      <p className="text-xl font-bold text-gray-900 dark:text-white">
-                        {parseInt(storeData.metrics.totalSales || '0').toLocaleString()}
-                      </p>
-                    </div>
-                    
-                    <div className="space-y-2">
-                      <div className="flex items-center space-x-2">
-                        <Package className="w-4 h-4 text-green-600 dark:text-green-400" />
-                        <span className="text-sm font-medium text-gray-600 dark:text-gray-400">Items</span>
-                      </div>
-                      <p className="text-xl font-bold text-gray-900 dark:text-white">
-                        {(storeData.metrics.totalItems || 0).toLocaleString()}
-                      </p>
-                    </div>
+                <CardContent>
+                  <div className="text-2xl font-bold text-gray-900 dark:text-white">
+                    {storeInventory.summary.totalItems.toLocaleString()}
                   </div>
-
-                  <div className="pt-2 border-t border-gray-200 dark:border-gray-700">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium text-gray-600 dark:text-gray-400">Revenue</span>
-                      <span className="text-lg font-semibold text-emerald-600 dark:text-emerald-400">
-                        Rp {parseFloat(storeData.metrics.totalRevenue || '0').toLocaleString()}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Recent Sales */}
-                  {storeData.recentSales?.length > 0 && (
-                    <div className="pt-2 border-t border-gray-200 dark:border-gray-700">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-sm font-medium text-gray-600 dark:text-gray-400">Recent Sales</span>
-                        <Eye className="w-4 h-4 text-gray-400" />
-                      </div>
-                      <div className="space-y-1 max-h-20 overflow-y-auto">
-                        {storeData.recentSales.slice(0, 3).map((sale, index) => (
-                          <div key={index} className="flex items-center justify-between text-xs">
-                            <span className="text-gray-600 dark:text-gray-400 truncate">
-                              {sale.tanggal} - {sale.namaKonsumen || 'Customer'}
-                            </span>
-                            <span className="text-green-600 dark:text-green-400 font-medium">
-                              Rp {parseFloat(sale.totalHarga || '0').toLocaleString()}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    Individual inventory records
+                  </p>
                 </CardContent>
               </Card>
-            ))}
-          </div>
 
-          {/* Add Store if no stores */}
-          {(!storesData || storesData.length === 0) && (
+              <Card className="bg-white/50 dark:bg-black/20 backdrop-blur-xl border border-white/20 dark:border-gray-800/50">
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium text-gray-600 dark:text-gray-400">
+                    Total Quantity
+                  </CardTitle>
+                  <Boxes className="h-4 w-4 text-green-600 dark:text-green-400" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold text-gray-900 dark:text-white">
+                    {storeInventory.summary.totalQuantity.toLocaleString()}
+                  </div>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    Total units across all items
+                  </p>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-white/50 dark:bg-black/20 backdrop-blur-xl border border-white/20 dark:border-gray-800/50">
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium text-gray-600 dark:text-gray-400">
+                    Unique Item Codes
+                  </CardTitle>
+                  <Box className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold text-gray-900 dark:text-white">
+                    {storeInventory.summary.uniqueItemCodes.toLocaleString()}
+                  </div>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    Different product types
+                  </p>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+
+          {/* Inventory Details */}
+          {storeInventory && storeInventory.inventory.length > 0 && (
+            <Card className="bg-white/50 dark:bg-black/20 backdrop-blur-xl border border-white/20 dark:border-gray-800/50">
+              <CardHeader>
+                <CardTitle className="text-xl font-semibold text-gray-900 dark:text-white">
+                  Inventory Items - {selectedStore?.namaGudang} ({selectedStoreCode})
+                </CardTitle>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  Complete inventory list based on transfer orders
+                </p>
+              </CardHeader>
+              <CardContent>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-gray-200 dark:border-gray-700">
+                        <th className="text-left py-2 font-medium text-gray-900 dark:text-white">Item Code</th>
+                        <th className="text-left py-2 font-medium text-gray-900 dark:text-white">Item Name</th>
+                        <th className="text-left py-2 font-medium text-gray-900 dark:text-white">Serial Number</th>
+                        <th className="text-right py-2 font-medium text-gray-900 dark:text-white">Quantity</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {storeInventory.inventory.map((item, index) => (
+                        <tr key={`${item.kodeItem}-${item.sn || 'no-sn'}-${index}`} className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                          <td className="py-2 text-gray-900 dark:text-white font-medium">{item.kodeItem}</td>
+                          <td className="py-2 text-gray-900 dark:text-white">{item.namaItem}</td>
+                          <td className="py-2 text-gray-500 dark:text-gray-400">{item.sn || '-'}</td>
+                          <td className="py-2 text-right text-gray-900 dark:text-white font-semibold">{item.qty}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* No inventory message */}
+          {selectedStoreCode && storeInventory && storeInventory.inventory.length === 0 && (
+            <Card className="bg-white/50 dark:bg-black/20 backdrop-blur-xl border border-white/20 dark:border-gray-800/50">
+              <CardContent className="p-12 text-center">
+                <Package className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
+                  No Inventory Found
+                </h3>
+                <p className="text-gray-600 dark:text-gray-400">
+                  This store currently has no inventory. Create transfer orders to move stock to this store.
+                </p>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* No store selected message */}
+          {!selectedStoreCode && stores && stores.length > 0 && (
+            <Card className="bg-white/50 dark:bg-black/20 backdrop-blur-xl border border-white/20 dark:border-gray-800/50">
+              <CardContent className="p-12 text-center">
+                <Store className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
+                  Select a Store
+                </h3>
+                <p className="text-gray-600 dark:text-gray-400">
+                  Choose a store from the dropdown above to view its inventory.
+                </p>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* No stores available */}
+          {(!stores || stores.length === 0) && !storesLoading && (
             <Card className="bg-white/50 dark:bg-black/20 backdrop-blur-xl border border-white/20 dark:border-gray-800/50">
               <CardContent className="p-12 text-center">
                 <Store className="w-16 h-16 text-gray-400 mx-auto mb-4" />
@@ -301,7 +268,7 @@ export default function StoresOverview() {
                   No Stores Found
                 </h3>
                 <p className="text-gray-600 dark:text-gray-400">
-                  Add stores to start viewing aggregated dashboard data.
+                  Add stores to start viewing inventory data.
                 </p>
               </CardContent>
             </Card>
