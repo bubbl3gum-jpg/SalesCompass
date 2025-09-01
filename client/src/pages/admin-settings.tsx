@@ -119,18 +119,6 @@ const tableConfigs: TableConfig[] = [
       { key: 'tanggalMasuk', label: 'Date Joined', type: 'date', required: true },
       { key: 'jabatan', label: 'Position', type: 'select', required: true, options: [] },
     ]
-  },
-  {
-    name: 'edc',
-    displayName: 'EDC / Payment Methods',
-    endpoint: '/api/edc',
-    importTable: 'edc',
-    keyField: 'edcId',
-    fields: [
-      { key: 'namaEdc', label: 'EDC Name', type: 'text', required: true },
-      { key: 'jenisEdc', label: 'EDC Type', type: 'text', required: true },
-      { key: 'biayaAdmin', label: 'Admin Fee', type: 'number' },
-    ]
   }
 ];
 
@@ -182,7 +170,6 @@ export default function AdminSettings() {
   const storesQuery = useTableData('/api/stores', activeTab === 'stores', currentPage['stores'] || 1, itemsPerPage);
   const positionsQuery = useTableData('/api/positions', activeTab === 'positions' || activeTab === 'staff', currentPage['positions'] || 1, itemsPerPage); // Positions needed for staff form
   const staffQuery = useTableData('/api/staff', activeTab === 'staff', currentPage['staff'] || 1, itemsPerPage);
-  const edcQuery = useTableData('/api/edc', activeTab === 'edc', currentPage['edc'] || 1, itemsPerPage);
 
   // Get positions data for staff form
   const positions = positionsQuery.data || [];
@@ -534,9 +521,6 @@ export default function AdminSettings() {
       case 'staff':
         queryResult = staffQuery;
         break;
-      case 'edc':
-        queryResult = edcQuery;
-        break;
       default:
         queryResult = { data: null, isLoading: false, error: null };
     }
@@ -785,7 +769,7 @@ export default function AdminSettings() {
         </Card>
       </div>
     );
-  }, [selectedItems, searchQueries, referenceSheetQuery, storesQuery, positionsQuery, staffQuery, edcQuery, handleSelectAll, handleSelectItem]);
+  }, [selectedItems, searchQueries, referenceSheetQuery, storesQuery, positionsQuery, staffQuery, handleSelectAll, handleSelectItem]);
 
   if (!user) {
     return <div>Please log in to access admin settings.</div>;
@@ -808,12 +792,11 @@ export default function AdminSettings() {
             </div>
 
             <Tabs value={activeTab} onValueChange={handleTabChange}>
-              <TabsList className="grid w-full grid-cols-5 bg-white/10 dark:bg-black/10 backdrop-blur-xl border-white/20 dark:border-gray-800/50">
+              <TabsList className="grid w-full grid-cols-4 bg-white/10 dark:bg-black/10 backdrop-blur-xl border-white/20 dark:border-gray-800/50">
                 <TabsTrigger value="reference-sheet" data-testid="tab-reference-sheet">Reference Sheet</TabsTrigger>
                 <TabsTrigger value="stores" data-testid="tab-stores">Stores</TabsTrigger>
                 <TabsTrigger value="positions" data-testid="tab-positions">Positions</TabsTrigger>
                 <TabsTrigger value="staff" data-testid="tab-staff">Staff</TabsTrigger>
-                <TabsTrigger value="edc" data-testid="tab-edc">EDC</TabsTrigger>
               </TabsList>
 
               {tableConfigs.map((config) => (

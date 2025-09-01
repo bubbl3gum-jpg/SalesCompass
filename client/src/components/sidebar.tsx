@@ -87,6 +87,12 @@ const navigationItems = [
         permission: "pricelist:read"
       },
       {
+        name: "Payment Methods",
+        href: "/payment-methods",
+        icon: "fas fa-credit-card",
+        permission: "admin:settings"
+      },
+      {
         name: "Admin Settings",
         href: "/admin-settings",
         icon: "fas fa-cogs",
