@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useSidebar } from "@/hooks/useSidebar";
 import { useStoreAuth } from "@/hooks/useStoreAuth";
@@ -39,20 +39,40 @@ export default function StoresOverview() {
   // Fetch all stores for the selector
   const { data: stores, isLoading: storesLoading } = useQuery<any[]>({
     queryKey: ['/api/stores'],
+    queryFn: async () => {
+      const response = await fetch('/api/stores', {
+        credentials: 'include',
+      });
+      if (!response.ok) {
+        throw new Error(`${response.status}: ${response.statusText}`);
+      }
+      return response.json();
+    },
     retry: false,
   });
 
   // Fetch inventory for the selected store
   const { data: storeInventory, isLoading: inventoryLoading, error } = useQuery<StoreInventory>({
     queryKey: ['/api/stores', selectedStoreCode, 'inventory'],
+    queryFn: async () => {
+      const response = await fetch(`/api/stores/${selectedStoreCode}/inventory`, {
+        credentials: 'include',
+      });
+      if (!response.ok) {
+        throw new Error(`${response.status}: ${response.statusText}`);
+      }
+      return response.json();
+    },
     enabled: !!selectedStoreCode,
     retry: false,
   });
 
-  // Set default store when stores load
-  if (stores && stores.length > 0 && !selectedStoreCode) {
-    setSelectedStoreCode(stores[0].kodeGudang);
-  }
+  // Set default store when stores load (use useEffect to avoid direct state update)
+  useEffect(() => {
+    if (stores && stores.length > 0 && !selectedStoreCode) {
+      setSelectedStoreCode(stores[0].kodeGudang);
+    }
+  }, [stores, selectedStoreCode]);
 
   const selectedStore = stores?.find(store => store.kodeGudang === selectedStoreCode);
   const isLoading = storesLoading || inventoryLoading;

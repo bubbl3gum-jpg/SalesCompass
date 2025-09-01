@@ -4,6 +4,7 @@ import { storage } from "./storage";
 import { setupAuth } from "./replitAuth";
 import { authRouter } from "./authRoutes";
 import { authenticate, requireAuth, requireStoreAuth, scopeToStore } from "./authMiddleware";
+import { isAuthenticated } from "./replitAuth";
 import crypto from 'crypto';
 import { z } from "zod";
 import { withCache, CACHE_KEYS, CACHE_TTL, invalidateCache, invalidateCachePattern } from "./cache";
@@ -433,7 +434,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Search endpoints for admin settings
-  app.get('/api/search/reference-sheet', authenticate, async (req, res) => {
+  app.get('/api/search/reference-sheet', isAuthenticated, async (req, res) => {
     try {
       const { q } = req.query;
       if (!q || typeof q !== 'string') {
@@ -447,7 +448,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/search/stores', authenticate, async (req, res) => {
+  app.get('/api/search/stores', isAuthenticated, async (req, res) => {
     try {
       const { q } = req.query;
       if (!q || typeof q !== 'string') {
@@ -461,7 +462,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/search/staff', authenticate, async (req, res) => {
+  app.get('/api/search/staff', isAuthenticated, async (req, res) => {
     try {
       const { q } = req.query;
       if (!q || typeof q !== 'string') {
@@ -478,7 +479,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Legacy auth route - now handled by authRouter
 
   // User permissions route
-  app.get('/api/user/permissions', authenticate, async (req: any, res) => {
+  app.get('/api/user/permissions', isAuthenticated, async (req: any, res) => {
     try {
       const userEmail = req.user.claims.email;
       const cacheKey = `${CACHE_KEYS.USER_PERMISSIONS}_${userEmail}`;
@@ -497,7 +498,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Store authentication route
-  app.post('/api/store/auth', authenticate, async (req, res) => {
+  app.post('/api/store/auth', isAuthenticated, async (req, res) => {
     try {
       const { kodeGudang, username, password } = req.body;
       
@@ -534,7 +535,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get current authenticated store
-  app.get('/api/store/current', authenticate, async (req, res) => {
+  app.get('/api/store/current', isAuthenticated, async (req, res) => {
     try {
       const authenticatedStore = (req.session as any).authenticatedStore;
       const storeLoginType = (req.session as any).storeLoginType || 'single_store';
@@ -567,7 +568,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Store switch route (for All Store users only)
-  app.post('/api/store/switch', authenticate, async (req, res) => {
+  app.post('/api/store/switch', isAuthenticated, async (req, res) => {
     try {
       const { kodeGudang } = req.body;
       const storeLoginType = (req.session as any).storeLoginType;
@@ -604,7 +605,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Store logout route
-  app.post('/api/store/logout', authenticate, async (req, res) => {
+  app.post('/api/store/logout', isAuthenticated, async (req, res) => {
     try {
       delete (req.session as any).authenticatedStore;
       delete (req.session as any).storeLoginType;
@@ -675,7 +676,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Store dashboard with aggregated data from all stores
-  app.get('/api/stores/dashboard', authenticate, async (req, res) => {
+  app.get('/api/stores/dashboard', isAuthenticated, async (req, res) => {
     try {
       const stores = await storage.getStores();
       const dashboardData = [];
@@ -709,7 +710,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Price resolution endpoint
-  app.get('/api/price/quote', authenticate, async (req, res) => {
+  app.get('/api/price/quote', isAuthenticated, async (req, res) => {
     try {
       const {
         serial_number,
@@ -775,7 +776,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Import endpoint for bulk data upload with progress tracking
   // High-performance non-blocking import endpoint (sub-1s response time)
-  app.post('/api/import', authenticate, upload.single('file'), async (req, res) => {
+  app.post('/api/import', isAuthenticated, upload.single('file'), async (req, res) => {
     try {
       if (!req.file) {
         return res.status(400).json({ message: 'No file uploaded' });
@@ -868,7 +869,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
 
   // Get all import jobs for monitoring (admin only) - optimized with caching
-  app.get('/api/import/jobs', authenticate, (req, res) => {
+  app.get('/api/import/jobs', isAuthenticated, (req, res) => {
     // Add cache headers to prevent excessive polling
     res.set('Cache-Control', 'public, max-age=30'); // Cache for 30 seconds
     res.set('ETag', '"empty-jobs"');
@@ -888,7 +889,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   const { pricelistImportProcessor } = await import('./pricelistImportProcessor');
   
   // Initiate transfer import - returns presigned URL for direct S3 upload
-  app.post('/api/transfer-imports/initiate', authenticate, async (req, res) => {
+  app.post('/api/transfer-imports/initiate', isAuthenticated, async (req, res) => {
     try {
       const { fileName, contentType, expectedSchema } = req.body;
       
@@ -1591,7 +1592,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Master data endpoints
-  app.get('/api/stores', authenticate, async (req, res) => {
+  app.get('/api/stores', isAuthenticated, async (req, res) => {
     try {
       // Clear cache first to ensure fresh data
       cache.del(CACHE_KEYS.STORES);
@@ -2286,7 +2287,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Store inventory endpoint - get inventory for a specific store
-  app.get('/api/stores/:kodeGudang/inventory', authenticate, async (req, res) => {
+  app.get('/api/stores/:kodeGudang/inventory', isAuthenticated, async (req, res) => {
     try {
       const { kodeGudang } = req.params;
       

@@ -341,7 +341,7 @@ export default function Dashboard() {
                         <CommandEmpty>No store found.</CommandEmpty>
                         <CommandGroup>
                           <CommandItem
-                            key="ALL_STORE"
+                            key="all-stores-option"
                             value="ALL_STORE All Stores"
                             onSelect={() => {
                               setSelectedStore('ALL_STORE');
