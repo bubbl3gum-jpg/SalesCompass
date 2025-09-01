@@ -27,11 +27,13 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Search } from "lucide-react";
 
 const salesFormSchema = z.object({
   kodeGudang: z.string().min(1, "Store is required"),
   tanggal: z.string().min(1, "Date is required"),
-  serialNumber: z.string().min(1, "Serial number is required"),
+  serialNumber: z.string().optional(),
   kodeItem: z.string().min(1, "Item code is required"),
   namaItem: z.string().min(1, "Item name is required"),
   quantity: z.string().min(1, "Quantity is required"),
@@ -55,6 +57,8 @@ interface ItemLookup {
   normalPrice: number;
   sp?: number;
   availableQuantity: number;
+  kelompok?: string;
+  family?: string;
 }
 
 interface DiscountOption {
@@ -70,12 +74,14 @@ export function SalesEntryModal({ isOpen, onClose, selectedStore }: SalesEntryMo
   const { user, hasPermission } = useStoreAuth();
   const queryClient = useQueryClient();
   
-  // State for the new flow
-  const [itemOptions, setItemOptions] = useState<ItemLookup[]>([]);
+  // State for the search and selection
+  const [searchMode, setSearchMode] = useState<'serial' | 'item' | 'manual'>('serial');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [itemSearchResults, setItemSearchResults] = useState<ItemLookup[]>([]);
   const [selectedItemData, setSelectedItemData] = useState<ItemLookup | null>(null);
   const [availableQuantities, setAvailableQuantities] = useState<number[]>([]);
   const [applicableDiscounts, setApplicableDiscounts] = useState<DiscountOption[]>([]);
-  const [isLoadingItems, setIsLoadingItems] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
 
   const form = useForm<SalesFormData>({
     resolver: zodResolver(salesFormSchema),
@@ -115,10 +121,12 @@ export function SalesEntryModal({ isOpen, onClose, selectedStore }: SalesEntryMo
         finalPrice: "0",
         notes: "",
       });
-      setItemOptions([]);
+      setItemSearchResults([]);
       setSelectedItemData(null);
       setAvailableQuantities([]);
       setApplicableDiscounts([]);
+      setSearchQuery('');
+      setSearchMode('serial');
     }
   }, [isOpen, selectedStore, form]);
 
@@ -138,51 +146,59 @@ export function SalesEntryModal({ isOpen, onClose, selectedStore }: SalesEntryMo
     retry: false,
   });
 
-  // Serial number lookup function
-  const lookupItemsBySerial = async (serialNumber: string, storeCode: string) => {
-    if (!serialNumber.trim() || !storeCode) return;
+  // Unified search function
+  const performSearch = async () => {
+    if (!searchQuery.trim() || !form.getValues('kodeGudang')) return;
     
-    setIsLoadingItems(true);
+    setIsSearching(true);
+    setItemSearchResults([]);
+    
     try {
-      // First, search for items by serial number in pricelist
-      const priceResponse = await fetch(`/api/pricelist`, { credentials: 'include' });
-      if (!priceResponse.ok) throw new Error('Failed to get pricelist');
-      
-      const priceList = await priceResponse.json();
-      const matchingPriceItems = priceList.filter((price: any) => 
-        price.sn === serialNumber
-      );
+      // Get both pricelist and reference sheets
+      const [priceResponse, referenceResponse] = await Promise.all([
+        fetch(`/api/pricelist`, { credentials: 'include' }),
+        fetch(`/api/reference-sheets`, { credentials: 'include' })
+      ]);
 
-      // If no exact serial number match, try searching by item code in reference sheet
-      let matchingItems: any[] = [];
+      if (!priceResponse.ok || !referenceResponse.ok) {
+        throw new Error('Failed to fetch data');
+      }
+
+      const priceData = await priceResponse.json();
+      const priceList = priceData.data || priceData || [];
+      const referenceSheets = await referenceResponse.json();
       
-      if (matchingPriceItems.length > 0) {
-        // Get item details from reference sheet for matched serial numbers
-        const referenceResponse = await fetch(`/api/reference-sheets`, { credentials: 'include' });
-        if (!referenceResponse.ok) throw new Error('Failed to lookup items');
+      let matchingItems: ItemLookup[] = [];
+      const searchLower = searchQuery.toLowerCase();
+
+      if (searchMode === 'serial') {
+        // Search by serial number in pricelist
+        const priceMatches = priceList.filter((price: any) => 
+          price.sn === searchQuery
+        );
         
-        const referenceItems = await referenceResponse.json();
-        matchingItems = matchingPriceItems.map((priceItem: any) => {
-          const refItem = referenceItems.find((ref: any) => ref.kodeItem === priceItem.kodeItem);
+        matchingItems = priceMatches.map((priceItem: any) => {
+          const refItem = referenceSheets.find((ref: any) => ref.kodeItem === priceItem.kodeItem);
           return {
             kodeItem: priceItem.kodeItem,
             namaItem: refItem?.namaItem || priceItem.kodeItem,
             normalPrice: priceItem.normalPrice || 0,
             sp: priceItem.sp,
             availableQuantity: 1,
+            kelompok: refItem?.kelompok || priceItem.kelompok,
+            family: refItem?.family || priceItem.family,
           };
         });
-      } else {
-        // Try searching by item code in reference sheet if no serial number found
-        const referenceResponse = await fetch(`/api/reference-sheets?search=${encodeURIComponent(serialNumber)}`, { credentials: 'include' });
-        if (!referenceResponse.ok) throw new Error('Failed to lookup items');
-        
-        const referenceItems = await referenceResponse.json();
-        const itemCodeMatches = referenceItems.filter((item: any) => 
-          item.kodeItem?.includes(serialNumber)
+      } else if (searchMode === 'item') {
+        // Search by item code, name, family, or kelompok
+        const refMatches = referenceSheets.filter((item: any) => 
+          item.kodeItem?.toLowerCase().includes(searchLower) ||
+          item.namaItem?.toLowerCase().includes(searchLower) ||
+          item.kelompok?.toLowerCase().includes(searchLower) ||
+          item.family?.toLowerCase().includes(searchLower)
         );
 
-        matchingItems = itemCodeMatches.map((item: any) => {
+        matchingItems = refMatches.map((item: any) => {
           const priceItem = priceList.find((price: any) => 
             price.kodeItem === item.kodeItem
           );
@@ -193,35 +209,36 @@ export function SalesEntryModal({ isOpen, onClose, selectedStore }: SalesEntryMo
             normalPrice: priceItem?.normalPrice || 0,
             sp: priceItem?.sp,
             availableQuantity: 1,
+            kelompok: item.kelompok,
+            family: item.family,
           };
         });
       }
 
       if (matchingItems.length === 0) {
         toast({
-          title: "Item Not Found",
-          description: "No items found with this serial number or item code",
+          title: "No Items Found",
+          description: `No items found matching "${searchQuery}"`,
           variant: "destructive",
         });
-        return;
-      }
-
-      setItemOptions(matchingItems);
-      
-      // If only one item, auto-select it
-      if (matchingItems.length === 1) {
-        selectItem(matchingItems[0]);
+      } else {
+        setItemSearchResults(matchingItems);
+        
+        // Auto-select if only one match
+        if (matchingItems.length === 1) {
+          selectItem(matchingItems[0]);
+        }
       }
       
     } catch (error) {
-      console.error('Error looking up items:', error);
+      console.error('Error searching items:', error);
       toast({
         title: "Error",
-        description: "Failed to lookup items",
+        description: "Failed to search items. Please try again.",
         variant: "destructive",
       });
     } finally {
-      setIsLoadingItems(false);
+      setIsSearching(false);
     }
   };
 
@@ -231,146 +248,126 @@ export function SalesEntryModal({ isOpen, onClose, selectedStore }: SalesEntryMo
     form.setValue('kodeItem', item.kodeItem);
     form.setValue('namaItem', item.namaItem);
     form.setValue('normalPrice', item.normalPrice.toString());
-    form.setValue('finalPrice', item.normalPrice.toString()); // Default to normal price
+    form.setValue('serialNumber', searchQuery);
     
-    // Generate quantity options (1 to available quantity)
-    const quantities = Array.from({ length: item.availableQuantity }, (_, i) => i + 1);
-    setAvailableQuantities(quantities);
+    // Set available quantities (1-10 for now)
+    setAvailableQuantities(Array.from({ length: 10 }, (_, i) => i + 1));
     
-    // Load applicable discounts for this item/store
-    loadApplicableDiscounts(item.kodeItem, form.getValues('kodeGudang'));
-  };
-
-  // Load applicable discounts
-  const loadApplicableDiscounts = (kodeItem: string, storeCode: string) => {
-    if (!hasPermission || !hasPermission("discount:read") || !allDiscounts || !Array.isArray(allDiscounts)) {
-      setApplicableDiscounts([]);
-      return;
-    }
-
-    // For now, show all discounts - in a real system, you'd filter by store/product
-    const discountOptions = allDiscounts.map((discount: any) => ({
-      discountId: discount.discountId,
-      discountName: discount.discountName || `Discount ${discount.discountId}`,
-      discountType: discount.discountType || '0',
-      percentage: parseFloat(discount.discountType || '0'),
-    }));
-    
-    setApplicableDiscounts(discountOptions);
-  };
-
-  // Calculate final price based on discount selection
-  const calculateFinalPrice = (discountType: string) => {
-    if (!selectedItemData) return;
-    
-    let finalPrice = selectedItemData.normalPrice;
-    
-    if (discountType === 'SP' && selectedItemData.sp) {
-      // Use SP price
-      finalPrice = selectedItemData.sp;
-    } else if (discountType && discountType !== 'SP') {
-      // Apply percentage discount
-      const discountPercent = parseFloat(discountType) || 0;
-      finalPrice = selectedItemData.normalPrice * (1 - discountPercent / 100);
+    // Filter applicable discounts
+    if (allDiscounts) {
+      const applicableDiscounts = allDiscounts.filter((discount: any) => {
+        // Check if discount is active
+        const now = new Date();
+        const startDate = discount.startFrom ? new Date(discount.startFrom) : null;
+        const endDate = discount.endAt ? new Date(discount.endAt) : null;
+        
+        if (startDate && now < startDate) return false;
+        if (endDate && now > endDate) return false;
+        
+        return true;
+      });
+      
+      setApplicableDiscounts(applicableDiscounts);
     }
     
-    form.setValue('finalPrice', finalPrice.toString());
+    // Default quantity to 1
+    form.setValue('quantity', '1');
+    calculateFinalPrice('1', item.normalPrice, '');
   };
 
-  // Sales creation mutation
+  // Calculate final price based on quantity and discount
+  const calculateFinalPrice = (quantity: string, normalPrice: number, discountType: string) => {
+    const qty = parseInt(quantity) || 0;
+    let total = qty * normalPrice;
+    
+    if (discountType && applicableDiscounts.length > 0) {
+      const discount = applicableDiscounts.find(d => d.discountId.toString() === discountType);
+      if (discount) {
+        if (discount.percentage) {
+          total = total * (1 - discount.percentage / 100);
+        } else if (discount.amount) {
+          total = Math.max(0, total - discount.amount);
+        }
+      }
+    }
+    
+    form.setValue('finalPrice', total.toFixed(2));
+  };
+
+  // Handle quantity change
+  const handleQuantityChange = (value: string) => {
+    form.setValue('quantity', value);
+    if (selectedItemData) {
+      calculateFinalPrice(value, selectedItemData.normalPrice, form.getValues('discountType') || '');
+    }
+  };
+
+  // Handle discount change
+  const handleDiscountChange = (value: string) => {
+    form.setValue('discountType', value);
+    if (selectedItemData) {
+      calculateFinalPrice(form.getValues('quantity'), selectedItemData.normalPrice, value);
+    }
+  };
+
+  // Create sale mutation
   const createSaleMutation = useMutation({
     mutationFn: async (data: any) => {
-      const response = await apiRequest('POST', '/api/sales', data);
-      return response.json();
+      return apiRequest('POST', '/api/sales', data);
     },
-    onSuccess: () => {
+    onSuccess: async (response) => {
+      const data = await response.json();
       toast({
         title: "Success",
         description: "Sale recorded successfully",
       });
-      queryClient.invalidateQueries({ queryKey: ["/api/sales"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/metrics"] });
+      
+      // Invalidate relevant queries
+      queryClient.invalidateQueries({ queryKey: ['/api/sales'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/stock'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/dashboard'] });
+      
       onClose();
     },
-    onError: (error) => {
-      if (isUnauthorizedError(error as Error)) {
+    onError: (error: any) => {
+      console.error('Sale creation error:', error);
+      
+      if (isUnauthorizedError(error)) {
         toast({
-          title: "Unauthorized", 
-          description: "You are logged out. Logging in again...",
+          title: "Session Expired",
+          description: "Please log in again to continue",
           variant: "destructive",
         });
-        setTimeout(() => {
-          window.location.replace("/api/login");
-        }, 500);
         return;
       }
+      
+      const errorMessage = error?.message || "Failed to record sale";
       toast({
         title: "Error",
-        description: "Failed to create sale",
+        description: errorMessage,
         variant: "destructive",
       });
     },
   });
 
+  // Form submission
   const onSubmit = (data: SalesFormData) => {
-    if (!selectedItemData) {
-      toast({
-        title: "Error",
-        description: "Please select an item first",
-        variant: "destructive",
-      });
-      return;
-    }
-
     const submitData = {
-      kodeGudang: data.kodeGudang,
-      tanggal: data.tanggal,
-      kodeItem: data.kodeItem,
-      serialNumber: data.serialNumber,
+      ...data,
       quantity: parseInt(data.quantity),
       normalPrice: parseFloat(data.normalPrice),
       finalPrice: parseFloat(data.finalPrice),
       discountType: data.discountType || null,
-      notes: data.notes || null,
-      paymentMethodId: 1, // Default payment method - adjust as needed
     };
-
+    
     createSaleMutation.mutate(submitData);
-  };
-
-  // Handle serial number input
-  const handleSerialNumberChange = (serialNumber: string) => {
-    form.setValue('serialNumber', serialNumber);
-    
-    // Clear previous selections
-    setItemOptions([]);
-    setSelectedItemData(null);
-    setAvailableQuantities([]);
-    setApplicableDiscounts([]);
-    form.setValue('kodeItem', '');
-    form.setValue('namaItem', '');
-    form.setValue('quantity', '');
-    form.setValue('normalPrice', '0');
-    form.setValue('finalPrice', '0');
-    form.setValue('discountType', '');
-    
-    // Lookup items if serial number is provided
-    if (serialNumber.trim() && form.getValues('kodeGudang')) {
-      lookupItemsBySerial(serialNumber, form.getValues('kodeGudang'));
-    }
-  };
-
-  // Handle discount type change
-  const handleDiscountChange = (discountType: string) => {
-    form.setValue('discountType', discountType);
-    calculateFinalPrice(discountType);
   };
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl bg-white/90 dark:bg-gray-900/90 backdrop-blur-xl border border-white/20 dark:border-gray-800/50">
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="text-2xl font-bold text-gray-900 dark:text-white">
+          <DialogTitle className="text-xl font-semibold">
             New Sale Entry
           </DialogTitle>
         </DialogHeader>
@@ -432,124 +429,167 @@ export function SalesEntryModal({ isOpen, onClose, selectedStore }: SalesEntryMo
               />
             </div>
 
-            {/* Serial Number - First Field */}
-            <FormField
-              control={form.control}
-              name="serialNumber"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Serial Number</FormLabel>
-                  <FormControl>
-                    <Input
-                      placeholder="Enter serial number"
-                      {...field}
-                      onChange={(e) => {
-                        field.onChange(e);
-                        handleSerialNumberChange(e.target.value);
-                      }}
-                      disabled={isLoadingItems}
-                      data-testid="input-serial-number"
-                    />
-                  </FormControl>
-                  {isLoadingItems && (
-                    <p className="text-xs text-blue-600 dark:text-blue-400">
-                      Looking up items...
+            {/* Search Section */}
+            <Card>
+              <CardContent className="pt-6">
+                <Tabs value={searchMode} onValueChange={(v) => setSearchMode(v as any)}>
+                  <TabsList className="grid w-full grid-cols-3">
+                    <TabsTrigger value="serial">Search by Serial Number</TabsTrigger>
+                    <TabsTrigger value="item">Search by Item Details</TabsTrigger>
+                    <TabsTrigger value="manual">Manual Entry</TabsTrigger>
+                  </TabsList>
+                  
+                  <TabsContent value="serial" className="space-y-4">
+                    <div className="flex gap-2">
+                      <Input
+                        placeholder="Enter serial number..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && performSearch()}
+                        disabled={isSearching}
+                        data-testid="input-serial-search"
+                      />
+                      <Button 
+                        type="button"
+                        onClick={performSearch}
+                        disabled={isSearching || !searchQuery.trim()}
+                      >
+                        <Search className="h-4 w-4 mr-2" />
+                        Search
+                      </Button>
+                    </div>
+                  </TabsContent>
+                  
+                  <TabsContent value="item" className="space-y-4">
+                    <div className="flex gap-2">
+                      <Input
+                        placeholder="Search by item code, name, family, or kelompok..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && performSearch()}
+                        disabled={isSearching}
+                        data-testid="input-item-search"
+                      />
+                      <Button 
+                        type="button"
+                        onClick={performSearch}
+                        disabled={isSearching || !searchQuery.trim()}
+                      >
+                        <Search className="h-4 w-4 mr-2" />
+                        Search
+                      </Button>
+                    </div>
+                  </TabsContent>
+                  
+                  <TabsContent value="manual" className="space-y-4">
+                    <p className="text-sm text-muted-foreground">
+                      Enter item details manually below
                     </p>
-                  )}
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+                  </TabsContent>
+                </Tabs>
 
-            {/* Item Selection - Show when multiple items found */}
-            {itemOptions.length > 1 && (
+                {/* Search Results */}
+                {itemSearchResults.length > 1 && (
+                  <div className="mt-4 space-y-2">
+                    <FormLabel>Select Item from Search Results</FormLabel>
+                    <div className="max-h-48 overflow-y-auto border rounded-md p-2 space-y-1">
+                      {itemSearchResults.map((item) => (
+                        <div
+                          key={item.kodeItem}
+                          className="p-2 hover:bg-accent rounded cursor-pointer"
+                          onClick={() => selectItem(item)}
+                        >
+                          <div className="font-medium">{item.kodeItem} - {item.namaItem}</div>
+                          <div className="text-sm text-muted-foreground">
+                            {item.kelompok && `Kelompok: ${item.kelompok}`}
+                            {item.family && ` | Family: ${item.family}`}
+                            {` | Price: Rp ${item.normalPrice.toLocaleString()}`}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Item Details - Always visible for manual entry */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <FormField
                 control={form.control}
                 name="kodeItem"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Select Item</FormLabel>
-                    <Select 
-                      onValueChange={(value) => {
-                        const selectedItem = itemOptions.find(item => item.kodeItem === value);
-                        if (selectedItem) {
-                          selectItem(selectedItem);
-                        }
-                      }} 
-                      value={field.value}
-                    >
-                      <FormControl>
-                        <SelectTrigger data-testid="select-item">
-                          <SelectValue placeholder="Choose the correct item" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {itemOptions.map((item) => (
-                          <SelectItem key={item.kodeItem} value={item.kodeItem}>
-                            {item.kodeItem} - {item.namaItem}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <FormLabel>Item Code</FormLabel>
+                    <FormControl>
+                      <Input
+                        {...field}
+                        readOnly={searchMode !== 'manual' && !!selectedItemData}
+                        className={searchMode !== 'manual' && selectedItemData ? "bg-gray-50 dark:bg-gray-800" : ""}
+                        data-testid="input-item-code"
+                      />
+                    </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
-            )}
 
-            {/* Auto-filled Item Information */}
-            {selectedItemData && (
+              <FormField
+                control={form.control}
+                name="namaItem"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Item Name</FormLabel>
+                    <FormControl>
+                      <Input
+                        {...field}
+                        readOnly={searchMode !== 'manual' && !!selectedItemData}
+                        className={searchMode !== 'manual' && selectedItemData ? "bg-gray-50 dark:bg-gray-800" : ""}
+                        data-testid="input-item-name"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            {/* Additional item info if available */}
+            {selectedItemData && (selectedItemData.kelompok || selectedItemData.family) && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <FormField
-                  control={form.control}
-                  name="kodeItem"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Item Code</FormLabel>
-                      <FormControl>
-                        <Input
-                          {...field}
-                          readOnly
-                          className="bg-gray-50 dark:bg-gray-800"
-                          data-testid="input-item-code"
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="namaItem"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Item Name</FormLabel>
-                      <FormControl>
-                        <Input
-                          {...field}
-                          readOnly
-                          className="bg-gray-50 dark:bg-gray-800"
-                          data-testid="input-item-name"
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                {selectedItemData.kelompok && (
+                  <div>
+                    <FormLabel>Kelompok</FormLabel>
+                    <Input
+                      value={selectedItemData.kelompok}
+                      readOnly
+                      className="bg-gray-50 dark:bg-gray-800"
+                    />
+                  </div>
+                )}
+                {selectedItemData.family && (
+                  <div>
+                    <FormLabel>Family</FormLabel>
+                    <Input
+                      value={selectedItemData.family}
+                      readOnly
+                      className="bg-gray-50 dark:bg-gray-800"
+                    />
+                  </div>
+                )}
               </div>
             )}
 
-            {/* Quantity and Normal Price */}
-            {selectedItemData && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <FormField
-                  control={form.control}
-                  name="quantity"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Quantity</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value}>
+            {/* Quantity and Price */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <FormField
+                control={form.control}
+                name="quantity"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Quantity</FormLabel>
+                    {availableQuantities.length > 0 ? (
+                      <Select onValueChange={handleQuantityChange} value={field.value}>
                         <FormControl>
                           <SelectTrigger data-testid="select-quantity">
                             <SelectValue placeholder="Select quantity" />
@@ -558,125 +598,96 @@ export function SalesEntryModal({ isOpen, onClose, selectedStore }: SalesEntryMo
                         <SelectContent>
                           {availableQuantities.map((qty) => (
                             <SelectItem key={qty} value={qty.toString()}>
-                              {qty} {qty === 1 ? 'unit' : 'units'}
+                              {qty}
                             </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="normalPrice"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Normal Price</FormLabel>
+                    ) : (
                       <FormControl>
-                        <Input
-                          {...field}
-                          readOnly
-                          className="bg-gray-50 dark:bg-gray-800"
-                          data-testid="input-normal-price"
+                        <Input 
+                          type="number" 
+                          {...field} 
+                          min="1"
+                          onChange={(e) => handleQuantityChange(e.target.value)}
+                          data-testid="input-quantity" 
                         />
                       </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-            )}
-
-            {/* Discount Type and Final Price */}
-            {selectedItemData && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <FormField
-                  control={form.control}
-                  name="discountType"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Discount Type</FormLabel>
-                      <Select onValueChange={handleDiscountChange} value={field.value}>
-                        <FormControl>
-                          <SelectTrigger data-testid="select-discount-type">
-                            <SelectValue placeholder="No discount" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="">No discount</SelectItem>
-                          {selectedItemData.sp && (
-                            <SelectItem value="SP">SP Price</SelectItem>
-                          )}
-                          {applicableDiscounts.map((discount) => (
-                            <SelectItem key={discount.discountId} value={discount.discountType}>
-                              {discount.discountName} ({discount.percentage}%)
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="finalPrice"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Final Price</FormLabel>
-                      <FormControl>
-                        <Input
-                          {...field}
-                          readOnly
-                          className="bg-green-50 dark:bg-green-900/20 font-semibold"
-                          data-testid="input-final-price"
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-            )}
-
-            {/* Selected Item Display */}
-            {selectedItemData && (
-              <Card className="bg-blue-50/50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
-                <CardContent className="p-4">
-                  <h4 className="font-medium text-blue-900 dark:text-blue-100 mb-3">Selected Item Summary</h4>
-                  <div className="grid grid-cols-2 gap-4 text-sm">
-                    <div>
-                      <span className="text-gray-600 dark:text-gray-400">Normal Price:</span>
-                      <p className="font-semibold text-gray-900 dark:text-white" data-testid="text-normal-price-display">
-                        Rp {selectedItemData.normalPrice.toLocaleString()}
-                      </p>
-                    </div>
-                    <div>
-                      <span className="text-gray-600 dark:text-gray-400">Available Stock:</span>
-                      <p className="font-semibold text-gray-900 dark:text-white" data-testid="text-available-stock">
-                        {selectedItemData.availableQuantity} units
-                      </p>
-                    </div>
-                    <div>
-                      <span className="text-gray-600 dark:text-gray-400">Final Price:</span>
-                      <p className="font-semibold text-emerald-600 dark:text-emerald-400" data-testid="text-final-price-display">
-                        Rp {parseFloat(form.getValues('finalPrice') || '0').toLocaleString()}
-                      </p>
-                    </div>
-                    {selectedItemData.sp && (
-                      <div>
-                        <span className="text-gray-600 dark:text-gray-400">SP Price:</span>
-                        <p className="font-semibold text-purple-600 dark:text-purple-400">
-                          Rp {selectedItemData.sp.toLocaleString()}
-                        </p>
-                      </div>
                     )}
-                  </div>
-                </CardContent>
-              </Card>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="normalPrice"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Normal Price</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        {...field}
+                        readOnly={searchMode !== 'manual' && !!selectedItemData}
+                        className={searchMode !== 'manual' && selectedItemData ? "bg-gray-50 dark:bg-gray-800" : ""}
+                        data-testid="input-normal-price"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="finalPrice"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Final Price</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        {...field}
+                        readOnly
+                        className="bg-gray-50 dark:bg-gray-800 font-semibold"
+                        data-testid="input-final-price"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            {/* Discount Selection */}
+            {applicableDiscounts.length > 0 && (
+              <FormField
+                control={form.control}
+                name="discountType"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Apply Discount (Optional)</FormLabel>
+                    <Select onValueChange={handleDiscountChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger data-testid="select-discount">
+                          <SelectValue placeholder="No discount" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="">No discount</SelectItem>
+                        {applicableDiscounts.map((discount) => (
+                          <SelectItem key={discount.discountId} value={discount.discountId.toString()}>
+                            {discount.discountName || discount.discountType} - 
+                            {discount.percentage ? ` ${discount.percentage}%` : ` Rp ${discount.amount?.toLocaleString()}`}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
             )}
 
             {/* Notes */}
@@ -688,9 +699,8 @@ export function SalesEntryModal({ isOpen, onClose, selectedStore }: SalesEntryMo
                   <FormLabel>Notes (Optional)</FormLabel>
                   <FormControl>
                     <Textarea
-                      rows={3}
                       placeholder="Add any additional notes..."
-                      className="resize-none"
+                      className="min-h-[80px]"
                       {...field}
                       data-testid="textarea-notes"
                     />
@@ -700,23 +710,30 @@ export function SalesEntryModal({ isOpen, onClose, selectedStore }: SalesEntryMo
               )}
             />
 
-            {/* Actions */}
-            <div className="flex justify-end space-x-4 pt-4">
+            {/* Action Buttons */}
+            <div className="flex justify-end gap-4">
               <Button
                 type="button"
                 variant="outline"
                 onClick={onClose}
+                disabled={createSaleMutation.isPending}
                 data-testid="button-cancel"
               >
                 Cancel
               </Button>
               <Button
                 type="submit"
-                className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700"
-                disabled={createSaleMutation.isPending}
-                data-testid="button-record-sale"
+                disabled={createSaleMutation.isPending || !form.getValues('kodeItem')}
+                data-testid="button-submit"
               >
-                {createSaleMutation.isPending ? "Recording..." : "Record Sale"}
+                {createSaleMutation.isPending ? (
+                  <>
+                    <i className="fas fa-spinner fa-spin mr-2"></i>
+                    Recording...
+                  </>
+                ) : (
+                  'Record Sale'
+                )}
               </Button>
             </div>
           </form>

@@ -1809,7 +1809,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Pricelist endpoints
-  app.get('/api/pricelist', authenticate, async (req, res) => {
+  app.get('/api/pricelist', isAuthenticated, async (req, res) => {
     try {
       const { page = 1, limit = 50, search = '' } = req.query;
       const pageNum = Math.max(1, parseInt(page as string) || 1);
@@ -1860,7 +1860,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/pricelist', authenticate, checkRole(['System Administrator']), async (req, res) => {
+  app.post('/api/pricelist', isAuthenticated, checkRole(['System Administrator']), async (req, res) => {
     try {
       const validatedData = insertPricelistSchema.parse(req.body);
       const pricelistItem = await storage.createPricelist(validatedData);
@@ -1879,7 +1879,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put('/api/pricelist/:pricelistId', authenticate, checkRole(['System Administrator']), async (req, res) => {
+  app.put('/api/pricelist/:pricelistId', isAuthenticated, checkRole(['System Administrator']), async (req, res) => {
     try {
       const { pricelistId } = req.params;
       const validatedData = insertPricelistSchema.partial().parse(req.body);
@@ -1899,7 +1899,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete('/api/pricelist/:pricelistId', authenticate, checkRole(['System Administrator']), async (req, res) => {
+  app.delete('/api/pricelist/:pricelistId', isAuthenticated, checkRole(['System Administrator']), async (req, res) => {
     try {
       const { pricelistId } = req.params;
       await storage.deletePricelist(parseInt(pricelistId));
@@ -1915,7 +1915,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Pricelist import endpoints (following Transfer import pattern)
-  app.post('/api/pricelist-imports/initiate', authenticate, checkRole(['System Administrator']), async (req, res) => {
+  app.post('/api/pricelist-imports/initiate', isAuthenticated, checkRole(['System Administrator']), async (req, res) => {
     try {
       const { fileName, contentType, expectedSchema } = req.body;
       
@@ -1946,7 +1946,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/pricelist-imports/complete', authenticate, checkRole(['System Administrator']), async (req, res) => {
+  app.post('/api/pricelist-imports/complete', isAuthenticated, checkRole(['System Administrator']), async (req, res) => {
     try {
       const { uploadId, fileKey, fileSize, fileSha256, idempotencyKey } = req.body;
       
@@ -2020,7 +2020,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/pricelist-imports/:uploadId/status', authenticate, async (req, res) => {
+  app.get('/api/pricelist-imports/:uploadId/status', isAuthenticated, async (req, res) => {
     try {
       const { uploadId } = req.params;
       const job = pricelistImportProcessor.getJob(uploadId);
@@ -2043,7 +2043,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get all pricelist import jobs
-  app.get('/api/pricelist-imports/jobs', authenticate, async (req, res) => {
+  app.get('/api/pricelist-imports/jobs', isAuthenticated, async (req, res) => {
     try {
       // Return empty array for now - this endpoint is used by the UI for job listings
       res.json([]);
@@ -2053,7 +2053,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/pricelist-imports/:uploadId/events', authenticate, (req, res) => {
+  app.get('/api/pricelist-imports/:uploadId/events', isAuthenticated, (req, res) => {
     const { uploadId } = req.params;
     const job = pricelistImportProcessor.getJob(uploadId);
     
