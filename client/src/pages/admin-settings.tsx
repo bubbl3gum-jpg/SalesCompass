@@ -159,9 +159,9 @@ export default function AdminSettings() {
   const [itemsPerPage] = useState(15); // Much smaller chunks for better performance
   const [maxDisplayItems] = useState(10); // Maximum items to render in DOM at once
 
-  // Lazy loading with pagination: Only fetch data for the currently active tab
+  // Always call all hooks, but control their enabling based on active tab
   const storesQuery = useTableData('/api/stores', activeTab === 'stores', currentPage['stores'] || 1, itemsPerPage);
-  const positionsQuery = useTableData('/api/positions', activeTab === 'positions' || activeTab === 'staff', currentPage['positions'] || 1, itemsPerPage); // Positions needed for staff form
+  const positionsQuery = useTableData('/api/positions', activeTab === 'positions' || activeTab === 'staff', currentPage['positions'] || 1, itemsPerPage);
   const staffQuery = useTableData('/api/staff', activeTab === 'staff', currentPage['staff'] || 1, itemsPerPage);
 
   // Get positions data for staff form
@@ -602,6 +602,22 @@ export default function AdminSettings() {
 
     const { data: rawData, isLoading, error } = queryResult;
     
+    // Check for unauthorized error BEFORE any hooks
+    if (error && isUnauthorizedError(error)) {
+      console.error("Unauthorized access detected:", error);
+      return (
+        <div className="text-center py-8">
+          <p className="text-red-600 dark:text-red-400">Unauthorized access. Please log in again.</p>
+          <button 
+            onClick={() => window.location.replace("/api/login")}
+            className="mt-2 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+          >
+            Log In
+          </button>
+        </div>
+      );
+    }
+    
     // Handle both paginated and non-paginated data safely
     let actualData: any[] = [];
     
@@ -643,22 +659,6 @@ export default function AdminSettings() {
     }, [filteredData, maxDisplayItems]);
     
     const remainingCount = Math.max(0, filteredData.length - maxDisplayItems);
-
-    if (error && isUnauthorizedError(error)) {
-      // Handle unauthorized error with useEffect to avoid infinite renders
-      console.error("Unauthorized access detected:", error);
-      return (
-        <div className="text-center py-8">
-          <p className="text-red-600 dark:text-red-400">Unauthorized access. Please log in again.</p>
-          <button 
-            onClick={() => window.location.replace("/api/login")}
-            className="mt-2 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-          >
-            Log In
-          </button>
-        </div>
-      );
-    }
 
     return (
       <div className="space-y-6">

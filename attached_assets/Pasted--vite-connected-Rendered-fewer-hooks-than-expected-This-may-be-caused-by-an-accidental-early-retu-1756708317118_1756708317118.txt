@@ -1,0 +1,23 @@
+[vite] connected.
+Rendered fewer hooks than expected. This may be caused by an accidental early return statement.
+Rendered fewer hooks than expected. This may be caused by an accidental early return statement.
+The above error occurred in the <AdminSettings> component:
+
+    at AdminSettings (https://6d424213-9427-40f2-8fc6-925f4c8457aa-00-17309an86voer.kirk.replit.dev/src/pages/admin-settings.tsx:145:20)
+    at ProtectedRoute (https://6d424213-9427-40f2-8fc6-925f4c8457aa-00-17309an86voer.kirk.replit.dev/src/App.tsx?v=5e1bojcjdbzlNXWuJ4OFH:103:14)
+    at Route (https://6d424213-9427-40f2-8fc6-925f4c8457aa-00-17309an86voer.kirk.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/wouter.js?v=f8e83ab1:191:16)
+    at Switch (https://6d424213-9427-40f2-8fc6-925f4c8457aa-00-17309an86voer.kirk.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/wouter.js?v=f8e83ab1:247:17)
+    at Suspense
+    at Router (https://6d424213-9427-40f2-8fc6-925f4c8457aa-00-17309an86voer.kirk.replit.dev/src/App.tsx?v=5e1bojcjdbzlNXWuJ4OFH:128:31)
+    at Provider (https://6d424213-9427-40f2-8fc6-925f4c8457aa-00-17309an86voer.kirk.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/chunk-OXZDJRWN.js?v=f8e83ab1:38:15)
+    at TooltipProvider (https://6d424213-9427-40f2-8fc6-925f4c8457aa-00-17309an86voer.kirk.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/@radix-ui_react-tooltip.js?v=f8e83ab1:61:5)
+    at SidebarProvider (https://6d424213-9427-40f2-8fc6-925f4c8457aa-00-17309an86voer.kirk.replit.dev/src/hooks/useSidebar.tsx:20:35)
+    at GlobalStoreProvider (https://6d424213-9427-40f2-8fc6-925f4c8457aa-00-17309an86voer.kirk.replit.dev/src/hooks/useGlobalStore.tsx:21:39)
+    at AuthProvider (https://6d424213-9427-40f2-8fc6-925f4c8457aa-00-17309an86voer.kirk.replit.dev/src/hooks/useStoreAuth.tsx:38:32)
+    at ThemeProvider (https://6d424213-9427-40f2-8fc6-925f4c8457aa-00-17309an86voer.kirk.replit.dev/src/components/theme-provider.tsx:25:3)
+    at QueryClientProvider (https://6d424213-9427-40f2-8fc6-925f4c8457aa-00-17309an86voer.kirk.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/@tanstack_react-query.js?v=f8e83ab1:2805:3)
+    at App
+
+Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://reactjs.org/link/error-boundaries to learn more about error boundaries.
+Rendered fewer hooks than expected. This may be caused by an accidental early return statement.
