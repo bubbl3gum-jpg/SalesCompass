@@ -59,6 +59,7 @@ interface ItemLookup {
   availableQuantity: number;
   kelompok?: string;
   family?: string;
+  spDiscountPercentage?: number;
 }
 
 interface DiscountOption {
@@ -208,9 +209,11 @@ export function SalesEntryModal({ isOpen, onClose, selectedStore }: SalesEntryMo
     const maxQty = item.availableQuantity || 1;
     setAvailableQuantities(Array.from({ length: maxQty }, (_, i) => i + 1));
     
-    // Filter applicable discounts
+    // Filter applicable discounts and add SP discount if available
+    let discountOptions: DiscountOption[] = [];
+    
     if (allDiscounts) {
-      const applicableDiscounts = allDiscounts.filter((discount: any) => {
+      const regularDiscounts = allDiscounts.filter((discount: any) => {
         // Check if discount is active
         const now = new Date();
         const startDate = discount.startFrom ? new Date(discount.startFrom) : null;
@@ -222,8 +225,21 @@ export function SalesEntryModal({ isOpen, onClose, selectedStore }: SalesEntryMo
         return true;
       });
       
-      setApplicableDiscounts(applicableDiscounts);
+      discountOptions = regularDiscounts || [];
     }
+
+    // Add SP as a discount option if it exists and is lower than normal price
+    if (item.sp && item.spDiscountPercentage && item.spDiscountPercentage > 0) {
+      const spDiscount: DiscountOption = {
+        discountId: -1, // Special ID for SP discount
+        discountName: `Special Price (SP)`,
+        discountType: 'SP',
+        percentage: item.spDiscountPercentage,
+      };
+      discountOptions.unshift(spDiscount); // Add at the beginning
+    }
+    
+    setApplicableDiscounts(discountOptions);
     
     // Default quantity to 1
     form.setValue('quantity', '1');

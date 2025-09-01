@@ -869,6 +869,10 @@ export class DatabaseStorage implements IStorage {
       availableQuantity: item.qty,
       kelompok: item.kelompok,
       family: item.family,
+      // Calculate sp discount percentage if sp exists and is less than normal price
+      spDiscountPercentage: (item.sp && item.normalPrice && Number(item.sp) < Number(item.normalPrice)) 
+        ? Math.round(((Number(item.normalPrice) - Number(item.sp)) / Number(item.normalPrice)) * 100) 
+        : null,
     }));
   }
 
@@ -911,6 +915,10 @@ export class DatabaseStorage implements IStorage {
       availableQuantity: item.qty,
       kelompok: item.kelompok,
       family: item.family,
+      // Calculate sp discount percentage if sp exists and is less than normal price
+      spDiscountPercentage: (item.sp && item.normalPrice && Number(item.sp) < Number(item.normalPrice)) 
+        ? Math.round(((Number(item.normalPrice) - Number(item.sp)) / Number(item.normalPrice)) * 100) 
+        : null,
     }));
   }
 }
