@@ -144,56 +144,73 @@ export function SalesEntryModal({ isOpen, onClose, selectedStore }: SalesEntryMo
     
     setIsLoadingItems(true);
     try {
-      // Get items with this serial number from reference sheet
-      const referenceResponse = await fetch(`/api/reference-sheets?search=${encodeURIComponent(serialNumber)}`);
-      if (!referenceResponse.ok) throw new Error('Failed to lookup items');
+      // First, search for items by serial number in pricelist
+      const priceResponse = await fetch(`/api/pricelist`, { credentials: 'include' });
+      if (!priceResponse.ok) throw new Error('Failed to get pricelist');
       
-      const referenceItems = await referenceResponse.json();
-      const matchingItems = referenceItems.filter((item: any) => 
-        item.sn === serialNumber || item.kodeItem?.includes(serialNumber)
+      const priceList = await priceResponse.json();
+      const matchingPriceItems = priceList.filter((price: any) => 
+        price.sn === serialNumber
       );
+
+      // If no exact serial number match, try searching by item code in reference sheet
+      let matchingItems: any[] = [];
+      
+      if (matchingPriceItems.length > 0) {
+        // Get item details from reference sheet for matched serial numbers
+        const referenceResponse = await fetch(`/api/reference-sheets`, { credentials: 'include' });
+        if (!referenceResponse.ok) throw new Error('Failed to lookup items');
+        
+        const referenceItems = await referenceResponse.json();
+        matchingItems = matchingPriceItems.map((priceItem: any) => {
+          const refItem = referenceItems.find((ref: any) => ref.kodeItem === priceItem.kodeItem);
+          return {
+            kodeItem: priceItem.kodeItem,
+            namaItem: refItem?.namaItem || priceItem.kodeItem,
+            normalPrice: priceItem.normalPrice || 0,
+            sp: priceItem.sp,
+            availableQuantity: 1,
+          };
+        });
+      } else {
+        // Try searching by item code in reference sheet if no serial number found
+        const referenceResponse = await fetch(`/api/reference-sheets?search=${encodeURIComponent(serialNumber)}`, { credentials: 'include' });
+        if (!referenceResponse.ok) throw new Error('Failed to lookup items');
+        
+        const referenceItems = await referenceResponse.json();
+        const itemCodeMatches = referenceItems.filter((item: any) => 
+          item.kodeItem?.includes(serialNumber)
+        );
+
+        matchingItems = itemCodeMatches.map((item: any) => {
+          const priceItem = priceList.find((price: any) => 
+            price.kodeItem === item.kodeItem
+          );
+
+          return {
+            kodeItem: item.kodeItem,
+            namaItem: item.namaItem,
+            normalPrice: priceItem?.normalPrice || 0,
+            sp: priceItem?.sp,
+            availableQuantity: 1,
+          };
+        });
+      }
 
       if (matchingItems.length === 0) {
         toast({
           title: "Item Not Found",
-          description: "No items found with this serial number",
+          description: "No items found with this serial number or item code",
           variant: "destructive",
         });
         return;
       }
 
-      // Get price information
-      const priceResponse = await fetch(`/api/pricelist`);
-      const priceList = priceResponse.ok ? await priceResponse.json() : [];
-
-      const itemsWithStock = matchingItems.map((item: any) => {
-        const priceItem = priceList.find((price: any) => 
-          price.kodeItem === item.kodeItem || price.sn === serialNumber
-        );
-
-        return {
-          kodeItem: item.kodeItem,
-          namaItem: item.namaItem,
-          normalPrice: priceItem?.normalPrice || 0,
-          sp: priceItem?.sp,
-          availableQuantity: 1, // Default to 1 since we're using transfers-based stock tracking
-        };
-      });
-
-      if (itemsWithStock.length === 0) {
-        toast({
-          title: "No Stock Available",
-          description: "No stock available for items with this serial number",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      setItemOptions(itemsWithStock);
+      setItemOptions(matchingItems);
       
       // If only one item, auto-select it
-      if (itemsWithStock.length === 1) {
-        selectItem(itemsWithStock[0]);
+      if (matchingItems.length === 1) {
+        selectItem(matchingItems[0]);
       }
       
     } catch (error) {
@@ -377,7 +394,7 @@ export function SalesEntryModal({ isOpen, onClose, selectedStore }: SalesEntryMo
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem value="ALL_STORE">All Stores</SelectItem>
+                          <SelectItem key="all-stores-modal" value="ALL_STORE">All Stores</SelectItem>
                           {storesArray?.map((store: any) => (
                             <SelectItem key={store.kodeGudang} value={store.kodeGudang}>
                               {store.namaGudang}

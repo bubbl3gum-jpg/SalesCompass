@@ -1663,16 +1663,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/reference-sheets', authenticate, async (req, res) => {
+  app.get('/api/reference-sheets', isAuthenticated, async (req, res) => {
     try {
+      const { search } = req.query;
       const referenceSheets = await storage.getReferenceSheets();
-      res.json(referenceSheets);
+      
+      // If search parameter provided, filter results
+      if (search && typeof search === 'string') {
+        const searchTerm = search.toLowerCase();
+        const filteredSheets = referenceSheets.filter(item => 
+          item.kodeItem?.toLowerCase().includes(searchTerm) ||
+          item.namaItem?.toLowerCase().includes(searchTerm) ||
+          item.kelompok?.toLowerCase().includes(searchTerm) ||
+          item.family?.toLowerCase().includes(searchTerm)
+        );
+        res.json(filteredSheets);
+      } else {
+        res.json(referenceSheets);
+      }
     } catch (error) {
       res.status(500).json({ message: 'Failed to get reference sheets' });
     }
   });
 
-  app.post('/api/reference-sheets', authenticate, checkRole(['System Administrator']), async (req, res) => {
+  app.post('/api/reference-sheets', isAuthenticated, checkRole(['System Administrator']), async (req, res) => {
     try {
       const validatedData = insertReferenceSheetSchema.parse(req.body);
       const referenceSheet = await storage.createReferenceSheet(validatedData);
@@ -1687,7 +1701,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put('/api/reference-sheets/:refId', authenticate, checkRole(['System Administrator']), async (req, res) => {
+  app.put('/api/reference-sheets/:refId', isAuthenticated, checkRole(['System Administrator']), async (req, res) => {
     try {
       const { refId } = req.params;
       const validatedData = insertReferenceSheetSchema.partial().parse(req.body);
@@ -1703,7 +1717,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete('/api/reference-sheets/:refId', authenticate, checkRole(['System Administrator']), async (req, res) => {
+  app.delete('/api/reference-sheets/:refId', isAuthenticated, checkRole(['System Administrator']), async (req, res) => {
     try {
       const { refId } = req.params;
       await storage.deleteReferenceSheet(refId);

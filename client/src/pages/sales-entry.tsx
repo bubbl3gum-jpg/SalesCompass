@@ -122,7 +122,7 @@ export default function SalesEntry() {
                     <SelectValue placeholder="Choose your store..." />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="ALL_STORE">All Stores</SelectItem>
+                    <SelectItem key="all-stores-select" value="ALL_STORE">All Stores</SelectItem>
                     {stores.map((store: any) => (
                       <SelectItem key={store.kodeGudang} value={store.kodeGudang}>
                         {store.namaGudang}
