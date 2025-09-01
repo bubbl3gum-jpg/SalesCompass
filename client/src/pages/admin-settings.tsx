@@ -294,7 +294,7 @@ export default function AdminSettings() {
     if (config?.name === 'staff') {
       const updatedConfig = { ...config };
       const jabatanField = updatedConfig.fields.find(f => f.key === 'jabatan');
-      if (jabatanField) {
+      if (jabatanField && Array.isArray(positions) && positions.length > 0) {
         jabatanField.options = positions.map((pos: any) => ({
           value: pos.positionName,
           label: pos.positionName
