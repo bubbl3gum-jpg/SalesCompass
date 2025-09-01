@@ -1499,6 +1499,97 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Bulk stock upload endpoint
+  app.post('/api/admin/bulk-stock-upload', authenticate, checkRole(['System Administrator']), async (req, res) => {
+    try {
+      const { stockData } = req.body;
+      
+      if (!stockData || !Array.isArray(stockData)) {
+        return res.status(400).json({ message: 'Invalid stock data format' });
+      }
+
+      const results = {
+        processed: 0,
+        created: 0,
+        errors: [] as any[]
+      };
+
+      // Ensure SYSTEM store exists for initial stock entries
+      const systemStoreCode = 'SYSTEM';
+      let systemStore;
+      try {
+        const stores = await storage.getStores();
+        systemStore = stores.find(s => s.kodeGudang === systemStoreCode);
+        
+        if (!systemStore) {
+          systemStore = await storage.createStore({
+            kodeGudang: systemStoreCode,
+            namaGudang: 'System Initial Stock',
+            jenisGudang: 'SYSTEM',
+            storePassword: 'system123'
+          });
+        }
+      } catch (error) {
+        console.error('Error ensuring system store:', error);
+        return res.status(500).json({ message: 'Failed to setup system store' });
+      }
+
+      // Process each stock record
+      for (const stockRecord of stockData) {
+        try {
+          results.processed++;
+          
+          const { kodeGudang, kodeItem, namaItem, sn, qty } = stockRecord;
+          
+          if (!kodeGudang || !kodeItem || !qty || qty <= 0) {
+            results.errors.push({
+              row: results.processed,
+              error: 'Missing required fields (kodeGudang, kodeItem, qty > 0)'
+            });
+            continue;
+          }
+
+          // Generate transfer order number
+          const timestamp = Date.now();
+          const toNumber = `BULK-${timestamp}-${results.processed}`;
+
+          // Create transfer order from SYSTEM to target store
+          await storage.createTransferOrder({
+            toNumber,
+            dariGudang: systemStoreCode,
+            keGudang: kodeGudang,
+            tanggal: new Date().toISOString().split('T')[0]
+          });
+
+          // Create transfer item
+          await storage.createToItemList({
+            toNumber,
+            kodeItem,
+            namaItem: namaItem || kodeItem,
+            sn: sn || null,
+            qty: parseInt(qty)
+          });
+
+          results.created++;
+        } catch (error) {
+          console.error(`Error processing stock record ${results.processed}:`, error);
+          results.errors.push({
+            row: results.processed,
+            error: error instanceof Error ? error.message : 'Unknown error'
+          });
+        }
+      }
+
+      res.json({
+        message: `Bulk stock upload completed. Created ${results.created} transfer orders.`,
+        results
+      });
+    } catch (error) {
+      console.error('Bulk stock upload error:', error);
+      res.status(500).json({ message: 'Failed to process bulk stock upload' });
+    }
+  });
+
   // Master data endpoints
   app.get('/api/stores', authenticate, async (req, res) => {
     try {

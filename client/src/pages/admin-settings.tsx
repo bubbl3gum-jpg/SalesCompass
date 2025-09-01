@@ -142,6 +142,13 @@ export default function AdminSettings() {
   const { shouldUseGlobalStore } = useGlobalStore();
 
   const [activeTab, setActiveTab] = useState('stores');
+  const [showBulkUploadModal, setShowBulkUploadModal] = useState(false);
+  const [bulkUploadFile, setBulkUploadFile] = useState<File | null>(null);
+  const [bulkUploadData, setBulkUploadData] = useState<any[]>([]);
+  const [bulkUploadProgress, setBulkUploadProgress] = useState<{ 
+    uploading: boolean; 
+    results: { processed: number; created: number; errors: any[] } | null 
+  }>({ uploading: false, results: null });
   const [currentPage, setCurrentPage] = useState<Record<string, number>>({});
   const [itemsPerPage] = useState(15); // Much smaller chunks for better performance
   const [maxDisplayItems] = useState(10); // Maximum items to render in DOM at once
@@ -424,6 +431,91 @@ export default function AdminSettings() {
       queryClient.invalidateQueries({ queryKey: [config.endpoint] });
     }
     setShowImportModal(false);
+  };
+
+  // Bulk upload functions
+  const handleBulkFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setBulkUploadFile(file);
+      setBulkUploadProgress({ uploading: false, results: null });
+    }
+  };
+
+  const processBulkUpload = async () => {
+    if (!bulkUploadFile) return;
+
+    setBulkUploadProgress({ uploading: true, results: null });
+
+    try {
+      // Parse CSV/Excel file
+      const text = await bulkUploadFile.text();
+      const lines = text.split('\n').filter(line => line.trim());
+      
+      if (lines.length < 2) {
+        throw new Error('File must contain at least header and one data row');
+      }
+
+      // Parse header
+      const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+      const requiredHeaders = ['kodegudang', 'kodeitem', 'qty'];
+      
+      for (const required of requiredHeaders) {
+        if (!headers.includes(required)) {
+          throw new Error(`Missing required column: ${required}`);
+        }
+      }
+
+      // Parse data rows
+      const stockData = [];
+      for (let i = 1; i < lines.length; i++) {
+        const values = lines[i].split(',').map(v => v.trim());
+        if (values.length === 0 || !values[0]) continue;
+
+        const record: any = {};
+        headers.forEach((header, index) => {
+          record[header] = values[index] || '';
+        });
+
+        // Map to expected field names
+        stockData.push({
+          kodeGudang: record.kodegudang,
+          kodeItem: record.kodeitem,
+          namaItem: record.namaitem || record.kodeitem,
+          qty: parseInt(record.qty) || 0,
+          sn: record.sn || null
+        });
+      }
+
+      // Send to backend
+      const response = await apiRequest('POST', '/api/admin/bulk-stock-upload', { stockData });
+      const data = await response.json();
+      
+      setBulkUploadProgress({ 
+        uploading: false, 
+        results: data.results 
+      });
+
+      toast({
+        title: "Success",
+        description: data.message || "Bulk stock upload completed",
+      });
+
+      // Clear file input
+      setBulkUploadFile(null);
+      const fileInput = document.getElementById('bulk-upload-file') as HTMLInputElement;
+      if (fileInput) fileInput.value = '';
+
+    } catch (error) {
+      console.error('Bulk upload error:', error);
+      setBulkUploadProgress({ uploading: false, results: null });
+      
+      toast({
+        title: "Upload Failed",
+        description: error instanceof Error ? error.message : "Failed to process bulk upload",
+        variant: "destructive",
+      });
+    }
   };
 
   // Render field value based on field type  
@@ -769,10 +861,11 @@ export default function AdminSettings() {
             </div>
 
             <Tabs value={activeTab} onValueChange={handleTabChange}>
-              <TabsList className="grid w-full grid-cols-3 bg-white/10 dark:bg-black/10 backdrop-blur-xl border-white/20 dark:border-gray-800/50">
+              <TabsList className="grid w-full grid-cols-4 bg-white/10 dark:bg-black/10 backdrop-blur-xl border-white/20 dark:border-gray-800/50">
                 <TabsTrigger value="stores" data-testid="tab-stores">Stores</TabsTrigger>
                 <TabsTrigger value="positions" data-testid="tab-positions">Positions</TabsTrigger>
                 <TabsTrigger value="staff" data-testid="tab-staff">Staff</TabsTrigger>
+                <TabsTrigger value="bulk-upload" data-testid="tab-bulk-upload">Bulk Stock Upload</TabsTrigger>
               </TabsList>
 
               {tableConfigs.map((config) => (
@@ -785,6 +878,127 @@ export default function AdminSettings() {
                   )}
                 </TabsContent>
               ))}
+              
+              {/* Bulk Stock Upload Tab */}
+              <TabsContent value="bulk-upload" className="mt-6">
+                {activeTab === 'bulk-upload' ? (
+                  <Card className="bg-white/80 dark:bg-gray-900/80 backdrop-blur-xl border-white/20 dark:border-gray-800/50">
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2 text-gray-900 dark:text-white">
+                        <Upload className="w-5 h-5" />
+                        Bulk Stock Upload
+                      </CardTitle>
+                      <p className="text-gray-600 dark:text-gray-400">
+                        Upload stock data for all stores at once. This creates transfer orders from a system store to populate initial inventory.
+                      </p>
+                    </CardHeader>
+                    <CardContent className="space-y-6">
+                      {/* File Format Instructions */}
+                      <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4">
+                        <h4 className="font-medium text-blue-800 dark:text-blue-200 mb-2">
+                          📄 Required File Format (CSV/Excel)
+                        </h4>
+                        <div className="text-sm text-blue-700 dark:text-blue-300 space-y-2">
+                          <p><strong>Required Columns:</strong></p>
+                          <ul className="list-disc list-inside space-y-1 ml-4">
+                            <li><strong>kodeGudang:</strong> Store code (must exist in system)</li>
+                            <li><strong>kodeItem:</strong> Item code</li>
+                            <li><strong>namaItem:</strong> Item name (optional, will use kodeItem if not provided)</li>
+                            <li><strong>qty:</strong> Quantity (must be greater than 0)</li>
+                            <li><strong>sn:</strong> Serial number (optional)</li>
+                          </ul>
+                          <p className="mt-3"><strong>Example:</strong></p>
+                          <div className="bg-white dark:bg-gray-800 rounded p-2 font-mono text-xs">
+                            kodeGudang,kodeItem,namaItem,qty,sn<br/>
+                            B-CGI,ITEM001,Sample Item 1,10,SN001<br/>
+                            B-CGI,ITEM002,Sample Item 2,5,<br/>
+                            B-C.SC,ITEM001,Sample Item 1,15,SN002
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* File Upload */}
+                      <div className="space-y-4">
+                        <div>
+                          <Label htmlFor="bulk-upload-file">Upload Stock File</Label>
+                          <Input
+                            id="bulk-upload-file"
+                            type="file"
+                            accept=".csv,.xlsx,.xls"
+                            onChange={handleBulkFileChange}
+                            disabled={bulkUploadProgress.uploading}
+                            data-testid="input-bulk-upload-file"
+                          />
+                        </div>
+
+                        {bulkUploadFile && (
+                          <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded">
+                            <span className="text-sm text-gray-600 dark:text-gray-400">
+                              {bulkUploadFile.name} ({(bulkUploadFile.size / 1024).toFixed(1)} KB)
+                            </span>
+                            <Button
+                              size="sm"
+                              onClick={processBulkUpload}
+                              disabled={bulkUploadProgress.uploading}
+                              data-testid="button-process-upload"
+                            >
+                              {bulkUploadProgress.uploading ? 'Processing...' : 'Process Upload'}
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Progress and Results */}
+                      {bulkUploadProgress.results && (
+                        <div className="space-y-4">
+                          <div className={`p-4 rounded-lg ${
+                            bulkUploadProgress.results.errors.length === 0 
+                              ? 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800'
+                              : 'bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800'
+                          }`}>
+                            <h4 className="font-medium mb-2">Upload Results</h4>
+                            <div className="text-sm space-y-1">
+                              <p>✅ Processed: {bulkUploadProgress.results.processed} records</p>
+                              <p>✅ Created: {bulkUploadProgress.results.created} transfer orders</p>
+                              {bulkUploadProgress.results.errors.length > 0 && (
+                                <p className="text-red-600 dark:text-red-400">
+                                  ❌ Errors: {bulkUploadProgress.results.errors.length}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+
+                          {bulkUploadProgress.results.errors.length > 0 && (
+                            <div className="bg-red-50 dark:bg-red-900/20 rounded-lg p-4 border border-red-200 dark:border-red-800">
+                              <h4 className="font-medium text-red-800 dark:text-red-200 mb-2">Errors</h4>
+                              <div className="text-sm text-red-700 dark:text-red-300 space-y-1 max-h-40 overflow-y-auto">
+                                {bulkUploadProgress.results.errors.map((error: any, index: number) => (
+                                  <p key={index}>Row {error.row}: {error.error}</p>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Warning */}
+                      <div className="bg-amber-50 dark:bg-amber-900/20 rounded-lg p-4 border border-amber-200 dark:border-amber-800">
+                        <h4 className="font-medium text-amber-800 dark:text-amber-200 mb-2">⚠️ Important Notes</h4>
+                        <div className="text-sm text-amber-700 dark:text-amber-300 space-y-1">
+                          <p>• This action creates transfer orders from a SYSTEM store to populate initial inventory</p>
+                          <p>• Make sure all store codes in your file exist in the system</p>
+                          <p>• This is typically used for initial stock setup or bulk inventory adjustments</p>
+                          <p>• Review the transfer orders in the Transfers page after upload</p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ) : (
+                  <div className="flex items-center justify-center h-32">
+                    <p className="text-gray-500 dark:text-gray-400">Click to load Bulk Stock Upload</p>
+                  </div>
+                )}
+              </TabsContent>
             </Tabs>
           </div>
         </div>
