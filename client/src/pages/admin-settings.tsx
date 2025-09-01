@@ -136,6 +136,12 @@ function useTableData(endpoint: string, enabled = true, page = 1, limit = 100) {
 
 export default function AdminSettings() {
   const { user } = useStoreAuth();
+  
+  // Early return check BEFORE any other hooks
+  if (!user) {
+    return <div>Please log in to access admin settings.</div>;
+  }
+  
   const { isExpanded } = useSidebar();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -839,10 +845,6 @@ export default function AdminSettings() {
       </div>
     );
   }, [selectedItems, searchQueries, storesQuery, positionsQuery, staffQuery, handleSelectAll, handleSelectItem]);
-
-  if (!user) {
-    return <div>Please log in to access admin settings.</div>;
-  }
 
   return (
     <div className="flex h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 dark:from-gray-900 dark:via-blue-900 dark:to-indigo-950">
