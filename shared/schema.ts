@@ -103,18 +103,6 @@ export const storeDiscounts = pgTable("store_discounts", {
   index("uq_store_discount").on(table.kodeGudang, table.discountId),
 ]);
 
-// Opening Stock
-export const openingStock = pgTable("opening_stock", {
-  itemId: integer("item_id").primaryKey().generatedByDefaultAsIdentity(),
-  sn: varchar("sn", { length: 100 }),
-  kodeItem: varchar("kode_item", { length: 50 }),
-  kelompok: varchar("kelompok", { length: 50 }),
-  family: varchar("family", { length: 50 }),
-  deskripsiMaterial: varchar("deskripsi_material", { length: 255 }),
-  kodeMotif: varchar("kode_motif", { length: 50 }),
-  namaItem: varchar("nama_item", { length: 255 }),
-  qty: integer("qty"),
-});
 
 // EDC
 export const edc = pgTable("edc", {
@@ -263,8 +251,6 @@ export type DiscountType = typeof discountTypes.$inferSelect;
 export type InsertPricelist = typeof pricelist.$inferInsert;
 export type Pricelist = typeof pricelist.$inferSelect;
 
-export type InsertOpeningStock = typeof openingStock.$inferInsert;
-export type OpeningStock = typeof openingStock.$inferSelect;
 
 export type InsertLaporanPenjualan = typeof laporanPenjualan.$inferInsert;
 export type LaporanPenjualan = typeof laporanPenjualan.$inferSelect;
@@ -306,7 +292,6 @@ export const insertDiscountTypeSchema = createInsertSchema(discountTypes).omit({
   discountAmount: z.coerce.number().min(0, "Discount amount must be positive")
 });
 export const insertPricelistSchema = createInsertSchema(pricelist).omit({ pricelistId: true });
-export const insertOpeningStockSchema = createInsertSchema(openingStock).omit({ itemId: true });
 export const insertLaporanPenjualanSchema = createInsertSchema(laporanPenjualan).omit({ penjualanId: true });
 export const insertSettlementSchema = createInsertSchema(settlements).omit({ settlementId: true });
 export const insertTransferOrderSchema = createInsertSchema(transferOrders);

@@ -64,12 +64,6 @@ const navigationItems = [
         permission: "admin:settings"
       },
       {
-        name: "Opening Stock",
-        href: "/opening-stock",
-        icon: "fas fa-boxes",
-        permission: "opening_stock:read"
-      },
-      {
         name: "Stock Opname",
         href: "/stock-opname",
         icon: "fas fa-clipboard-check",

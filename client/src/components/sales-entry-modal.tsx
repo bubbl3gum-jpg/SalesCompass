@@ -162,19 +162,11 @@ export function SalesEntryModal({ isOpen, onClose, selectedStore }: SalesEntryMo
         return;
       }
 
-      // Get opening stock quantities for each matching item
-      const openingStockResponse = await fetch(`/api/opening-stock`);
-      const openingStock = openingStockResponse.ok ? await openingStockResponse.json() : [];
-      
       // Get price information
       const priceResponse = await fetch(`/api/pricelist`);
       const priceList = priceResponse.ok ? await priceResponse.json() : [];
 
       const itemsWithStock = matchingItems.map((item: any) => {
-        const stockItem = openingStock.find((stock: any) => 
-          stock.kodeItem === item.kodeItem && stock.kodeGudang === storeCode
-        );
-        
         const priceItem = priceList.find((price: any) => 
           price.kodeItem === item.kodeItem || price.sn === serialNumber
         );
@@ -184,9 +176,9 @@ export function SalesEntryModal({ isOpen, onClose, selectedStore }: SalesEntryMo
           namaItem: item.namaItem,
           normalPrice: priceItem?.normalPrice || 0,
           sp: priceItem?.sp,
-          availableQuantity: stockItem?.qty || 0,
+          availableQuantity: 1, // Default to 1 since we're using transfers-based stock tracking
         };
-      }).filter((item: ItemLookup) => item.availableQuantity > 0);
+      });
 
       if (itemsWithStock.length === 0) {
         toast({
@@ -234,7 +226,7 @@ export function SalesEntryModal({ isOpen, onClose, selectedStore }: SalesEntryMo
 
   // Load applicable discounts
   const loadApplicableDiscounts = (kodeItem: string, storeCode: string) => {
-    if (!hasPermission || !hasPermission("discount:read") || !allDiscounts) {
+    if (!hasPermission || !hasPermission("discount:read") || !allDiscounts || !Array.isArray(allDiscounts)) {
       setApplicableDiscounts([]);
       return;
     }
@@ -281,7 +273,6 @@ export function SalesEntryModal({ isOpen, onClose, selectedStore }: SalesEntryMo
       });
       queryClient.invalidateQueries({ queryKey: ["/api/sales"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/metrics"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/opening-stock"] });
       onClose();
     },
     onError: (error) => {

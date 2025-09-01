@@ -63,11 +63,6 @@ export default function StockOpname() {
     retry: false,
   });
 
-  // Get opening stock for comparison
-  const { data: openingStock, isLoading: openingStockLoading } = useQuery<any[]>({
-    queryKey: ["/api/opening-stock"],
-    retry: false,
-  });
 
   useEffect(() => {
     if (soError && isUnauthorizedError(soError as Error)) {
@@ -197,12 +192,6 @@ export default function StockOpname() {
     });
   };
 
-  // Compare stock opname with opening stock
-  const getVariance = (kodeItem: string, soQty: number) => {
-    const openingStockItem = openingStock?.find((item: any) => item.kodeItem === kodeItem);
-    const systemQty = openingStockItem?.qty || 0;
-    return soQty - systemQty;
-  };
 
   if (isLoading) {
     return (
@@ -388,43 +377,6 @@ export default function StockOpname() {
             </CardContent>
           </Card>
 
-          {/* Variance Analysis */}
-          {openingStock && openingStock.length > 0 && (
-            <Card className="bg-white/20 dark:bg-black/20 backdrop-blur-xl border border-white/20 dark:border-gray-800/50">
-              <CardHeader>
-                <CardTitle className="text-gray-900 dark:text-white">Opening Stock Reference</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-gray-200 dark:border-gray-700">
-                        <th className="text-left py-2 font-medium text-gray-900 dark:text-white">Item Code</th>
-                        <th className="text-left py-2 font-medium text-gray-900 dark:text-white">Item Name</th>
-                        <th className="text-left py-2 font-medium text-gray-900 dark:text-white">Serial Number</th>
-                        <th className="text-right py-2 font-medium text-gray-900 dark:text-white">System Qty</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {openingStock.slice(0, 10).map((item: any) => (
-                        <tr key={item.itemId} className="border-b border-gray-100 dark:border-gray-800">
-                          <td className="py-2 text-gray-900 dark:text-white">{item.kodeItem}</td>
-                          <td className="py-2 text-gray-900 dark:text-white">{item.namaItem}</td>
-                          <td className="py-2 text-gray-500 dark:text-gray-400">{item.sn || '-'}</td>
-                          <td className="py-2 text-right text-gray-900 dark:text-white">{item.qty}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  {openingStock.length > 10 && (
-                    <p className="text-center py-2 text-sm text-gray-500 dark:text-gray-400">
-                      And {openingStock.length - 10} more items...
-                    </p>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          )}
         </main>
       </div>
 

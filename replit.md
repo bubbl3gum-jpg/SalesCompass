@@ -6,6 +6,8 @@ This is a comprehensive Live Sales Recap & Stock management system built with mo
 
 The system supports 6 different user roles (SPG, Supervisor, Stockist, Sales Administrator, Finance, System Administrator) with specific permissions and access levels. It includes sophisticated price resolution logic, transfer order management, settlement processing, and comprehensive reporting features.
 
+**Recent Architecture Change (September 1, 2025)**: Completely transitioned from opening stock-based inventory tracking to a transfers-only system. All opening stock functionality has been removed from the frontend, backend, database schema, and user permissions. Stock levels are now determined exclusively through transfer orders between stores.
+
 ## User Preferences
 
 Preferred communication style: Simple, everyday language.
