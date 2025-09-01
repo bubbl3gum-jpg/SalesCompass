@@ -97,6 +97,7 @@ export interface IStorage {
   getPriceBySerial(serialNumber: string): Promise<Pricelist | undefined>;
   getPriceByKodeItem(kodeItem: string): Promise<Pricelist | undefined>;
   getPricesByFamilyAndMaterial(family: string, deskripsiMaterial: string): Promise<Pricelist[]>;
+  getEnhancedPriceForItem(kodeItem: string, serialNumber?: string): Promise<Pricelist | undefined>;
 
   // Sales operations
   createSale(data: InsertLaporanPenjualan): Promise<LaporanPenjualan>;
@@ -466,6 +467,71 @@ export class DatabaseStorage implements IStorage {
         eq(pricelist.deskripsiMaterial, deskripsiMaterial)
       )
     );
+  }
+
+  // Enhanced price resolution that uses reference_sheet for hierarchical lookup
+  async getEnhancedPriceForItem(kodeItem: string, serialNumber?: string): Promise<Pricelist | undefined> {
+    // Strategy 1: Try exact serial number match if provided
+    if (serialNumber) {
+      const serialPrice = await this.getPriceBySerial(serialNumber);
+      if (serialPrice && serialPrice.normalPrice) {
+        return serialPrice;
+      }
+    }
+
+    // Strategy 2: Try exact kode_item match
+    const itemPrice = await this.getPriceByKodeItem(kodeItem);
+    if (itemPrice && itemPrice.normalPrice) {
+      return itemPrice;
+    }
+
+    // Strategy 3: Get item details from reference_sheet for hierarchical lookup
+    const [refItem] = await db.select().from(referenceSheet).where(eq(referenceSheet.kodeItem, kodeItem));
+    if (!refItem) {
+      return undefined;
+    }
+
+    // Strategy 4: Try family + deskripsi_material match (best fit)
+    if (refItem.family && refItem.deskripsiMaterial) {
+      const [familyMaterialPrice] = await db.select().from(pricelist).where(
+        and(
+          eq(pricelist.family, refItem.family),
+          eq(pricelist.deskripsiMaterial, refItem.deskripsiMaterial),
+          sql`${pricelist.normalPrice} IS NOT NULL`
+        )
+      );
+      if (familyMaterialPrice) {
+        return familyMaterialPrice;
+      }
+    }
+
+    // Strategy 5: Try family match
+    if (refItem.family) {
+      const [familyPrice] = await db.select().from(pricelist).where(
+        and(
+          eq(pricelist.family, refItem.family),
+          sql`${pricelist.normalPrice} IS NOT NULL`
+        )
+      );
+      if (familyPrice) {
+        return familyPrice;
+      }
+    }
+
+    // Strategy 6: Try kelompok match
+    if (refItem.kelompok) {
+      const [kelompokPrice] = await db.select().from(pricelist).where(
+        and(
+          eq(pricelist.kelompok, refItem.kelompok),
+          sql`${pricelist.normalPrice} IS NOT NULL`
+        )
+      );
+      if (kelompokPrice) {
+        return kelompokPrice;
+      }
+    }
+
+    return undefined;
   }
 
   async updatePricelist(pricelistId: number, data: Partial<InsertPricelist>): Promise<Pricelist> {
@@ -846,14 +912,9 @@ export class DatabaseStorage implements IStorage {
         qty: toItemList.qty,
         toNumber: toItemList.toNumber,
         keGudang: transferOrders.keGudang,
-        normalPrice: pricelist.normalPrice,
-        sp: pricelist.sp,
-        kelompok: pricelist.kelompok,
-        family: pricelist.family,
       })
       .from(toItemList)
       .leftJoin(transferOrders, eq(toItemList.toNumber, transferOrders.toNumber))
-      .leftJoin(pricelist, eq(toItemList.kodeItem, pricelist.kodeItem))
       .where(
         and(
           eq(toItemList.sn, serialNumber),
@@ -861,24 +922,32 @@ export class DatabaseStorage implements IStorage {
         )
       );
 
-    return results.map(item => ({
-      kodeItem: item.kodeItem,
-      namaItem: item.namaItem,
-      normalPrice: item.normalPrice || 0,
-      sp: item.sp,
-      availableQuantity: item.qty,
-      kelompok: item.kelompok,
-      family: item.family,
-      // Calculate sp discount percentage if sp exists and is less than normal price
-      spDiscountPercentage: (item.sp && item.normalPrice && Number(item.sp) < Number(item.normalPrice)) 
-        ? Math.round(((Number(item.normalPrice) - Number(item.sp)) / Number(item.normalPrice)) * 100) 
-        : null,
+    // Use enhanced price resolution for each item
+    const enhancedResults = await Promise.all(results.map(async (item) => {
+      const priceInfo = item.kodeItem ? await this.getEnhancedPriceForItem(item.kodeItem, item.sn || undefined) : null;
+      
+      return {
+        kodeItem: item.kodeItem,
+        namaItem: item.namaItem,
+        normalPrice: priceInfo?.normalPrice ? Number(priceInfo.normalPrice) : 0,
+        sp: priceInfo?.sp ? Number(priceInfo.sp) : null,
+        availableQuantity: item.qty,
+        kelompok: priceInfo?.kelompok || null,
+        family: priceInfo?.family || null,
+        // Calculate sp discount percentage if sp exists and is less than normal price
+        spDiscountPercentage: (priceInfo?.sp && priceInfo?.normalPrice && Number(priceInfo.sp) < Number(priceInfo.normalPrice)) 
+          ? Math.round(((Number(priceInfo.normalPrice) - Number(priceInfo.sp)) / Number(priceInfo.normalPrice)) * 100) 
+          : null,
+      };
     }));
+
+    return enhancedResults;
   }
 
   async searchInventoryByDetails(storeCode: string, searchQuery: string): Promise<any[]> {
     const searchLower = searchQuery.toLowerCase();
     
+    // First get inventory items, then join with reference_sheet for better search
     const results = await db
       .select({
         kodeItem: toItemList.kodeItem,
@@ -887,39 +956,44 @@ export class DatabaseStorage implements IStorage {
         qty: toItemList.qty,
         toNumber: toItemList.toNumber,
         keGudang: transferOrders.keGudang,
-        normalPrice: pricelist.normalPrice,
-        sp: pricelist.sp,
-        kelompok: pricelist.kelompok,
-        family: pricelist.family,
+        kelompok: referenceSheet.kelompok,
+        family: referenceSheet.family,
       })
       .from(toItemList)
       .leftJoin(transferOrders, eq(toItemList.toNumber, transferOrders.toNumber))
-      .leftJoin(pricelist, eq(toItemList.kodeItem, pricelist.kodeItem))
+      .leftJoin(referenceSheet, eq(toItemList.kodeItem, referenceSheet.kodeItem))
       .where(
         and(
           or(
             ilike(toItemList.kodeItem, `%${searchQuery}%`),
             ilike(toItemList.namaItem, `%${searchQuery}%`),
-            ilike(pricelist.kelompok, `%${searchQuery}%`),
-            ilike(pricelist.family, `%${searchQuery}%`)
+            ilike(referenceSheet.kelompok, `%${searchQuery}%`),
+            ilike(referenceSheet.family, `%${searchQuery}%`)
           ),
           storeCode === 'ALL_STORE' ? sql`1=1` : eq(transferOrders.keGudang, storeCode)
         )
       );
 
-    return results.map(item => ({
-      kodeItem: item.kodeItem,
-      namaItem: item.namaItem,
-      normalPrice: item.normalPrice || 0,
-      sp: item.sp,
-      availableQuantity: item.qty,
-      kelompok: item.kelompok,
-      family: item.family,
-      // Calculate sp discount percentage if sp exists and is less than normal price
-      spDiscountPercentage: (item.sp && item.normalPrice && Number(item.sp) < Number(item.normalPrice)) 
-        ? Math.round(((Number(item.normalPrice) - Number(item.sp)) / Number(item.normalPrice)) * 100) 
-        : null,
+    // Use enhanced price resolution for each item
+    const enhancedResults = await Promise.all(results.map(async (item) => {
+      const priceInfo = item.kodeItem ? await this.getEnhancedPriceForItem(item.kodeItem, item.sn || undefined) : null;
+      
+      return {
+        kodeItem: item.kodeItem,
+        namaItem: item.namaItem,
+        normalPrice: priceInfo?.normalPrice ? Number(priceInfo.normalPrice) : 0,
+        sp: priceInfo?.sp ? Number(priceInfo.sp) : null,
+        availableQuantity: item.qty,
+        kelompok: priceInfo?.kelompok || item.kelompok || null,
+        family: priceInfo?.family || item.family || null,
+        // Calculate sp discount percentage if sp exists and is less than normal price
+        spDiscountPercentage: (priceInfo?.sp && priceInfo?.normalPrice && Number(priceInfo.sp) < Number(priceInfo.normalPrice)) 
+          ? Math.round(((Number(priceInfo.normalPrice) - Number(priceInfo.sp)) / Number(priceInfo.normalPrice)) * 100) 
+          : null,
+      };
     }));
+
+    return enhancedResults;
   }
 }
 
