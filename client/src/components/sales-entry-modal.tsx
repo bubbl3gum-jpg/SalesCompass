@@ -234,7 +234,7 @@ export function SalesEntryModal({ isOpen, onClose, selectedStore }: SalesEntryMo
     const qty = parseInt(quantity) || 0;
     let total = qty * normalPrice;
     
-    if (discountType && applicableDiscounts.length > 0) {
+    if (discountType && discountType !== '' && applicableDiscounts.length > 0) {
       const discount = applicableDiscounts.find(d => d.discountId.toString() === discountType);
       if (discount) {
         if (discount.percentage) {
@@ -258,9 +258,10 @@ export function SalesEntryModal({ isOpen, onClose, selectedStore }: SalesEntryMo
 
   // Handle discount change
   const handleDiscountChange = (value: string) => {
-    form.setValue('discountType', value);
+    const discountValue = value === 'none' ? '' : value;
+    form.setValue('discountType', discountValue);
     if (selectedItemData) {
-      calculateFinalPrice(form.getValues('quantity'), selectedItemData.normalPrice, value);
+      calculateFinalPrice(form.getValues('quantity'), selectedItemData.normalPrice, discountValue);
     }
   };
 
@@ -629,7 +630,7 @@ export function SalesEntryModal({ isOpen, onClose, selectedStore }: SalesEntryMo
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="">No discount</SelectItem>
+                        <SelectItem value="none">No discount</SelectItem>
                         {applicableDiscounts.map((discount) => (
                           <SelectItem key={discount.discountId} value={discount.discountId.toString()}>
                             {discount.discountName || discount.discountType} - 
