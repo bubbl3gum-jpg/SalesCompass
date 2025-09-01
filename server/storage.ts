@@ -154,6 +154,10 @@ export interface IStorage {
   // Transfer order item list operations
   createToItemList(data: InsertToItemList): Promise<ToItemList>;
   getToItemListByTransferOrderNumber(toNumber: string): Promise<ToItemList[]>;
+
+  // Inventory search operations
+  searchInventoryBySerial(storeCode: string, serialNumber: string): Promise<any[]>;
+  searchInventoryByDetails(storeCode: string, searchQuery: string): Promise<any[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -830,6 +834,84 @@ export class DatabaseStorage implements IStorage {
 
   async deleteTransferOrder(toNumber: string): Promise<void> {
     await db.delete(transferOrders).where(eq(transferOrders.toNumber, toNumber));
+  }
+
+  // Inventory search operations - searches actual store stock from transfer orders
+  async searchInventoryBySerial(storeCode: string, serialNumber: string): Promise<any[]> {
+    const results = await db
+      .select({
+        kodeItem: toItemList.kodeItem,
+        namaItem: toItemList.namaItem,
+        sn: toItemList.sn,
+        qty: toItemList.qty,
+        toNumber: toItemList.toNumber,
+        keGudang: transferOrders.keGudang,
+        normalPrice: pricelist.normalPrice,
+        sp: pricelist.sp,
+        kelompok: pricelist.kelompok,
+        family: pricelist.family,
+      })
+      .from(toItemList)
+      .leftJoin(transferOrders, eq(toItemList.toNumber, transferOrders.toNumber))
+      .leftJoin(pricelist, eq(toItemList.kodeItem, pricelist.kodeItem))
+      .where(
+        and(
+          eq(toItemList.sn, serialNumber),
+          storeCode === 'ALL_STORE' ? sql`1=1` : eq(transferOrders.keGudang, storeCode)
+        )
+      );
+
+    return results.map(item => ({
+      kodeItem: item.kodeItem,
+      namaItem: item.namaItem,
+      normalPrice: item.normalPrice || 0,
+      sp: item.sp,
+      availableQuantity: item.qty,
+      kelompok: item.kelompok,
+      family: item.family,
+    }));
+  }
+
+  async searchInventoryByDetails(storeCode: string, searchQuery: string): Promise<any[]> {
+    const searchLower = searchQuery.toLowerCase();
+    
+    const results = await db
+      .select({
+        kodeItem: toItemList.kodeItem,
+        namaItem: toItemList.namaItem,
+        sn: toItemList.sn,
+        qty: toItemList.qty,
+        toNumber: toItemList.toNumber,
+        keGudang: transferOrders.keGudang,
+        normalPrice: pricelist.normalPrice,
+        sp: pricelist.sp,
+        kelompok: pricelist.kelompok,
+        family: pricelist.family,
+      })
+      .from(toItemList)
+      .leftJoin(transferOrders, eq(toItemList.toNumber, transferOrders.toNumber))
+      .leftJoin(pricelist, eq(toItemList.kodeItem, pricelist.kodeItem))
+      .where(
+        and(
+          or(
+            ilike(toItemList.kodeItem, `%${searchQuery}%`),
+            ilike(toItemList.namaItem, `%${searchQuery}%`),
+            ilike(pricelist.kelompok, `%${searchQuery}%`),
+            ilike(pricelist.family, `%${searchQuery}%`)
+          ),
+          storeCode === 'ALL_STORE' ? sql`1=1` : eq(transferOrders.keGudang, storeCode)
+        )
+      );
+
+    return results.map(item => ({
+      kodeItem: item.kodeItem,
+      namaItem: item.namaItem,
+      normalPrice: item.normalPrice || 0,
+      sp: item.sp,
+      availableQuantity: item.qty,
+      kelompok: item.kelompok,
+      family: item.family,
+    }));
   }
 }
 

@@ -2381,6 +2381,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
 
+  // Inventory search endpoint - searches actual store stock
+  app.get('/api/inventory/search', isAuthenticated, async (req, res) => {
+    try {
+      const { store, query, searchType = 'serial' } = req.query;
+      
+      if (!store || !query) {
+        return res.status(400).json({ message: 'Store and query parameters are required' });
+      }
+
+      const storeCode = store as string;
+      const searchQuery = query as string;
+      const type = searchType as string;
+
+      // Search in transfer order items (actual inventory)
+      let inventoryItems;
+      
+      if (type === 'serial') {
+        // Search by serial number in transfer orders
+        inventoryItems = await storage.searchInventoryBySerial(storeCode, searchQuery);
+      } else {
+        // Search by item details (code, name, etc.) in transfer orders
+        inventoryItems = await storage.searchInventoryByDetails(storeCode, searchQuery);
+      }
+
+      res.json(inventoryItems);
+    } catch (error) {
+      console.error('Inventory search error:', error);
+      res.status(500).json({ message: 'Failed to search inventory' });
+    }
+  });
+
   // Dashboard metrics
   app.get('/api/dashboard/metrics', authenticate, async (req, res) => {
     try {

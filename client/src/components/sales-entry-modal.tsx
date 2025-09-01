@@ -146,7 +146,7 @@ export function SalesEntryModal({ isOpen, onClose, selectedStore }: SalesEntryMo
     retry: false,
   });
 
-  // Unified search function
+  // Unified search function - now searches actual store inventory
   const performSearch = async () => {
     if (!searchQuery.trim() || !form.getValues('kodeGudang')) return;
     
@@ -154,71 +154,25 @@ export function SalesEntryModal({ isOpen, onClose, selectedStore }: SalesEntryMo
     setItemSearchResults([]);
     
     try {
-      // Get both pricelist and reference sheets
-      const [priceResponse, referenceResponse] = await Promise.all([
-        fetch(`/api/pricelist`, { credentials: 'include' }),
-        fetch(`/api/reference-sheets`, { credentials: 'include' })
-      ]);
-
-      if (!priceResponse.ok || !referenceResponse.ok) {
-        throw new Error('Failed to fetch data');
-      }
-
-      const priceData = await priceResponse.json();
-      const priceList = priceData.data || priceData || [];
-      const referenceSheets = await referenceResponse.json();
+      const store = form.getValues('kodeGudang');
+      const searchType = searchMode;
       
-      let matchingItems: ItemLookup[] = [];
-      const searchLower = searchQuery.toLowerCase();
+      // Use the new inventory search endpoint
+      const response = await fetch(
+        `/api/inventory/search?store=${encodeURIComponent(store)}&query=${encodeURIComponent(searchQuery)}&searchType=${searchType}`, 
+        { credentials: 'include' }
+      );
 
-      if (searchMode === 'serial') {
-        // Search by serial number in pricelist
-        const priceMatches = priceList.filter((price: any) => 
-          price.sn === searchQuery
-        );
-        
-        matchingItems = priceMatches.map((priceItem: any) => {
-          const refItem = referenceSheets.find((ref: any) => ref.kodeItem === priceItem.kodeItem);
-          return {
-            kodeItem: priceItem.kodeItem,
-            namaItem: refItem?.namaItem || priceItem.kodeItem,
-            normalPrice: priceItem.normalPrice || 0,
-            sp: priceItem.sp,
-            availableQuantity: 1,
-            kelompok: refItem?.kelompok || priceItem.kelompok,
-            family: refItem?.family || priceItem.family,
-          };
-        });
-      } else if (searchMode === 'item') {
-        // Search by item code, name, family, or kelompok
-        const refMatches = referenceSheets.filter((item: any) => 
-          item.kodeItem?.toLowerCase().includes(searchLower) ||
-          item.namaItem?.toLowerCase().includes(searchLower) ||
-          item.kelompok?.toLowerCase().includes(searchLower) ||
-          item.family?.toLowerCase().includes(searchLower)
-        );
-
-        matchingItems = refMatches.map((item: any) => {
-          const priceItem = priceList.find((price: any) => 
-            price.kodeItem === item.kodeItem
-          );
-
-          return {
-            kodeItem: item.kodeItem,
-            namaItem: item.namaItem,
-            normalPrice: priceItem?.normalPrice || 0,
-            sp: priceItem?.sp,
-            availableQuantity: 1,
-            kelompok: item.kelompok,
-            family: item.family,
-          };
-        });
+      if (!response.ok) {
+        throw new Error('Failed to search inventory');
       }
+
+      const matchingItems: ItemLookup[] = await response.json();
 
       if (matchingItems.length === 0) {
         toast({
           title: "No Items Found",
-          description: `No items found matching "${searchQuery}"`,
+          description: `No items found matching "${searchQuery}" in store inventory`,
           variant: "destructive",
         });
       } else {
@@ -231,10 +185,10 @@ export function SalesEntryModal({ isOpen, onClose, selectedStore }: SalesEntryMo
       }
       
     } catch (error) {
-      console.error('Error searching items:', error);
+      console.error('Error searching inventory:', error);
       toast({
         title: "Error",
-        description: "Failed to search items. Please try again.",
+        description: "Failed to search store inventory. Please try again.",
         variant: "destructive",
       });
     } finally {
