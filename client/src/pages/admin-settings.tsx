@@ -50,25 +50,6 @@ interface TableConfig {
 
 const tableConfigs: TableConfig[] = [
   {
-    name: 'reference-sheet',
-    displayName: 'Reference Sheet (Items Master)',
-    endpoint: '/api/reference-sheets',
-    importTable: 'reference-sheet',
-    keyField: 'refId',
-    fields: [
-      { key: 'kodeItem', label: 'Item Code', type: 'text', required: true },
-      { key: 'namaItem', label: 'Item Name', type: 'text', required: true },
-      { key: 'kelompok', label: 'Group', type: 'text' },
-      { key: 'family', label: 'Family', type: 'text' },
-      { key: 'originalCode', label: 'Original Code', type: 'text' },
-      { key: 'color', label: 'Color', type: 'text' },
-      { key: 'kodeMaterial', label: 'Material Code', type: 'text' },
-      { key: 'deskripsiMaterial', label: 'Material Description', type: 'text' },
-      { key: 'kodeMotif', label: 'Motif Code', type: 'text' },
-      { key: 'deskripsiMotif', label: 'Motif Description', type: 'text' },
-    ]
-  },
-  {
     name: 'stores',
     displayName: 'Stores',
     endpoint: '/api/stores',
@@ -160,13 +141,12 @@ export default function AdminSettings() {
   const queryClient = useQueryClient();
   const { shouldUseGlobalStore } = useGlobalStore();
 
-  const [activeTab, setActiveTab] = useState('reference-sheet');
+  const [activeTab, setActiveTab] = useState('stores');
   const [currentPage, setCurrentPage] = useState<Record<string, number>>({});
   const [itemsPerPage] = useState(15); // Much smaller chunks for better performance
   const [maxDisplayItems] = useState(10); // Maximum items to render in DOM at once
 
   // Lazy loading with pagination: Only fetch data for the currently active tab
-  const referenceSheetQuery = useTableData('/api/reference-sheets', activeTab === 'reference-sheet', currentPage['reference-sheet'] || 1, itemsPerPage);
   const storesQuery = useTableData('/api/stores', activeTab === 'stores', currentPage['stores'] || 1, itemsPerPage);
   const positionsQuery = useTableData('/api/positions', activeTab === 'positions' || activeTab === 'staff', currentPage['positions'] || 1, itemsPerPage); // Positions needed for staff form
   const staffQuery = useTableData('/api/staff', activeTab === 'staff', currentPage['staff'] || 1, itemsPerPage);
@@ -509,9 +489,6 @@ export default function AdminSettings() {
     // Get the appropriate query data based on table name
     let queryResult;
     switch (config.name) {
-      case 'reference-sheet':
-        queryResult = referenceSheetQuery;
-        break;
       case 'stores':
         queryResult = storesQuery;
         break;
@@ -769,7 +746,7 @@ export default function AdminSettings() {
         </Card>
       </div>
     );
-  }, [selectedItems, searchQueries, referenceSheetQuery, storesQuery, positionsQuery, staffQuery, handleSelectAll, handleSelectItem]);
+  }, [selectedItems, searchQueries, storesQuery, positionsQuery, staffQuery, handleSelectAll, handleSelectItem]);
 
   if (!user) {
     return <div>Please log in to access admin settings.</div>;
@@ -792,8 +769,7 @@ export default function AdminSettings() {
             </div>
 
             <Tabs value={activeTab} onValueChange={handleTabChange}>
-              <TabsList className="grid w-full grid-cols-4 bg-white/10 dark:bg-black/10 backdrop-blur-xl border-white/20 dark:border-gray-800/50">
-                <TabsTrigger value="reference-sheet" data-testid="tab-reference-sheet">Reference Sheet</TabsTrigger>
+              <TabsList className="grid w-full grid-cols-3 bg-white/10 dark:bg-black/10 backdrop-blur-xl border-white/20 dark:border-gray-800/50">
                 <TabsTrigger value="stores" data-testid="tab-stores">Stores</TabsTrigger>
                 <TabsTrigger value="positions" data-testid="tab-positions">Positions</TabsTrigger>
                 <TabsTrigger value="staff" data-testid="tab-staff">Staff</TabsTrigger>

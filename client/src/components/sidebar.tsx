@@ -58,6 +58,12 @@ const navigationItems = [
     category: "Inventory",
     items: [
       {
+        name: "Reference Sheet",
+        href: "/reference-sheet",
+        icon: "fas fa-clipboard-list",
+        permission: "admin:settings"
+      },
+      {
         name: "Opening Stock",
         href: "/opening-stock",
         icon: "fas fa-boxes",
