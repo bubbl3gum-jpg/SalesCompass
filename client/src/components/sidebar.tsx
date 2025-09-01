@@ -41,6 +41,12 @@ const navigationItems = [
         permission: "settlement:read"
       },
       {
+        name: "Price Lists",
+        href: "/price-lists",
+        icon: "fas fa-tags",
+        permission: "pricelist:read"
+      },
+      {
         name: "Discounts",
         href: "/discounts", 
         icon: "fas fa-percentage",
@@ -80,12 +86,6 @@ const navigationItems = [
   {
     category: "Administration",
     items: [
-      {
-        name: "Price Lists",
-        href: "/price-lists",
-        icon: "fas fa-tags",
-        permission: "pricelist:read"
-      },
       {
         name: "Payment Methods",
         href: "/payment-methods",
