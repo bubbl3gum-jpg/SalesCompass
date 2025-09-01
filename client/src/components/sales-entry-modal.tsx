@@ -204,8 +204,9 @@ export function SalesEntryModal({ isOpen, onClose, selectedStore }: SalesEntryMo
     form.setValue('normalPrice', item.normalPrice.toString());
     form.setValue('serialNumber', searchQuery);
     
-    // Set available quantities (1-10 for now)
-    setAvailableQuantities(Array.from({ length: 10 }, (_, i) => i + 1));
+    // Set available quantities based on actual inventory
+    const maxQty = item.availableQuantity || 1;
+    setAvailableQuantities(Array.from({ length: maxQty }, (_, i) => i + 1));
     
     // Filter applicable discounts
     if (allDiscounts) {
