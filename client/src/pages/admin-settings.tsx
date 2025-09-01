@@ -97,7 +97,6 @@ const tableConfigs: TableConfig[] = [
       { key: 'canAccessStockOpname', label: 'Stock Opname Access', type: 'checkbox' },
       { key: 'canAccessTransfers', label: 'Transfers Access', type: 'checkbox' },
       { key: 'canAccessPriceLists', label: 'Price Lists Access', type: 'checkbox' },
-      { key: 'canAccessDiscounts', label: 'Discounts Access', type: 'checkbox' },
       { key: 'canAccessAdminSettings', label: 'Admin Settings Access', type: 'checkbox' },
     ]
   },
@@ -809,12 +808,11 @@ export default function AdminSettings() {
             </div>
 
             <Tabs value={activeTab} onValueChange={handleTabChange}>
-              <TabsList className="grid w-full grid-cols-6 bg-white/10 dark:bg-black/10 backdrop-blur-xl border-white/20 dark:border-gray-800/50">
+              <TabsList className="grid w-full grid-cols-5 bg-white/10 dark:bg-black/10 backdrop-blur-xl border-white/20 dark:border-gray-800/50">
                 <TabsTrigger value="reference-sheet" data-testid="tab-reference-sheet">Reference Sheet</TabsTrigger>
                 <TabsTrigger value="stores" data-testid="tab-stores">Stores</TabsTrigger>
                 <TabsTrigger value="positions" data-testid="tab-positions">Positions</TabsTrigger>
                 <TabsTrigger value="staff" data-testid="tab-staff">Staff</TabsTrigger>
-                <TabsTrigger value="discounts" data-testid="tab-discounts">Discounts</TabsTrigger>
                 <TabsTrigger value="edc" data-testid="tab-edc">EDC</TabsTrigger>
               </TabsList>
 
