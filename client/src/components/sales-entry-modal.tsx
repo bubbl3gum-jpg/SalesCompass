@@ -212,7 +212,7 @@ export function SalesEntryModal({ isOpen, onClose, selectedStore }: SalesEntryMo
     // Filter applicable discounts and add SP discount if available
     let discountOptions: DiscountOption[] = [];
     
-    if (allDiscounts) {
+    if (allDiscounts && Array.isArray(allDiscounts)) {
       const regularDiscounts = allDiscounts.filter((discount: any) => {
         // Check if discount is active
         const now = new Date();
@@ -251,17 +251,27 @@ export function SalesEntryModal({ isOpen, onClose, selectedStore }: SalesEntryMo
     const qty = parseInt(quantity) || 0;
     let total = qty * normalPrice;
     
+    console.log('calculateFinalPrice called:', { quantity, normalPrice, discountType, qty, total });
+    console.log('Available discounts:', applicableDiscounts);
+    
     if (discountType && discountType !== '' && applicableDiscounts.length > 0) {
       const discount = applicableDiscounts.find(d => d.discountId.toString() === discountType);
+      console.log('Found discount:', discount);
+      
       if (discount) {
         if (discount.percentage) {
-          total = total * (1 - discount.percentage / 100);
+          const discountAmount = total * (discount.percentage / 100);
+          total = total - discountAmount;
+          console.log('Applied percentage discount:', { percentage: discount.percentage, discountAmount, newTotal: total });
         } else if (discount.amount) {
+          const originalTotal = total;
           total = Math.max(0, total - discount.amount);
+          console.log('Applied amount discount:', { amount: discount.amount, originalTotal, newTotal: total });
         }
       }
     }
     
+    console.log('Final calculated total:', total);
     form.setValue('finalPrice', total.toFixed(2));
   };
 
@@ -275,9 +285,12 @@ export function SalesEntryModal({ isOpen, onClose, selectedStore }: SalesEntryMo
 
   // Handle discount change
   const handleDiscountChange = (value: string) => {
+    console.log('handleDiscountChange called with value:', value);
     const discountValue = value === 'none' ? '' : value;
+    console.log('Setting discount value to:', discountValue);
     form.setValue('discountType', discountValue);
     if (selectedItemData) {
+      console.log('Recalculating price with selected item:', selectedItemData);
       calculateFinalPrice(form.getValues('quantity'), selectedItemData.normalPrice, discountValue);
     }
   };
