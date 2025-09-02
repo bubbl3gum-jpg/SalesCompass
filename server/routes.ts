@@ -1126,7 +1126,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Map frontend fields to database fields
       const mappedData = {
         ...req.body,
-        discByAmount: req.body.finalPrice, // Map finalPrice to discByAmount (stores the final price)
+        discByAmount: req.body.finalPrice?.toString() || '0', // Convert to string for decimal field
         sn: req.body.serialNumber || req.body.sn, // Support both field names
       };
       
@@ -1251,7 +1251,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Map frontend fields to database fields
       const mappedData = {
         ...req.body,
-        discByAmount: req.body.finalPrice, // Map finalPrice to discByAmount (stores the final price)
+        discByAmount: req.body.finalPrice?.toString() || '0', // Convert to string for decimal field
         sn: req.body.serialNumber || req.body.sn, // Support both field names
       };
       
