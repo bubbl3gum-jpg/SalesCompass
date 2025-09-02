@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Sidebar } from "@/components/sidebar";
 import { useSidebar } from "@/hooks/useSidebar";
 import { useStoreAuth } from "@/hooks/useStoreAuth";
@@ -10,6 +10,9 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
 
 export default function SalesEntry() {
@@ -17,8 +20,14 @@ export default function SalesEntry() {
   const { user } = useStoreAuth(); // Get user for permissions
   const { selectedStore: globalSelectedStore, setSelectedStore: setGlobalSelectedStore, shouldUseGlobalStore } = useGlobalStore();
   const [showSalesModal, setShowSalesModal] = useState(false);
+  const [editingSale, setEditingSale] = useState<any>(null);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deletingSale, setDeletingSale] = useState<any>(null);
   const [localSelectedStore, setLocalSelectedStore] = useState<string>('');
   const [dateFilter, setDateFilter] = useState<string>(new Date().toISOString().split('T')[0]);
+  
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
 
   // Determine which store to use - global for all-store users, local for individual store users
   const effectiveStore = shouldUseGlobalStore ? globalSelectedStore : localSelectedStore;
@@ -35,6 +44,45 @@ export default function SalesEntry() {
     enabled: !!effectiveStore,
     retry: false,
   });
+
+  // Delete sale mutation
+  const deleteSaleMutation = useMutation({
+    mutationFn: async (saleId: number) => {
+      return await apiRequest(`/api/sales/${saleId}`, 'DELETE');
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/sales"] });
+      toast({
+        title: "Success",
+        description: "Sales transaction deleted successfully",
+      });
+      setShowDeleteModal(false);
+      setDeletingSale(null);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Delete Failed",
+        description: error.message || "Failed to delete sales transaction",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleEditSale = (sale: any) => {
+    setEditingSale(sale);
+    setShowSalesModal(true);
+  };
+
+  const handleDeleteSale = (sale: any) => {
+    setDeletingSale(sale);
+    setShowDeleteModal(true);
+  };
+
+  const confirmDelete = () => {
+    if (deletingSale) {
+      deleteSaleMutation.mutate(deletingSale.penjualanId);
+    }
+  };
 
   // Auto-select store for individual store users only (all-store users use global selection)
   useEffect(() => {
@@ -236,19 +284,45 @@ export default function SalesEntry() {
                         </div>
                       </div>
 
-                      <div className="text-right">
-                        <p className="font-semibold text-gray-900 dark:text-white">
-                          Rp {parseFloat(sale.finalPrice || '0').toLocaleString()}
-                        </p>
-                        <div className="flex items-center space-x-2 mt-1">
-                          {sale.preOrder && (
-                            <Badge variant="secondary" className="text-xs">
-                              Pre-Order
-                            </Badge>
-                          )}
-                          <span className="text-xs text-gray-500 dark:text-gray-400">
-                            {sale.paymentMethod || 'Cash'}
-                          </span>
+                      <div className="flex items-center space-x-4">
+                        <div className="text-right">
+                          <p className="font-semibold text-gray-900 dark:text-white">
+                            Rp {parseFloat(sale.finalPrice || '0').toLocaleString()}
+                          </p>
+                          <div className="flex items-center space-x-2 mt-1">
+                            {sale.preOrder && (
+                              <Badge variant="secondary" className="text-xs">
+                                Pre-Order
+                              </Badge>
+                            )}
+                            <span className="text-xs text-gray-500 dark:text-gray-400">
+                              {sale.paymentMethod || 'Cash'}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Action Buttons */}
+                        <div className="flex flex-col space-y-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleEditSale(sale)}
+                            className="text-xs px-3 py-1"
+                            data-testid={`button-edit-${sale.penjualanId}`}
+                          >
+                            <i className="fas fa-edit mr-1"></i>
+                            Edit
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleDeleteSale(sale)}
+                            className="text-xs px-3 py-1 text-red-600 hover:text-red-700 border-red-200 hover:border-red-300"
+                            data-testid={`button-delete-${sale.penjualanId}`}
+                          >
+                            <i className="fas fa-trash mr-1"></i>
+                            Delete
+                          </Button>
                         </div>
                       </div>
                     </div>
@@ -289,9 +363,58 @@ export default function SalesEntry() {
 
       <SalesEntryModal
         isOpen={showSalesModal}
-        onClose={() => setShowSalesModal(false)}
+        onClose={() => {
+          setShowSalesModal(false);
+          setEditingSale(null);
+        }}
         selectedStore={effectiveStore}
+        editingSale={editingSale}
       />
+
+      {/* Delete Confirmation Modal */}
+      <Dialog open={showDeleteModal} onOpenChange={setShowDeleteModal}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Sales Transaction</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete this sales transaction? This action cannot be undone.
+              {deletingSale && (
+                <div className="mt-4 p-3 bg-gray-50 dark:bg-gray-800 rounded-md">
+                  <p className="font-medium">{deletingSale.kodeItem}</p>
+                  <p className="text-sm text-gray-500">
+                    {deletingSale.tanggal} • Store: {deletingSale.kodeGudang} • 
+                    Rp {parseFloat(deletingSale.finalPrice || '0').toLocaleString()}
+                  </p>
+                </div>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-4 mt-6">
+            <Button
+              variant="outline"
+              onClick={() => setShowDeleteModal(false)}
+              disabled={deleteSaleMutation.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={confirmDelete}
+              disabled={deleteSaleMutation.isPending}
+              data-testid="button-confirm-delete"
+            >
+              {deleteSaleMutation.isPending ? (
+                <>
+                  <i className="fas fa-spinner fa-spin mr-2"></i>
+                  Deleting...
+                </>
+              ) : (
+                'Delete Transaction'
+              )}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

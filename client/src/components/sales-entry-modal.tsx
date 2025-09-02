@@ -50,6 +50,7 @@ interface SalesEntryModalProps {
   isOpen: boolean;
   onClose: () => void;
   selectedStore?: string;
+  editingSale?: any;
 }
 
 interface ItemLookup {
@@ -72,7 +73,7 @@ interface DiscountOption {
   endAt?: string;
 }
 
-export function SalesEntryModal({ isOpen, onClose, selectedStore }: SalesEntryModalProps) {
+export function SalesEntryModal({ isOpen, onClose, selectedStore, editingSale }: SalesEntryModalProps) {
   const { toast } = useToast();
   const { user, hasPermission } = useStoreAuth();
   const queryClient = useQueryClient();
@@ -88,7 +89,19 @@ export function SalesEntryModal({ isOpen, onClose, selectedStore }: SalesEntryMo
 
   const form = useForm<SalesFormData>({
     resolver: zodResolver(salesFormSchema),
-    defaultValues: {
+    defaultValues: editingSale ? {
+      kodeGudang: editingSale.kodeGudang || selectedStore || "",
+      tanggal: editingSale.tanggal || new Date().toISOString().split('T')[0],
+      serialNumber: editingSale.serialNumber || "",
+      kodeItem: editingSale.kodeItem || "",
+      namaItem: editingSale.namaItem || "",
+      quantity: "1", // Default to 1 for editing
+      normalPrice: editingSale.finalPrice?.toString() || "0",
+      discountType: editingSale.discountType || "",
+      finalPrice: editingSale.finalPrice?.toString() || "0",
+      paymentMethod: editingSale.paymentMethod || "Cash",
+      notes: editingSale.notes || "",
+    } : {
       kodeGudang: selectedStore || "",
       tanggal: new Date().toISOString().split('T')[0],
       serialNumber: "",
@@ -316,10 +329,14 @@ export function SalesEntryModal({ isOpen, onClose, selectedStore }: SalesEntryMo
     calculateFinalPrice(currentQuantity, currentNormalPrice, discountValue);
   };
 
-  // Create sale mutation
-  const createSaleMutation = useMutation({
+  // Create or Update sale mutation
+  const saveSaleMutation = useMutation({
     mutationFn: async (data: any) => {
-      return apiRequest('POST', '/api/sales', data);
+      if (editingSale) {
+        return apiRequest('PUT', `/api/sales/${editingSale.penjualanId}`, data);
+      } else {
+        return apiRequest('POST', '/api/sales', data);
+      }
     },
     onSuccess: async (response) => {
       const data = await response.json();
@@ -366,7 +383,7 @@ export function SalesEntryModal({ isOpen, onClose, selectedStore }: SalesEntryMo
       discountType: data.discountType || null,
     };
     
-    createSaleMutation.mutate(submitData);
+    saveSaleMutation.mutate(submitData);
   };
 
   return (
@@ -374,7 +391,7 @@ export function SalesEntryModal({ isOpen, onClose, selectedStore }: SalesEntryMo
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-xl font-semibold">
-            New Sale Entry
+            {editingSale ? 'Edit Sale Transaction' : 'New Sale Entry'}
           </DialogTitle>
         </DialogHeader>
 
@@ -754,23 +771,23 @@ export function SalesEntryModal({ isOpen, onClose, selectedStore }: SalesEntryMo
                 type="button"
                 variant="outline"
                 onClick={onClose}
-                disabled={createSaleMutation.isPending}
+                disabled={saveSaleMutation.isPending}
                 data-testid="button-cancel"
               >
                 Cancel
               </Button>
               <Button
                 type="submit"
-                disabled={createSaleMutation.isPending || !form.getValues('kodeItem')}
+                disabled={saveSaleMutation.isPending || !form.getValues('kodeItem')}
                 data-testid="button-submit"
               >
-                {createSaleMutation.isPending ? (
+                {saveSaleMutation.isPending ? (
                   <>
                     <i className="fas fa-spinner fa-spin mr-2"></i>
                     Recording...
                   </>
                 ) : (
-                  'Record Sale'
+                  editingSale ? 'Update Sale' : 'Record Sale'
                 )}
               </Button>
             </div>

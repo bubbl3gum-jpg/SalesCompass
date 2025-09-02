@@ -103,6 +103,9 @@ export interface IStorage {
   createSale(data: InsertLaporanPenjualan): Promise<LaporanPenjualan>;
   getSales(kodeGudang?: string, tanggal?: string): Promise<LaporanPenjualan[]>;
   getSalesToday(kodeGudang: string): Promise<{ totalSales: string, count: number }>;
+  getSaleById(penjualanId: number): Promise<LaporanPenjualan | undefined>;
+  updateSale(penjualanId: number, data: Partial<InsertLaporanPenjualan>): Promise<LaporanPenjualan>;
+  deleteSale(penjualanId: number): Promise<void>;
 
   // Settlement operations
   createSettlement(data: InsertSettlement): Promise<Settlement>;
@@ -579,6 +582,32 @@ export class DatabaseStorage implements IStorage {
       );
     
     return result || { totalSales: '0', count: 0 };
+  }
+
+  async getSaleById(penjualanId: number): Promise<LaporanPenjualan | undefined> {
+    const [sale] = await db.select().from(laporanPenjualan).where(eq(laporanPenjualan.penjualanId, penjualanId)).limit(1);
+    return sale;
+  }
+
+  async updateSale(penjualanId: number, data: Partial<InsertLaporanPenjualan>): Promise<LaporanPenjualan> {
+    const [updatedSale] = await db.update(laporanPenjualan)
+      .set(data)
+      .where(eq(laporanPenjualan.penjualanId, penjualanId))
+      .returning();
+    
+    if (!updatedSale) {
+      throw new Error(`Sale with ID ${penjualanId} not found`);
+    }
+    
+    return updatedSale;
+  }
+
+  async deleteSale(penjualanId: number): Promise<void> {
+    const result = await db.delete(laporanPenjualan).where(eq(laporanPenjualan.penjualanId, penjualanId));
+    
+    if (result.rowCount === 0) {
+      throw new Error(`Sale with ID ${penjualanId} not found`);
+    }
   }
 
   // Settlement operations

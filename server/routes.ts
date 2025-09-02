@@ -1196,6 +1196,71 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get single sale by ID (must come before the store/date route to avoid conflicts)
+  app.get('/api/sales/:id(\\d+)', authenticate, async (req, res) => {
+    try {
+      const penjualanId = parseInt(req.params.id);
+      const sale = await storage.getSaleById(penjualanId);
+      
+      if (!sale) {
+        return res.status(404).json({ message: 'Sale not found' });
+      }
+
+      // Transform field names from snake_case to camelCase for frontend
+      const transformedSale = {
+        penjualanId: sale.penjualanId,
+        kodeGudang: sale.kodeGudang,
+        tanggal: sale.tanggal,
+        serialNumber: sale.sn,
+        kodeItem: sale.kodeItem,
+        discByAmount: sale.discByAmount,
+        notes: sale.notes,
+        preOrder: sale.preOrder,
+        itemId: sale.itemId,
+        discountType: sale.discountType,
+        paymentMethod: sale.paymentMethod,
+        finalPrice: sale.discByAmount
+      };
+      
+      res.json(transformedSale);
+    } catch (error) {
+      console.error('Get sale by ID error:', error);
+      res.status(500).json({ message: 'Failed to get sale' });
+    }
+  });
+
+  // Update sale - SPG, Supervisors, and above
+  app.put('/api/sales/:id(\\d+)', authenticate, checkRole(['SPG', 'Supervisor', 'Sales Administrator', 'System Administrator']), async (req, res) => {
+    try {
+      const penjualanId = parseInt(req.params.id);
+      const validatedData = insertLaporanPenjualanSchema.partial().parse(req.body);
+
+      const updatedSale = await storage.updateSale(penjualanId, validatedData);
+      res.json(updatedSale);
+    } catch (error) {
+      console.error('Update sale error:', error);
+      if (error instanceof Error && error.message.includes('not found')) {
+        return res.status(404).json({ message: error.message });
+      }
+      res.status(400).json({ message: 'Failed to update sale' });
+    }
+  });
+
+  // Delete sale - Supervisors and above only
+  app.delete('/api/sales/:id(\\d+)', authenticate, checkRole(['Supervisor', 'Sales Administrator', 'System Administrator']), async (req, res) => {
+    try {
+      const penjualanId = parseInt(req.params.id);
+      await storage.deleteSale(penjualanId);
+      res.json({ message: 'Sale deleted successfully' });
+    } catch (error) {
+      console.error('Delete sale error:', error);
+      if (error instanceof Error && error.message.includes('not found')) {
+        return res.status(404).json({ message: error.message });
+      }
+      res.status(500).json({ message: 'Failed to delete sale' });
+    }
+  });
+
   // Settlement creation - Supervisors and above
   app.post('/api/settlements', authenticate, checkRole(['Supervisor', 'Sales Administrator', 'Finance', 'System Administrator']), async (req, res) => {
     try {
