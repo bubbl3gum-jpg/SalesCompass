@@ -48,7 +48,7 @@ export default function SalesEntry() {
   // Delete sale mutation
   const deleteSaleMutation = useMutation({
     mutationFn: async (saleId: number) => {
-      return await apiRequest(`/api/sales/${saleId}`, 'DELETE');
+      return await apiRequest('DELETE', `/api/sales/${saleId}`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/sales"] });
@@ -378,16 +378,16 @@ export default function SalesEntry() {
             <DialogTitle>Delete Sales Transaction</DialogTitle>
             <DialogDescription>
               Are you sure you want to delete this sales transaction? This action cannot be undone.
-              {deletingSale && (
-                <div className="mt-4 p-3 bg-gray-50 dark:bg-gray-800 rounded-md">
-                  <p className="font-medium">{deletingSale.kodeItem}</p>
-                  <p className="text-sm text-gray-500">
-                    {deletingSale.tanggal} • Store: {deletingSale.kodeGudang} • 
-                    Rp {parseFloat(deletingSale.finalPrice || '0').toLocaleString()}
-                  </p>
-                </div>
-              )}
             </DialogDescription>
+            {deletingSale && (
+              <div className="mt-4 p-3 bg-gray-50 dark:bg-gray-800 rounded-md">
+                <p className="font-medium">{deletingSale.kodeItem}</p>
+                <p className="text-sm text-gray-500">
+                  {deletingSale.tanggal} • Store: {deletingSale.kodeGudang} • 
+                  Rp {parseFloat(deletingSale.finalPrice || '0').toLocaleString()}
+                </p>
+              </div>
+            )}
           </DialogHeader>
           <div className="flex justify-end gap-4 mt-6">
             <Button
