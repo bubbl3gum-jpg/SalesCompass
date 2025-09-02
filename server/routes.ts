@@ -2240,10 +2240,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post('/api/edc', authenticate, checkRole(['System Administrator']), async (req, res) => {
     try {
+      // More flexible validation
       const validatedData = z.object({
         namaEdc: z.string(),
         jenisEdc: z.string(),
-        biayaAdmin: z.union([z.string(), z.number()]).optional()
+        biayaAdmin: z.any().optional() // Accept any type and handle it
       }).parse(req.body);
       
       // Transform to database format
@@ -2259,7 +2260,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         edcId: edc.edcId,
         namaEdc: edc.merchantName,
         jenisEdc: edc.edcType,
-        biayaAdmin: validatedData.biayaAdmin || 0
+        biayaAdmin: validatedData.biayaAdmin !== undefined ? Number(validatedData.biayaAdmin) : 0
       });
     } catch (error) {
       console.error('EDC creation error:', error);
