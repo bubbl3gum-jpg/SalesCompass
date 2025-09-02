@@ -1123,7 +1123,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Sales entry - SPG, Supervisors can create
   app.post('/api/sales', authenticate, checkRole(['SPG', 'Supervisor', 'Sales Administrator']), async (req, res) => {
     try {
-      const validatedData = insertLaporanPenjualanSchema.parse(req.body);
+      // Map frontend fields to database fields
+      const mappedData = {
+        ...req.body,
+        discByAmount: req.body.finalPrice, // Map finalPrice to discByAmount (stores the final price)
+        sn: req.body.serialNumber || req.body.sn, // Support both field names
+      };
+      
+      // Remove frontend-specific fields that don't exist in the database
+      delete mappedData.finalPrice;
+      delete mappedData.normalPrice;
+      delete mappedData.quantity;
+      delete mappedData.serialNumber;
+      delete mappedData.namaItem;
+      
+      const validatedData = insertLaporanPenjualanSchema.parse(mappedData);
 
       // Create the sale
       const sale = await storage.createSale(validatedData);
@@ -1233,7 +1247,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put('/api/sales/:id(\\d+)', authenticate, checkRole(['SPG', 'Supervisor', 'Sales Administrator', 'System Administrator']), async (req, res) => {
     try {
       const penjualanId = parseInt(req.params.id);
-      const validatedData = insertLaporanPenjualanSchema.partial().parse(req.body);
+      
+      // Map frontend fields to database fields
+      const mappedData = {
+        ...req.body,
+        discByAmount: req.body.finalPrice, // Map finalPrice to discByAmount (stores the final price)
+        sn: req.body.serialNumber || req.body.sn, // Support both field names
+      };
+      
+      // Remove frontend-specific fields that don't exist in the database
+      delete mappedData.finalPrice;
+      delete mappedData.normalPrice;
+      delete mappedData.quantity;
+      delete mappedData.serialNumber;
+      delete mappedData.namaItem;
+      
+      const validatedData = insertLaporanPenjualanSchema.partial().parse(mappedData);
 
       const updatedSale = await storage.updateSale(penjualanId, validatedData);
       res.json(updatedSale);
