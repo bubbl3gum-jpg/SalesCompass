@@ -248,31 +248,38 @@ export function SalesEntryModal({ isOpen, onClose, selectedStore }: SalesEntryMo
 
   // Calculate final price based on quantity and discount
   const calculateFinalPrice = (quantity: string, normalPrice: number, discountType: string) => {
-    const qty = parseInt(quantity) || 0;
+    const qty = parseInt(quantity) || 1; // Default to 1 if 0
     let total = qty * normalPrice;
     
     console.log('calculateFinalPrice called:', { quantity, normalPrice, discountType, qty, total });
     console.log('Available discounts:', applicableDiscounts);
     
-    if (discountType && discountType !== '' && applicableDiscounts.length > 0) {
+    if (discountType && discountType !== '' && discountType !== 'none' && applicableDiscounts.length > 0) {
       const discount = applicableDiscounts.find(d => d.discountId.toString() === discountType);
       console.log('Found discount:', discount);
       
       if (discount) {
-        if (discount.percentage) {
+        if (discount.percentage && discount.percentage > 0) {
           const discountAmount = total * (discount.percentage / 100);
           total = total - discountAmount;
           console.log('Applied percentage discount:', { percentage: discount.percentage, discountAmount, newTotal: total });
-        } else if (discount.amount) {
+        } else if (discount.amount && discount.amount > 0) {
           const originalTotal = total;
           total = Math.max(0, total - discount.amount);
           console.log('Applied amount discount:', { amount: discount.amount, originalTotal, newTotal: total });
         }
+      } else {
+        console.log('Discount not found for ID:', discountType);
       }
+    } else {
+      console.log('No discount applied - discountType:', discountType);
     }
     
     console.log('Final calculated total:', total);
-    form.setValue('finalPrice', total.toFixed(2));
+    form.setValue('finalPrice', total.toString());
+    
+    // Force form to trigger re-render
+    form.trigger('finalPrice');
   };
 
   // Handle quantity change
@@ -289,10 +296,18 @@ export function SalesEntryModal({ isOpen, onClose, selectedStore }: SalesEntryMo
     const discountValue = value === 'none' ? '' : value;
     console.log('Setting discount value to:', discountValue);
     form.setValue('discountType', discountValue);
-    if (selectedItemData) {
-      console.log('Recalculating price with selected item:', selectedItemData);
-      calculateFinalPrice(form.getValues('quantity'), selectedItemData.normalPrice, discountValue);
-    }
+    
+    // Force trigger the form to update and recalculate
+    const currentQuantity = form.getValues('quantity') || '1';
+    const currentNormalPrice = parseFloat(form.getValues('normalPrice')) || (selectedItemData?.normalPrice || 0);
+    
+    console.log('Current form values:', {
+      quantity: currentQuantity,
+      normalPrice: currentNormalPrice,
+      discountValue
+    });
+    
+    calculateFinalPrice(currentQuantity, currentNormalPrice, discountValue);
   };
 
   // Create sale mutation
@@ -663,8 +678,8 @@ export function SalesEntryModal({ isOpen, onClose, selectedStore }: SalesEntryMo
                         <SelectItem value="none">No discount</SelectItem>
                         {applicableDiscounts.map((discount) => (
                           <SelectItem key={discount.discountId} value={discount.discountId.toString()}>
-                            {discount.discountName || discount.discountType} - 
-                            {discount.percentage ? ` ${discount.percentage}%` : ` Rp ${discount.amount?.toLocaleString()}`}
+                            {discount.discountName || discount.discountType}
+                            {discount.percentage ? ` - ${discount.percentage}%` : ` - Rp ${discount.amount?.toLocaleString()}`}
                           </SelectItem>
                         ))}
                       </SelectContent>
