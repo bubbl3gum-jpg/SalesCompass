@@ -64,10 +64,11 @@ interface ItemLookup {
 
 interface DiscountOption {
   discountId: number;
-  discountName: string;
-  discountType: string;
-  percentage?: number;
-  amount?: number;
+  discountName: string | null;
+  discountType: string | null;
+  discountAmount: string | null;
+  startFrom?: string;
+  endAt?: string;
 }
 
 export function SalesEntryModal({ isOpen, onClose, selectedStore }: SalesEntryModalProps) {
@@ -233,8 +234,8 @@ export function SalesEntryModal({ isOpen, onClose, selectedStore }: SalesEntryMo
       const spDiscount: DiscountOption = {
         discountId: -1, // Special ID for SP discount
         discountName: `Special Price (SP)`,
-        discountType: 'SP',
-        percentage: item.spDiscountPercentage,
+        discountType: 'percentage',
+        discountAmount: item.spDiscountPercentage.toString(),
       };
       discountOptions.unshift(spDiscount); // Add at the beginning
     }
@@ -258,18 +259,20 @@ export function SalesEntryModal({ isOpen, onClose, selectedStore }: SalesEntryMo
       const discount = applicableDiscounts.find(d => d.discountId.toString() === discountType);
       console.log('Found discount:', discount);
       
-      if (discount) {
-        if (discount.percentage && discount.percentage > 0) {
-          const discountAmount = total * (discount.percentage / 100);
+      if (discount && discount.discountAmount) {
+        const discountValue = parseFloat(discount.discountAmount);
+        
+        if (discount.discountType === 'percentage' && discountValue > 0) {
+          const discountAmount = total * (discountValue / 100);
           total = total - discountAmount;
-          console.log('Applied percentage discount:', { percentage: discount.percentage, discountAmount, newTotal: total });
-        } else if (discount.amount && discount.amount > 0) {
+          console.log('Applied percentage discount:', { percentage: discountValue, discountAmount, newTotal: total });
+        } else if (discount.discountType === 'amount' && discountValue > 0) {
           const originalTotal = total;
-          total = Math.max(0, total - discount.amount);
-          console.log('Applied amount discount:', { amount: discount.amount, originalTotal, newTotal: total });
+          total = Math.max(0, total - discountValue);
+          console.log('Applied amount discount:', { amount: discountValue, originalTotal, newTotal: total });
         }
       } else {
-        console.log('Discount not found for ID:', discountType);
+        console.log('Discount not found or no discountAmount for ID:', discountType);
       }
     } else {
       console.log('No discount applied - discountType:', discountType);
@@ -678,8 +681,12 @@ export function SalesEntryModal({ isOpen, onClose, selectedStore }: SalesEntryMo
                         <SelectItem value="none">No discount</SelectItem>
                         {applicableDiscounts.map((discount) => (
                           <SelectItem key={discount.discountId} value={discount.discountId.toString()}>
-                            {discount.discountName || discount.discountType}
-                            {discount.percentage ? ` - ${discount.percentage}%` : ` - Rp ${discount.amount?.toLocaleString()}`}
+                            {discount.discountName || 'Discount'}
+                            {discount.discountType === 'percentage' && discount.discountAmount ? 
+                              ` - ${discount.discountAmount}%` : 
+                              discount.discountType === 'amount' && discount.discountAmount ? 
+                                ` - Rp ${parseFloat(discount.discountAmount).toLocaleString()}` : 
+                                ''}
                           </SelectItem>
                         ))}
                       </SelectContent>
