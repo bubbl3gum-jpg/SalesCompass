@@ -122,8 +122,9 @@ export default function SalesEntry() {
                     <SelectValue placeholder="Choose your store..." />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem key="all-stores-select" value="ALL_STORE">All Stores</SelectItem>
-                    {stores.map((store: any) => (
+                    {stores
+                      .filter((store: any) => store.kodeGudang && store.namaGudang && store.kodeGudang.trim() !== '' && store.namaGudang.trim() !== '')
+                      .map((store: any) => (
                       <SelectItem key={store.kodeGudang} value={store.kodeGudang}>
                         {store.namaGudang}
                       </SelectItem>

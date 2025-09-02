@@ -340,29 +340,9 @@ export default function Dashboard() {
                       <CommandList>
                         <CommandEmpty>No store found.</CommandEmpty>
                         <CommandGroup>
-                          <CommandItem
-                            key="all-stores-option"
-                            value="ALL_STORE All Stores"
-                            onSelect={() => {
-                              setSelectedStore('ALL_STORE');
-                              setStoreDropdownOpen(false);
-                            }}
-                            className="cursor-pointer"
-                          >
-                            <Check
-                              className={cn(
-                                "mr-2 h-4 w-4",
-                                selectedStore === 'ALL_STORE' ? "opacity-100" : "opacity-0"
-                              )}
-                            />
-                            <div className="flex flex-col">
-                              <span className="font-medium">All Stores</span>
-                              <span className="text-sm text-gray-500 dark:text-gray-400">
-                                ALL_STORE
-                              </span>
-                            </div>
-                          </CommandItem>
-                          {stores.map((store) => (
+                          {stores
+                            .filter((store: any) => store.kodeGudang && store.namaGudang && store.kodeGudang.trim() !== '' && store.namaGudang.trim() !== '')
+                            .map((store) => (
                             <CommandItem
                               key={store.kodeGudang}
                               value={`${store.kodeGudang} ${store.namaGudang}`}

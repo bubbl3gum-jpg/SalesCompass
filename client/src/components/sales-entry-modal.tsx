@@ -394,8 +394,9 @@ export function SalesEntryModal({ isOpen, onClose, selectedStore }: SalesEntryMo
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem key="all-stores-modal" value="ALL_STORE">All Stores</SelectItem>
-                          {storesArray?.map((store: any) => (
+                          {storesArray
+                            ?.filter((store: any) => store.kodeGudang && store.namaGudang && store.kodeGudang.trim() !== '' && store.namaGudang.trim() !== '')
+                            .map((store: any) => (
                             <SelectItem key={store.kodeGudang} value={store.kodeGudang}>
                               {store.namaGudang}
                             </SelectItem>
