@@ -1728,7 +1728,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/discounts', authenticate, async (req, res) => {
+  app.get('/api/discounts', isAuthenticated, async (req, res) => {
     try {
       const discounts = await withCache(
         CACHE_KEYS.DISCOUNTS,
@@ -1741,7 +1741,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/discounts', authenticate, checkRole(['System Administrator']), async (req, res) => {
+  app.post('/api/discounts', isAuthenticated, checkRole(['System Administrator']), async (req, res) => {
     try {
       const validatedData = insertDiscountTypeSchema.parse(req.body);
       // Convert number to string for storage
@@ -1765,7 +1765,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put('/api/discounts/:discountId', authenticate, checkRole(['System Administrator']), async (req, res) => {
+  app.put('/api/discounts/:discountId', isAuthenticated, checkRole(['System Administrator']), async (req, res) => {
     try {
       const { discountId } = req.params;
       const validatedData = insertDiscountTypeSchema.partial().parse(req.body);
@@ -1793,7 +1793,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete('/api/discounts/:discountId', authenticate, checkRole(['System Administrator']), async (req, res) => {
+  app.delete('/api/discounts/:discountId', isAuthenticated, checkRole(['System Administrator']), async (req, res) => {
     try {
       const { discountId } = req.params;
       await storage.deleteDiscountType(parseInt(discountId));
