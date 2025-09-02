@@ -10,6 +10,9 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { Check, ChevronsUpDown } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
@@ -24,6 +27,7 @@ export default function SalesEntry() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deletingSale, setDeletingSale] = useState<any>(null);
   const [localSelectedStore, setLocalSelectedStore] = useState<string>('');
+  const [storeComboboxOpen, setStoreComboboxOpen] = useState(false);
   const [dateFilter, setDateFilter] = useState<string>(new Date().toISOString().split('T')[0]);
   
   const { toast } = useToast();
@@ -165,20 +169,52 @@ export default function SalesEntry() {
                 Select Store:
               </label>
               <div className="flex-1 max-w-sm">
-                <Select value={globalSelectedStore} onValueChange={setGlobalSelectedStore}>
-                  <SelectTrigger data-testid="select-store-main">
-                    <SelectValue placeholder="Choose your store..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {stores
-                      .filter((store: any) => store.kodeGudang && store.namaGudang && store.kodeGudang.trim() !== '' && store.namaGudang.trim() !== '')
-                      .map((store: any) => (
-                      <SelectItem key={store.kodeGudang} value={store.kodeGudang}>
-                        {store.namaGudang}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Popover open={storeComboboxOpen} onOpenChange={setStoreComboboxOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={storeComboboxOpen}
+                      className="w-full justify-between"
+                      data-testid="select-store-main"
+                    >
+                      {globalSelectedStore
+                        ? stores.find((store: any) => store.kodeGudang === globalSelectedStore)?.namaGudang
+                        : "Choose your store..."}
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-full p-0">
+                    <Command>
+                      <CommandInput placeholder="Search stores..." />
+                      <CommandList>
+                        <CommandEmpty>No store found.</CommandEmpty>
+                        <CommandGroup>
+                          {stores
+                            .filter((store: any) => store.kodeGudang && store.namaGudang && store.kodeGudang.trim() !== '' && store.namaGudang.trim() !== '')
+                            .map((store: any) => (
+                            <CommandItem
+                              key={store.kodeGudang}
+                              value={store.namaGudang}
+                              onSelect={() => {
+                                setGlobalSelectedStore(store.kodeGudang);
+                                setStoreComboboxOpen(false);
+                              }}
+                            >
+                              <Check
+                                className={cn(
+                                  "mr-2 h-4 w-4",
+                                  globalSelectedStore === store.kodeGudang ? "opacity-100" : "opacity-0"
+                                )}
+                              />
+                              {store.namaGudang}
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
               </div>
               {globalSelectedStore && (
                 <Button
