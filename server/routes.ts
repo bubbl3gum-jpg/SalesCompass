@@ -1135,12 +1135,61 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get sales data
+  // Get sales data with query parameters
   app.get('/api/sales', authenticate, async (req, res) => {
     try {
       const { kode_gudang, tanggal } = req.query;
       const sales = await storage.getSales(kode_gudang as string, tanggal as string);
-      res.json(sales);
+      
+      // Transform field names from snake_case to camelCase for frontend
+      const transformedSales = sales.map(sale => ({
+        penjualanId: sale.penjualanId,
+        kodeGudang: sale.kodeGudang,
+        tanggal: sale.tanggal,
+        serialNumber: sale.sn,
+        kodeItem: sale.kodeItem,
+        discByAmount: sale.discByAmount,
+        notes: sale.notes,
+        preOrder: sale.preOrder,
+        itemId: sale.itemId,
+        discountType: sale.discountType,
+        paymentMethod: sale.paymentMethod,
+        finalPrice: sale.discByAmount // Use discByAmount as finalPrice
+      }));
+      
+      res.json(transformedSales);
+    } catch (error) {
+      console.error('Get sales error:', error);
+      res.status(500).json({ message: 'Failed to get sales data' });
+    }
+  });
+
+  // Get sales data with path parameters (matches frontend query pattern)
+  app.get('/api/sales/:store/:date', authenticate, async (req, res) => {
+    try {
+      const { store, date } = req.params;
+      const kode_gudang = store === 'ALL_STORE' ? undefined : store;
+      const tanggal = date;
+      
+      const sales = await storage.getSales(kode_gudang, tanggal);
+      
+      // Transform field names from snake_case to camelCase for frontend
+      const transformedSales = sales.map(sale => ({
+        penjualanId: sale.penjualanId,
+        kodeGudang: sale.kodeGudang,
+        tanggal: sale.tanggal,
+        serialNumber: sale.sn,
+        kodeItem: sale.kodeItem,
+        discByAmount: sale.discByAmount,
+        notes: sale.notes,
+        preOrder: sale.preOrder,
+        itemId: sale.itemId,
+        discountType: sale.discountType,
+        paymentMethod: sale.paymentMethod,
+        finalPrice: sale.discByAmount // Use discByAmount as finalPrice
+      }));
+      
+      res.json(transformedSales);
     } catch (error) {
       console.error('Get sales error:', error);
       res.status(500).json({ message: 'Failed to get sales data' });
