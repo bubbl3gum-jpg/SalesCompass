@@ -2234,10 +2234,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/edc', authenticate, checkRole(['System Administrator']), async (req, res) => {
     try {
       const validatedData = z.object({
-        merchantName: z.string(),
-        edcType: z.string()
+        namaEdc: z.string(),
+        jenisEdc: z.string(),
+        biayaAdmin: z.string().optional()
       }).parse(req.body);
-      const edc = await storage.createEdc(validatedData);
+      
+      // Transform to database format
+      const edcData = {
+        merchantName: validatedData.namaEdc,
+        edcType: validatedData.jenisEdc
+      };
+      
+      const edc = await storage.createEdc(edcData);
       res.json(edc);
     } catch (error) {
       console.error('EDC creation error:', error);
