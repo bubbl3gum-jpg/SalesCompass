@@ -1154,7 +1154,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         itemId: sale.itemId,
         discountType: sale.discountType,
         paymentMethod: sale.paymentMethod,
-        finalPrice: sale.discByAmount // Use discByAmount as finalPrice
+        finalPrice: parseFloat(sale.discByAmount || '0')
       }));
       
       res.json(transformedSales);
@@ -1186,7 +1186,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         itemId: sale.itemId,
         discountType: sale.discountType,
         paymentMethod: sale.paymentMethod,
-        finalPrice: sale.discByAmount // Use discByAmount as finalPrice
+        finalPrice: parseFloat(sale.discByAmount || '0')
       }));
       
       res.json(transformedSales);
@@ -1219,7 +1219,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         itemId: sale.itemId,
         discountType: sale.discountType,
         paymentMethod: sale.paymentMethod,
-        finalPrice: sale.discByAmount
+        finalPrice: parseFloat(sale.discByAmount || '0')
       };
       
       res.json(transformedSale);
