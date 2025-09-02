@@ -15,7 +15,7 @@ import { cn } from "@/lib/utils";
 export default function SalesEntry() {
   const { isExpanded } = useSidebar();
   const { user } = useStoreAuth(); // Get user for permissions
-  const { selectedStore: globalSelectedStore, shouldUseGlobalStore } = useGlobalStore();
+  const { selectedStore: globalSelectedStore, setSelectedStore: setGlobalSelectedStore, shouldUseGlobalStore } = useGlobalStore();
   const [showSalesModal, setShowSalesModal] = useState(false);
   const [localSelectedStore, setLocalSelectedStore] = useState<string>('');
   const [dateFilter, setDateFilter] = useState<string>(new Date().toISOString().split('T')[0]);
@@ -110,14 +110,14 @@ export default function SalesEntry() {
             </div>
           </div>
           
-          {/* Store Selector - Only show for individual store users (all-store users use global selection) */}
-          {!shouldUseGlobalStore && user?.can_access_all_stores && (
+          {/* Store Selector - Show for users who have access to multiple stores */}
+          {shouldUseGlobalStore && (
             <div className="flex items-center gap-4">
               <label className="text-sm font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap">
                 Select Store:
               </label>
               <div className="flex-1 max-w-sm">
-                <Select value={localSelectedStore} onValueChange={setLocalSelectedStore}>
+                <Select value={globalSelectedStore} onValueChange={setGlobalSelectedStore}>
                   <SelectTrigger data-testid="select-store-main">
                     <SelectValue placeholder="Choose your store..." />
                   </SelectTrigger>
@@ -131,11 +131,11 @@ export default function SalesEntry() {
                   </SelectContent>
                 </Select>
               </div>
-              {localSelectedStore && (
+              {globalSelectedStore && (
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => setLocalSelectedStore('')}
+                  onClick={() => setGlobalSelectedStore('')}
                   className="text-xs"
                   data-testid="button-clear-store"
                 >
