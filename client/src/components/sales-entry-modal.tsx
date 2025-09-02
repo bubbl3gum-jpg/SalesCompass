@@ -132,27 +132,55 @@ export function SalesEntryModal({ isOpen, onClose, selectedStore, editingSale }:
   // Reset form when modal opens
   useEffect(() => {
     if (isOpen) {
-      form.reset({
-        kodeGudang: selectedStore || "",
-        tanggal: new Date().toISOString().split('T')[0],
-        serialNumber: "",
-        kodeItem: "",
-        namaItem: "",
-        quantity: "",
-        normalPrice: "0",
-        discountType: "",
-        finalPrice: "0",
-        paymentMethod: "Cash",
-        notes: "",
-      });
-      setItemSearchResults([]);
-      setSelectedItemData(null);
-      setAvailableQuantities([]);
-      setApplicableDiscounts([]);
-      setSearchQuery('');
-      setSearchMode('serial');
+      if (editingSale) {
+        // When editing, populate form with existing data
+        form.reset({
+          kodeGudang: editingSale.kodeGudang || selectedStore || "",
+          tanggal: editingSale.tanggal || new Date().toISOString().split('T')[0],
+          serialNumber: editingSale.serialNumber || "",
+          kodeItem: editingSale.kodeItem || "",
+          namaItem: editingSale.namaItem || "",
+          quantity: editingSale.quantity?.toString() || "1",
+          normalPrice: editingSale.normalPrice?.toString() || editingSale.finalPrice?.toString() || "0",
+          discountType: editingSale.discountType || "",
+          finalPrice: editingSale.finalPrice?.toString() || "0",
+          paymentMethod: editingSale.paymentMethod || "Cash",
+          notes: editingSale.notes || "",
+        });
+        // Set item data if available
+        if (editingSale.kodeItem) {
+          setSelectedItemData({
+            kodeItem: editingSale.kodeItem,
+            namaItem: editingSale.namaItem,
+            normalPrice: editingSale.normalPrice || editingSale.finalPrice || 0,
+            sp: 0,
+            availableQuantity: 999,
+          });
+        }
+      } else {
+        // When creating new, reset to empty form
+        form.reset({
+          kodeGudang: selectedStore || "",
+          tanggal: new Date().toISOString().split('T')[0],
+          serialNumber: "",
+          kodeItem: "",
+          namaItem: "",
+          quantity: "",
+          normalPrice: "0",
+          discountType: "",
+          finalPrice: "0",
+          paymentMethod: "Cash",
+          notes: "",
+        });
+        setItemSearchResults([]);
+        setSelectedItemData(null);
+        setAvailableQuantities([]);
+        setApplicableDiscounts([]);
+        setSearchQuery('');
+        setSearchMode('serial');
+      }
     }
-  }, [isOpen, selectedStore, form]);
+  }, [isOpen, selectedStore, editingSale, form]);
 
   // Get stores
   const { data: stores } = useQuery({
