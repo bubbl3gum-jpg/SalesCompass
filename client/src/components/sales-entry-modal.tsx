@@ -40,6 +40,7 @@ const salesFormSchema = z.object({
   normalPrice: z.string(),
   discountType: z.string().optional(),
   finalPrice: z.string(),
+  paymentMethod: z.string().min(1, "Payment method is required"),
   notes: z.string().optional(),
 });
 
@@ -97,6 +98,7 @@ export function SalesEntryModal({ isOpen, onClose, selectedStore }: SalesEntryMo
       normalPrice: "0",
       discountType: "",
       finalPrice: "0",
+      paymentMethod: "Cash",
       notes: "",
     },
   });
@@ -121,6 +123,7 @@ export function SalesEntryModal({ isOpen, onClose, selectedStore }: SalesEntryMo
         normalPrice: "0",
         discountType: "",
         finalPrice: "0",
+        paymentMethod: "Cash",
         notes: "",
       });
       setItemSearchResults([]);
@@ -697,6 +700,33 @@ export function SalesEntryModal({ isOpen, onClose, selectedStore }: SalesEntryMo
                 )}
               />
             )}
+
+            {/* Payment Method */}
+            <FormField
+              control={form.control}
+              name="paymentMethod"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Payment Method</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger data-testid="select-payment-method">
+                        <SelectValue placeholder="Select payment method" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="Cash">Cash</SelectItem>
+                      <SelectItem value="Credit Card">Credit Card</SelectItem>
+                      <SelectItem value="Debit Card">Debit Card</SelectItem>
+                      <SelectItem value="Bank Transfer">Bank Transfer</SelectItem>
+                      <SelectItem value="E-Wallet">E-Wallet</SelectItem>
+                      <SelectItem value="QRIS">QRIS</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
             {/* Notes */}
             <FormField
