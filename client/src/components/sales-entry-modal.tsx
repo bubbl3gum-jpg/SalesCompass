@@ -86,6 +86,12 @@ export function SalesEntryModal({ isOpen, onClose, selectedStore, editingSale }:
   const [availableQuantities, setAvailableQuantities] = useState<number[]>([]);
   const [applicableDiscounts, setApplicableDiscounts] = useState<DiscountOption[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+  
+  // Fetch payment methods from database
+  const { data: paymentMethods = [] } = useQuery({
+    queryKey: ['/api/edc'],
+    enabled: isOpen,
+  });
 
   const form = useForm<SalesFormData>({
     resolver: zodResolver(salesFormSchema),
@@ -733,11 +739,11 @@ export function SalesEntryModal({ isOpen, onClose, selectedStore, editingSale }:
                     </FormControl>
                     <SelectContent>
                       <SelectItem value="Cash">Cash</SelectItem>
-                      <SelectItem value="Credit Card">Credit Card</SelectItem>
-                      <SelectItem value="Debit Card">Debit Card</SelectItem>
-                      <SelectItem value="Bank Transfer">Bank Transfer</SelectItem>
-                      <SelectItem value="E-Wallet">E-Wallet</SelectItem>
-                      <SelectItem value="QRIS">QRIS</SelectItem>
+                      {Array.isArray(paymentMethods) && paymentMethods.map((method: any) => (
+                        <SelectItem key={method.edcId} value={method.namaEdc}>
+                          {method.namaEdc} {method.jenisEdc ? `(${method.jenisEdc})` : ''}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                   <FormMessage />

@@ -2225,7 +2225,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/edc', authenticate, async (req, res) => {
     try {
       const edcList = await storage.getEdc();
-      res.json(edcList);
+      // Transform to frontend format
+      const transformedList = edcList.map(edc => ({
+        edcId: edc.edcId,
+        namaEdc: edc.merchantName || '',
+        jenisEdc: edc.edcType || '',
+        biayaAdmin: 0
+      }));
+      res.json(transformedList);
     } catch (error) {
       res.status(500).json({ message: 'Failed to get EDC list' });
     }
@@ -2236,7 +2243,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const validatedData = z.object({
         namaEdc: z.string(),
         jenisEdc: z.string(),
-        biayaAdmin: z.string().optional()
+        biayaAdmin: z.union([z.string(), z.number()]).optional()
       }).parse(req.body);
       
       // Transform to database format
@@ -2246,7 +2253,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       };
       
       const edc = await storage.createEdc(edcData);
-      res.json(edc);
+      
+      // Return in frontend format
+      res.json({
+        edcId: edc.edcId,
+        namaEdc: edc.merchantName,
+        jenisEdc: edc.edcType,
+        biayaAdmin: validatedData.biayaAdmin || 0
+      });
     } catch (error) {
       console.error('EDC creation error:', error);
       if (error instanceof z.ZodError) {
