@@ -83,13 +83,15 @@ export default function PriceLists() {
   const refreshPricelistData = useCallback(async () => {
     console.log('🔄 Refreshing pricelist data...');
     
-    // Clear all cached pricelist queries
-    queryClient.removeQueries({ queryKey: ['/api/pricelist'] });
-    queryClient.clear(); // Clear entire cache as a fallback
+    // Only invalidate pricelist queries to refetch data without page reload
+    await queryClient.invalidateQueries({ queryKey: ['/api/pricelist'] });
+    await queryClient.invalidateQueries({ queryKey: ['/api/reference-sheets'] });
     
-    // Also refresh the current query
-    window.location.reload();
-  }, [queryClient]);
+    toast({
+      title: "Data refreshed",
+      description: "Price list data has been refreshed successfully.",
+    });
+  }, [queryClient, toast]);
 
   // Debounce search term to avoid too many API calls
   useEffect(() => {

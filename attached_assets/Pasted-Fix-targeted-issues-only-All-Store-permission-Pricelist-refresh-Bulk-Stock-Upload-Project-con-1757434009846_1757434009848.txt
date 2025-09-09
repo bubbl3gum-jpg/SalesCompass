@@ -1,0 +1,161 @@
+Fix targeted issues only — “All Store” permission, Pricelist refresh, Bulk Stock Upload
+
+Project context (do not change stack):
+Frontend: Next.js (TypeScript, React 18, Tailwind, shadcn/ui, TanStack Query).
+Backend: FastAPI (Python 3.12, SQLAlchemy 2.x, Alembic).
+DB: MySQL 8.
+RBAC already exists (roles like Admin/System Admin/Staff, store-scoped access, etc.).
+
+Scope guardrails (very important)
+
+✅ Only implement the items below.
+
+❌ Do not rename tables, routes, components, or refactor unrelated code.
+
+❌ No breaking changes to existing APIs.
+
+If a migration is strictly necessary, keep it minimal and include an Alembic revision.
+
+1) “All Store” must be a special permission (not a store)
+
+Problem: Currently “All Store” is treated like a store or the user must belong to a store. I don’t want to “join” a store to see data across stores.
+
+Goal behavior:
+
+Introduce a special permission (name it exactly: ALL_STORES_VIEW) that grants view/select access across all stores.
+
+“All Store” is not a row in stores. It’s a permission flag only.
+
+When a user with ALL_STORES_VIEW is logged in, show a Store Switcher UI (top nav or header).
+
+They can choose a specific store to activate/view.
+
+The active store drives context for:
+
+Sales Entry
+
+Settlements (create/new settlement)
+
+Stock Opname
+
+Persist the chosen active store in frontend (e.g., localStorage) and also pass it to backend on requests (e.g., query param store_id or header). Keep current API shapes if possible.
+
+Transfers exception: When creating a Transfer, user must explicitly pick stores (from_store, to_store) each time — do not auto-default to active store.
+
+Non-ALL users: If a user does not have ALL_STORES_VIEW, keep current behavior (they remain scoped to their assigned store as today).
+
+Implementation notes:
+
+Frontend: Add StoreSwitcher component that reads/writes a single activeStoreId and broadcasts via a context/provider or a lightweight global store. Ensure all store-scoped pages read this value.
+
+Backend: Respect optional store_id parameter for endpoints that are store-scoped. If supplied and user has ALL_STORES_VIEW, use it; otherwise enforce the user’s assigned store.
+
+Minimal DB change (only if needed): seed permissions.name = 'ALL_STORES_VIEW' and attach to Admin/System Admin.
+
+Acceptance tests (Gherkin-style):
+
+Given I’m Admin with ALL_STORES_VIEW, when I open the app, then I see a store selector and default to “no store selected” until I pick one.
+
+When I pick Store A, then Sales Entry, Settlements, and Stock Opname operate only on Store A until I change it.
+
+When I create a Transfer, then I must choose from_store and to_store explicitly (no hidden default).
+
+Given I’m a normal store-scoped user without ALL_STORES_VIEW, then nothing changes vs today.
+
+2) Pricelist “Refresh” button bug
+
+Problem: The “Refresh” button on the Pricelist page resets to Home instead of actually refreshing data.
+
+Fix:
+
+Make the button only refetch the current Pricelist query without changing the route or clearing page filters/search.
+
+With TanStack Query, call queryClient.invalidateQueries(['pricelist', currentFilters]) (or the app’s existing key).
+
+Do not navigate (router.push('/') or similar must not be called).
+
+Keep scroll position and current filters intact.
+
+Acceptance tests:
+
+Given I’m on /pricelist with filters applied, when I click “Refresh”, then data re-fetches and I remain on /pricelist with the same filters and scroll position.
+
+3) Admin Settings → “Bulk Stock Upload” page not working
+
+Problem: The Admin “Bulk Stock Upload” page shows errors or doesn’t function.
+
+Goal behavior:
+
+Support .csv and .xlsx uploads.
+
+Frontend:
+
+Drag-and-drop or file picker.
+
+Show a progress indicator while uploading/processing.
+
+After processing, show a clear summary: rows accepted, rows rejected, reasons (first 5 errors), and a downloadable error CSV (if errors).
+
+Backend:
+
+Endpoint (keep or create) e.g., POST /admin/bulk-stock/upload.
+
+Parse file, validate headers (map common aliases like serial_number, sn, kode item, etc.), and coerce types safely.
+
+Insert rows in a transaction with proper dedup rules already used by the app.
+
+Return a structured JSON summary { accepted, rejected, errors[] }.
+
+Handle large files gracefully (streaming upload on frontend, chunked or buffered process on backend if needed).
+
+Do not change existing tables; reuse current stock import logic/utilities if they exist.
+
+Acceptance tests:
+
+When I upload a valid small CSV, then I see “Success” with counts and I can continue working.
+
+When I upload a file with bad rows, then the summary lists error reasons and allows me to download an error report.
+
+When I refresh the page, then it does not navigate away; it just reloads the list/state as designed.
+
+Deliverables
+
+Minimal code changes limited to these 3 areas.
+
+If a migration is required for ALL_STORES_VIEW, add a single Alembic revision with idempotent seeding.
+
+Frontend unit/integration tests for:
+
+Store Switcher presence for ALL_STORES_VIEW users.
+
+Pricelist refresh behavior (no navigation).
+
+Backend tests (where applicable) for store scoping and the upload endpoint.
+
+Update inline docstrings/comments where you touch code.
+
+Validation checklist (I will verify)
+
+ Users without ALL_STORES_VIEW behave exactly as before.
+
+ Admin with ALL_STORES_VIEW can switch active store and see that context respected in Sales Entry, Settlements, Stock Opname.
+
+ Transfers require explicit from_store and to_store every time.
+
+ Pricelist “Refresh” refetches data and never navigates to Home.
+
+ Bulk Stock Upload accepts CSV/XLSX, shows progress, returns a clear summary, and produces an error CSV when needed.
+
+ No unrelated UI/route/DB changes.
+
+Notes for you (Replit AI)
+
+Keep filenames, routes, and component names stable unless you must create new small, focused modules (e.g., components/StoreSwitcher.tsx).
+
+If you add code, keep it small and self-contained.
+
+Prefer queryClient.invalidateQueries or equivalent over hard navigation for refresh behaviors.
+
+Explain any unavoidable migration in the PR description and keep it minimal.
+
+Do not implement new features beyond this list. Fix only what’s described above.
