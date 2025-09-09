@@ -135,18 +135,14 @@ function useTableData(endpoint: string, enabled = true, page = 1, limit = 100) {
 }
 
 export default function AdminSettings() {
+  // ALL hooks must be called at the top level, before any early returns
   const { user } = useStoreAuth();
-  
-  // Early return check BEFORE any other hooks
-  if (!user) {
-    return <div>Please log in to access admin settings.</div>;
-  }
-  
   const { isExpanded } = useSidebar();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { shouldUseGlobalStore } = useGlobalStore();
-
+  
+  // All state hooks
   const [activeTab, setActiveTab] = useState('stores');
   const [showBulkUploadModal, setShowBulkUploadModal] = useState(false);
   const [bulkUploadFile, setBulkUploadFile] = useState<File | null>(null);
@@ -158,6 +154,20 @@ export default function AdminSettings() {
   const [currentPage, setCurrentPage] = useState<Record<string, number>>({});
   const [itemsPerPage] = useState(15); // Much smaller chunks for better performance
   const [maxDisplayItems] = useState(10); // Maximum items to render in DOM at once
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [editingItem, setEditingItem] = useState<string | null>(null);
+  const [formData, setFormData] = useState<Record<string, string>>({});
+  const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
+  const [selectAll, setSelectAll] = useState(false);
+  const [searchQueries, setSearchQueries] = useState<Record<string, string>>({});
+  const [debouncedSearchQueries, setDebouncedSearchQueries] = useState<Record<string, string>>({});
+  const [currentImportId, setCurrentImportId] = useState<string | null>(null);
+  const [isImporting, setIsImporting] = useState(false);
+  const [deletingItem, setDeletingItem] = useState<{endpoint: string, id: string, name?: string} | null>(null);
+  const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   // Always call all hooks, but control their enabling based on active tab
   const storesQuery = useTableData('/api/stores', activeTab === 'stores', currentPage['stores'] || 1, itemsPerPage);
@@ -166,19 +176,6 @@ export default function AdminSettings() {
 
   // Get positions data for staff form
   const positions = positionsQuery.data || [];
-  const [showCreateModal, setShowCreateModal] = useState(false);
-  const [showEditModal, setShowEditModal] = useState(false);
-  const [showImportModal, setShowImportModal] = useState(false);
-  const [editingItem, setEditingItem] = useState<string | null>(null);
-  const [formData, setFormData] = useState<Record<string, string>>({});
-  
-  // Data Selection State
-  const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
-  const [selectAll, setSelectAll] = useState(false);
-  
-  // Search and Import Progress State with debouncing
-  const [searchQueries, setSearchQueries] = useState<Record<string, string>>({});
-  const [debouncedSearchQueries, setDebouncedSearchQueries] = useState<Record<string, string>>({});
   
   // Debounce search to prevent constant filtering
   useEffect(() => {
@@ -188,13 +185,8 @@ export default function AdminSettings() {
     
     return () => clearTimeout(timer);
   }, [searchQueries]);
-  const [currentImportId, setCurrentImportId] = useState<string | null>(null);
-  const [isImporting, setIsImporting] = useState(false);
-  const [deletingItem, setDeletingItem] = useState<{endpoint: string, id: string, name?: string} | null>(null);
-  const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
-
-  // Handle tab changes with cleanup to improve performance
+  
+  // All callback hooks must be called before early return
   const handleTabChange = useCallback((newTab: string) => {
     // Clear selections and search when switching tabs to prevent memory issues
     setSelectedItems(new Set());
@@ -203,7 +195,6 @@ export default function AdminSettings() {
     setActiveTab(newTab);
   }, [activeTab]);
 
-  // Selection handlers
   const handleSelectAll = useCallback((checked: boolean, data: any[], config: TableConfig) => {
     if (checked) {
       const allIds = new Set(data.map(item => item[config.keyField]));
@@ -227,6 +218,66 @@ export default function AdminSettings() {
       return newSelected;
     });
   }, []);
+  
+  const getCurrentConfig = useCallback(() => {
+    const config = tableConfigs.find(config => config.name === activeTab);
+    // Dynamically populate position options for staff
+    if (config?.name === 'staff') {
+      const updatedConfig = { ...config };
+      const jabatanField = updatedConfig.fields.find(f => f.key === 'jabatan');
+      if (jabatanField && Array.isArray(positions) && positions.length > 0) {
+        jabatanField.options = positions.map((pos: any) => ({
+          value: pos.positionName,
+          label: pos.positionName
+        }));
+      }
+      return updatedConfig;
+    }
+    return config;
+  }, [activeTab, positions]);
+
+  // All mutation hooks
+  const deleteMutation = useMutation({
+    mutationFn: async ({ endpoint, id }: { endpoint: string; id: string }) => {
+      const response = await apiRequest('DELETE', `${endpoint}/${id}`);
+      return response;
+    },
+    onSuccess: () => {
+      const config = getCurrentConfig();
+      if (config) {
+        queryClient.invalidateQueries({ queryKey: [config.endpoint] });
+      }
+      
+      toast({
+        title: "Success",
+        description: "Record deleted successfully",
+      });
+    },
+    onError: (error) => {
+      if (isUnauthorizedError(error as Error)) {
+        toast({
+          title: "Unauthorized",
+          description: "You are logged out. Logging in again...",
+          variant: "destructive",
+        });
+        setTimeout(() => {
+          window.location.replace("/api/login");
+        }, 500);
+        return;
+      }
+      
+      toast({
+        title: "Delete Failed",
+        description: (error as Error).message || "Failed to delete record",
+        variant: "destructive",
+      });
+    },
+  });
+  
+  // Early return check AFTER all hooks are called
+  if (!user) {
+    return <div>Please log in to access admin settings.</div>;
+  }
 
   const handleBulkDelete = (config: TableConfig) => {
     if (selectedItems.size === 0) {
@@ -266,60 +317,6 @@ export default function AdminSettings() {
       });
     }
   };
-
-  const getCurrentConfig = useCallback(() => {
-    const config = tableConfigs.find(config => config.name === activeTab);
-    // Dynamically populate position options for staff
-    if (config?.name === 'staff') {
-      const updatedConfig = { ...config };
-      const jabatanField = updatedConfig.fields.find(f => f.key === 'jabatan');
-      if (jabatanField && Array.isArray(positions) && positions.length > 0) {
-        jabatanField.options = positions.map((pos: any) => ({
-          value: pos.positionName,
-          label: pos.positionName
-        }));
-      }
-      return updatedConfig;
-    }
-    return config;
-  }, [activeTab, positions]);
-
-  const deleteMutation = useMutation({
-    mutationFn: async ({ endpoint, id }: { endpoint: string; id: string }) => {
-      const response = await apiRequest('DELETE', `${endpoint}/${id}`);
-      return response;
-    },
-    onSuccess: () => {
-      const config = getCurrentConfig();
-      if (config) {
-        queryClient.invalidateQueries({ queryKey: [config.endpoint] });
-      }
-      
-      toast({
-        title: "Success",
-        description: "Record deleted successfully",
-      });
-    },
-    onError: (error) => {
-      if (isUnauthorizedError(error as Error)) {
-        toast({
-          title: "Unauthorized",
-          description: "You are logged out. Logging in again...",
-          variant: "destructive",
-        });
-        setTimeout(() => {
-          window.location.replace("/api/login");
-        }, 500);
-        return;
-      }
-      
-      toast({
-        title: "Delete Failed",
-        description: (error as Error).message || "Failed to delete record",
-        variant: "destructive",
-      });
-    },
-  });
 
   const createMutation = useMutation({
     mutationFn: async (data: Record<string, string>) => {
