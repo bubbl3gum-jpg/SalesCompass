@@ -1735,7 +1735,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Master data endpoints
-  app.get('/api/stores', isAuthenticated, async (req, res) => {
+  app.get('/api/stores', authenticate, async (req, res) => {
     try {
       // Clear cache first to ensure fresh data
       cache.del(CACHE_KEYS.STORES);
