@@ -535,7 +535,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get current authenticated store
-  app.get('/api/store/current', isAuthenticated, async (req, res) => {
+  app.get('/api/store/current', authenticate, async (req, res) => {
     try {
       const authenticatedStore = (req.session as any).authenticatedStore;
       const storeLoginType = (req.session as any).storeLoginType || 'single_store';
@@ -869,7 +869,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
 
   // Get all import jobs for monitoring (admin only) - optimized with caching
-  app.get('/api/import/jobs', isAuthenticated, (req, res) => {
+  app.get('/api/import/jobs', authenticate, (req, res) => {
     // Add cache headers to prevent excessive polling
     res.set('Cache-Control', 'public, max-age=30'); // Cache for 30 seconds
     res.set('ETag', '"empty-jobs"');
@@ -1806,7 +1806,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/reference-sheets', isAuthenticated, async (req, res) => {
+  app.get('/api/reference-sheets', authenticate, async (req, res) => {
     try {
       const { search } = req.query;
       const referenceSheets = await storage.getReferenceSheets();
@@ -1871,7 +1871,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/discounts', isAuthenticated, async (req, res) => {
+  app.get('/api/discounts', authenticate, async (req, res) => {
     try {
       const discounts = await withCache(
         CACHE_KEYS.DISCOUNTS,
@@ -1884,7 +1884,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/discounts', isAuthenticated, checkRole(['System Administrator']), async (req, res) => {
+  app.post('/api/discounts', authenticate, checkRole(['System Administrator']), async (req, res) => {
     try {
       const validatedData = insertDiscountTypeSchema.parse(req.body);
       // Convert number to string for storage
