@@ -1,0 +1,107 @@
+Create stock table NOW (opening_stock was dropped) — migration + model only
+
+Do not change anything else in the project.
+Stack: FastAPI + SQLAlchemy 2.x + Alembic, MySQL 8.
+
+Task
+
+Create a new table stock with the exact schema and indexes below, via a single Alembic revision, and add a matching SQLAlchemy model. This is the only change. Do not refactor unrelated code, routes, or services.
+
+Required schema (snake_case)
+
+stock_id BIGINT PK AUTO_INCREMENT
+
+kode_gudang VARCHAR(32) NOT NULL — FK to the stores table’s primary key/unique key for store code (likely stores.kode_gudang; verify and adjust FK target if the actual column name differs)
+
+serial_number VARCHAR(128) NOT NULL
+
+kode_item VARCHAR(128) NOT NULL
+
+qty INT NOT NULL DEFAULT 1
+
+tanggal_in DATE NOT NULL
+
+tanggal_out DATE NULL
+
+Indexes
+
+INDEX on serial_number
+
+INDEX on (kode_gudang, kode_item)
+
+(Optional) INDEX on tanggal_out (helpful for on-hand queries)
+
+Alembic migration
+
+Create a revision named like create_stock_table. In upgrade():
+
+Create the stock table exactly as defined above.
+
+Add the FK on kode_gudang to the correct stores table/column.
+
+Add the three indexes mentioned.
+
+In downgrade():
+
+Drop the stock table.
+
+If Alembic op.create_table can’t express IF NOT EXISTS, you may first check with SQLAlchemy’s inspector or execute a CREATE TABLE IF NOT EXISTS as raw SQL for idempotency. However, assume table does not exist now and keep the migration simple.
+
+SQLAlchemy model (2.x style)
+
+Add a new model (no extra relationships unless trivial). Keep the name and __tablename__ exactly:
+
+# app/models/stock.py (or existing models module)
+from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import BigInteger, String, Integer, Date, ForeignKey, Index
+from app.db.base_class import Base  # adjust import to your project
+
+class Stock(Base):
+    __tablename__ = "stock"
+
+    stock_id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    kode_gudang: Mapped[str] = mapped_column(String(32), ForeignKey("stores.kode_gudang"), nullable=False)  # adjust FK target if needed
+    serial_number: Mapped[str] = mapped_column(String(128), nullable=False)
+    kode_item: Mapped[str] = mapped_column(String(128), nullable=False)
+    qty: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1")
+    tanggal_in: Mapped["date"] = mapped_column(Date, nullable=False)
+    tanggal_out: Mapped["date"] = mapped_column(Date, nullable=True)
+
+    __table_args__ = (
+        Index("ix_stock_serial_number", "serial_number"),
+        Index("ix_stock_kodegudang_kodeitem", "kode_gudang", "kode_item"),
+        Index("ix_stock_tanggal_out", "tanggal_out"),
+    )
+
+MySQL DDL (for reference only; implement via Alembic)
+CREATE TABLE IF NOT EXISTS `stock` (
+  `stock_id` BIGINT NOT NULL AUTO_INCREMENT,
+  `kode_gudang` VARCHAR(32) NOT NULL,
+  `serial_number` VARCHAR(128) NOT NULL,
+  `kode_item` VARCHAR(128) NOT NULL,
+  `qty` INT NOT NULL DEFAULT 1,
+  `tanggal_in` DATE NOT NULL,
+  `tanggal_out` DATE NULL,
+  PRIMARY KEY (`stock_id`),
+  KEY `idx_stock_serial_number` (`serial_number`),
+  KEY `idx_stock_kodegudang_kodeitem` (`kode_gudang`, `kode_item`),
+  KEY `idx_stock_tanggal_out` (`tanggal_out`),
+  CONSTRAINT `fk_stock_kode_gudang` FOREIGN KEY (`kode_gudang`) REFERENCES `stores` (`kode_gudang`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+
+If your stores table/column is named differently, update the FK accordingly.
+
+Acceptance checklist (I will verify)
+
+ Running Alembic upgrade creates stock table successfully (no other schema changes).
+
+ stock has the exact columns, PK, FK, and indexes as specified.
+
+ ORM model Stock exists and maps to the table with the same indexes.
+
+ Downgrade drops stock.
+
+ No other files/routes/services are modified beyond what’s needed to add this table/model.
+
+Implement only the above. Nothing else should change.
