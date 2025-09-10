@@ -2548,7 +2548,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
 
   // Inventory search endpoint - searches actual store stock
-  app.get('/api/inventory/search', isAuthenticated, async (req, res) => {
+  app.get('/api/inventory/search', authenticate, async (req, res) => {
     try {
       const { store, query, searchType = 'serial' } = req.query;
       

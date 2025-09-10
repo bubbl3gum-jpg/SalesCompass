@@ -454,7 +454,9 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getPriceBySerial(serialNumber: string): Promise<Pricelist | undefined> {
-    const [result] = await db.select().from(pricelist).where(eq(pricelist.sn, serialNumber));
+    // Normalize serial number: trim whitespace and convert to uppercase for consistent matching
+    const normalizedSerial = serialNumber.trim().toUpperCase();
+    const [result] = await db.select().from(pricelist).where(sql`UPPER(TRIM(${pricelist.sn})) = ${normalizedSerial}`);
     return result;
   }
 
@@ -933,6 +935,9 @@ export class DatabaseStorage implements IStorage {
 
   // Inventory search operations - searches actual store stock from transfer orders
   async searchInventoryBySerial(storeCode: string, serialNumber: string): Promise<any[]> {
+    // Normalize serial number: trim whitespace and convert to uppercase for consistent matching
+    const normalizedSerial = serialNumber.trim().toUpperCase();
+    
     const results = await db
       .select({
         kodeItem: toItemList.kodeItem,
@@ -946,7 +951,7 @@ export class DatabaseStorage implements IStorage {
       .leftJoin(transferOrders, eq(toItemList.toNumber, transferOrders.toNumber))
       .where(
         and(
-          eq(toItemList.sn, serialNumber),
+          sql`UPPER(TRIM(${toItemList.sn})) = ${normalizedSerial}`,
           storeCode === 'ALL_STORE' ? sql`1=1` : eq(transferOrders.keGudang, storeCode)
         )
       );
