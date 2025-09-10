@@ -70,12 +70,6 @@ const navigationItems = [
         permission: "stock:opname"
       },
       {
-        name: "Stores Overview",
-        href: "/stores-overview",
-        icon: "fas fa-store",
-        permission: "store:overview"
-      },
-      {
         name: "Transfers", 
         href: "/transfers",
         icon: "fas fa-exchange-alt",

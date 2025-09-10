@@ -18,7 +18,6 @@ const SalesEntry = lazy(() => import("@/pages/sales-entry"));
 const Settlements = lazy(() => import("@/pages/settlements"));
 const StockDashboard = lazy(() => import("@/pages/stock-dashboard"));
 const StockOpname = lazy(() => import("@/pages/stock-opname"));
-const StoresOverview = lazy(() => import("@/pages/stores-overview"));
 const Transfers = lazy(() => import("@/pages/transfers"));
 const PriceLists = lazy(() => import("@/pages/price-lists"));
 const PaymentMethods = lazy(() => import("@/pages/payment-methods"));
@@ -84,9 +83,6 @@ function Router() {
             <Route path="/settlements" component={Settlements} />
             <Route path="/stock-dashboard" component={Dashboard} />
             <Route path="/stock-opname" component={StockOpname} />
-            <Route path="/stores-overview">
-              {(params) => <ProtectedRoute component={StoresOverview} permission="store:overview" {...params} />}
-            </Route>
             <Route path="/transfers" component={Transfers} />
             <Route path="/price-lists">
               {(params) => <ProtectedRoute component={PriceLists} permission="pricelist:read" {...params} />}
