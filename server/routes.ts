@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth } from "./replitAuth";
 import { authRouter } from "./authRoutes";
-import { authenticate, requireAuth, requireStoreAuth, scopeToStore } from "./authMiddleware";
+import { authenticate, authorize, requireAuth, requireStoreAuth, scopeToStore } from "./authMiddleware";
 import { isAuthenticated } from "./replitAuth";
 import crypto from 'crypto';
 import { z } from "zod";
@@ -1952,7 +1952,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Pricelist endpoints
-  app.get('/api/pricelist', isAuthenticated, async (req, res) => {
+  app.get('/api/pricelist', authenticate, async (req, res) => {
     try {
       const { page = 1, limit = 50, search = '' } = req.query;
       const pageNum = Math.max(1, parseInt(page as string) || 1);
@@ -2003,7 +2003,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/pricelist', isAuthenticated, checkRole(['System Administrator']), async (req, res) => {
+  app.post('/api/pricelist', authenticate, authorize('pricelist:update'), async (req, res) => {
     try {
       const validatedData = insertPricelistSchema.parse(req.body);
       const pricelistItem = await storage.createPricelist(validatedData);
@@ -2022,7 +2022,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put('/api/pricelist/:pricelistId', isAuthenticated, checkRole(['System Administrator']), async (req, res) => {
+  app.put('/api/pricelist/:pricelistId', authenticate, authorize('pricelist:update'), async (req, res) => {
     try {
       const { pricelistId } = req.params;
       const validatedData = insertPricelistSchema.partial().parse(req.body);
@@ -2042,7 +2042,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete('/api/pricelist/:pricelistId', isAuthenticated, checkRole(['System Administrator']), async (req, res) => {
+  app.delete('/api/pricelist/:pricelistId', authenticate, authorize('pricelist:update'), async (req, res) => {
     try {
       const { pricelistId } = req.params;
       await storage.deletePricelist(parseInt(pricelistId));
