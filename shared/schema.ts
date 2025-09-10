@@ -11,6 +11,7 @@ import {
   date,
   boolean,
   pgEnum,
+  serial,
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
@@ -303,3 +304,23 @@ export const insertStoreEdcSchema = createInsertSchema(storeEdc).omit({ storeEdc
 export const insertEdcSettlementSchema = createInsertSchema(edcSettlement).omit({ edcSettlementId: true });
 export const insertStaffSchema = createInsertSchema(staff);
 export const insertPositionSchema = createInsertSchema(positions).omit({ positionId: true });
+
+// Stock table - replaces opening_stock with simplified schema
+export const stock = pgTable("stock", {
+  stockId: serial("stock_id").primaryKey(), // Using serial for auto-increment in PostgreSQL
+  kodeGudang: varchar("kode_gudang", { length: 32 }).notNull().references(() => stores.kodeGudang),
+  serialNumber: varchar("serial_number", { length: 128 }).notNull(),
+  kodeItem: varchar("kode_item", { length: 128 }).notNull(),
+  qty: integer("qty").notNull().default(1),
+  tanggalIn: date("tanggal_in").notNull(),
+  tanggalOut: date("tanggal_out"),
+}, (table) => [
+  index("idx_stock_serial_number").on(table.serialNumber),
+  index("idx_stock_kodegudang_kodeitem").on(table.kodeGudang, table.kodeItem),
+  index("idx_stock_tanggal_out").on(table.tanggalOut),
+]);
+
+export type InsertStock = typeof stock.$inferInsert;
+export type Stock = typeof stock.$inferSelect;
+
+export const insertStockSchema = createInsertSchema(stock).omit({ stockId: true });
