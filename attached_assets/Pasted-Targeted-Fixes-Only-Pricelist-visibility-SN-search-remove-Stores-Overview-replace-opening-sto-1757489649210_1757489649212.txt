@@ -1,0 +1,168 @@
+Targeted Fixes Only — Pricelist visibility, SN search, remove “Stores Overview”, replace opening_stock with stock
+
+Do not change stack or unrelated code.
+Frontend: Next.js (TypeScript, React 18, Tailwind, shadcn/ui, TanStack Query).
+Backend: FastAPI (Python 3.12, SQLAlchemy 2.x, Alembic).
+DB: MySQL 8.
+
+Scope guardrails
+
+✅ Fix only the items below.
+
+❌ Do not rename unrelated tables, routes, or components.
+
+❌ No broad refactors or design changes.
+
+If a migration is required, keep it minimal and add a single Alembic revision with clear upgrade/downgrade.
+
+1) Pricelist exists in DB but doesn’t render on frontend
+
+Problem: Data is present in the database, but the Pricelist page shows nothing.
+
+What to do:
+
+Trace end-to-end: backend endpoint → client fetch (TanStack Query) → mapping/render.
+
+Ensure the backend returns the expected JSON shape and HTTP 200. If the shape differs, normalize on the server (preferred) or adapt the client mapper.
+
+On the client, do not navigate; just display the rows. Preserve filters/search and scroll.
+
+Add defensive rendering for empty arrays vs null / undefined.
+
+Use queryClient.invalidateQueries([‘pricelist’, currentFilters]) for the page’s refresh action; remove any unintended router.push('/') or route resets.
+
+Acceptance checks:
+
+With DB seeded, /pricelist renders rows.
+
+Clicking “Refresh” refetches data in place (no navigation, filters intact).
+
+2) Sales Entry SN search fails with correct serial numbers
+
+Problem: Entering a correct serial number (SN) does not resolve the item.
+
+What to do (server first):
+
+Normalize inputs: trim, collapse whitespace, and consistent casing (UPPER() or as stored).
+
+Ensure SQL uses an index on the serial column (create if missing).
+
+Handle common aliases: serial_number, sn, serial.
+
+Return a clear 404 JSON when not found; otherwise return the single resolved item.
+
+Client:
+
+Validate input (trim) before querying.
+
+Show success path when a single match is found; show helpful error when not found.
+
+Acceptance checks:
+
+Known good SN resolves immediately to the correct item.
+
+Trivial whitespace/case differences still resolve.
+
+Non-existent SN shows a friendly “not found” message.
+
+3) Remove redundant “Stores Overview” page (401 + duplicate of Home)
+
+Problem: A page named “Stores Overview” loads with 401 and duplicates the existing store overview on Home.
+
+What to do:
+
+Remove the page component, route, and any navbar/side-menu links to it.
+
+Redirect any deep links hitting that route to Home (301/replace in Next.js).
+
+Keep the Home page’s store overview as the single source.
+
+Acceptance checks:
+
+No nav/route goes to the removed page.
+
+Visiting the old URL redirects to Home without a 401.
+
+4) Replace opening_stock table with a simpler stock table
+
+Problem: opening_stock has too many unnecessary attributes. Replace it with a new, simple table named stock.
+
+Required schema (use snake_case in SQL/ORM):
+
+stock_id BIGINT PK AUTO_INCREMENT
+
+kode_gudang VARCHAR(32) NOT NULL — FK to stores (use existing store key)
+
+serial_number VARCHAR(128) NOT NULL — (maps to “SN”)
+
+kode_item VARCHAR(128) NOT NULL — (maps to “Kode Item”)
+
+qty INT NOT NULL DEFAULT 1 — (maps to “Quantity”)
+
+tanggal_in DATE NOT NULL — (maps to “Tanggal In”)
+
+tanggal_out DATE NULL — (maps to “Tanggal Out”, nullable)
+
+Indexes:
+
+INDEX on (serial_number)
+
+INDEX on (kode_gudang, kode_item)
+
+(Optional) INDEX on (tanggal_out) for “on-hand” queries.
+
+Migration plan (Alembic):
+
+Create stock table exactly as above.
+
+If feasible, migrate minimal fields from opening_stock into stock (map/transform if names differ); otherwise skip migration per product decision.
+
+Update ORM models and any services/repositories to use stock.
+
+Drop opening_stock.
+
+Ensure all import/upload code targets stock.
+
+Acceptance checks:
+
+Alembic upgrade creates stock and drops opening_stock (with data migrated if configured).
+
+All features that used opening stock now read/write stock.
+
+Serial lookups and simple on-hand listings still work.
+
+Note: If other modules still depend on opening_stock, update them to read from stock without changing behavior. Keep changes minimal and localized.
+
+Deliverables
+
+Working Pricelist page showing DB data; refresh button refetches without navigation.
+
+Sales Entry SN search normalized and fast (with index).
+
+“Stores Overview” page removed and redirected to Home.
+
+Alembic migration: opening_stock → new stock (schema above); ORM updated.
+
+Brief PR/summary with what changed and where; include any new tests.
+
+Non-goals / Do NOT change
+
+Do not alter unrelated routes, components, or database tables.
+
+Do not redesign UI/UX.
+
+Do not introduce new features beyond what’s listed.
+
+Keep naming stable except where required in (4).
+
+Quick validation checklist (for me)
+
+ Pricelist renders from existing DB rows; refresh doesn’t navigate.
+
+ Correct SN resolves; trimmed/case input works; non-existent SN shows friendly error.
+
+ “Stores Overview” is gone; old URL redirects to Home; no 401s.
+
+ stock table exists, opening_stock removed; dependent code updated; migrations succeed.
+
+Implement only the above. Nothing else should change.
