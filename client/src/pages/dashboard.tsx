@@ -142,8 +142,66 @@ export default function Dashboard() {
     retry: false,
   });
 
-  const { data: stockData = [], isLoading: stockLoading } = useQuery<StockItem[]>({
-    queryKey: ["/api/stock/onhand", selectedStore],
+  // Stock overview from new stock table
+  const { data: stockOverview, isLoading: stockOverviewLoading } = useQuery({
+    queryKey: ['stores', 'stock', 'overview', { storeId: selectedStore, limit: 10 }],
+    queryFn: async () => {
+      const token = localStorage.getItem('accessToken');
+      const headers: HeadersInit = { 'Content-Type': 'application/json' };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+      
+      const params = new URLSearchParams();
+      if (selectedStore && selectedStore !== 'ALL_STORE') {
+        params.append('store_id', selectedStore);
+      }
+      params.append('limit_items', '10');
+      
+      const response = await fetch(`/api/stores/stock/overview?${params}`, {
+        credentials: 'include',
+        headers,
+      });
+      
+      if (!response.ok) {
+        throw new Error(`${response.status}: ${response.statusText}`);
+      }
+      return response.json();
+    },
+    enabled: !!selectedStore,
+    retry: false,
+  });
+
+  // Stock movements from new stock table  
+  const to = new Date().toISOString().split('T')[0];
+  const from = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+  
+  const { data: stockMovements, isLoading: stockMovementsLoading } = useQuery({
+    queryKey: ['stock', 'movements', { storeId: selectedStore, from, to }],
+    queryFn: async () => {
+      const token = localStorage.getItem('accessToken');
+      const headers: HeadersInit = { 'Content-Type': 'application/json' };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+      
+      const params = new URLSearchParams();
+      if (selectedStore && selectedStore !== 'ALL_STORE') {
+        params.append('store_id', selectedStore);
+      }
+      params.append('from', from);
+      params.append('to', to);
+      
+      const response = await fetch(`/api/stock/movements?${params}`, {
+        credentials: 'include',
+        headers,
+      });
+      
+      if (!response.ok) {
+        throw new Error(`${response.status}: ${response.statusText}`);
+      }
+      return response.json();
+    },
     enabled: !!selectedStore,
     retry: false,
   });
@@ -210,13 +268,12 @@ export default function Dashboard() {
     setSettlementForm(prev => ({ ...prev, store: selectedStore }));
   }, [selectedStore]);
 
-  const isLoadingData = metricsLoading || salesLoading || stockLoading;
+  const isLoadingData = metricsLoading || salesLoading || stockOverviewLoading || stockMovementsLoading;
 
-  // Helper functions
-  const filteredStock = stockData.filter((item: StockItem) => 
-    item.kodeItem.toLowerCase().includes(stockSearchTerm.toLowerCase()) ||
-    (item.serialNumber && item.serialNumber.toLowerCase().includes(stockSearchTerm.toLowerCase()))
-  );
+  // Helper functions - use top items from stock overview for filtering
+  const filteredStock = stockOverview?.activeStore?.topItems?.filter((item: any) => 
+    item.kodeItem.toLowerCase().includes(stockSearchTerm.toLowerCase())
+  ) || [];
 
   const getStockStatus = (qty: number) => {
     if (qty === 0) return { status: 'Out of Stock', color: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300' };
@@ -408,7 +465,7 @@ export default function Dashboard() {
                         <div>
                           <p className="text-sm font-medium text-gray-700 dark:text-gray-300">On-hand</p>
                           <p className="text-xl font-bold text-gray-900 dark:text-white" data-testid="text-onhand">
-                            {stockData.length.toLocaleString()}
+                            {stockOverview?.activeStore?.onHand?.toLocaleString() || '0'}
                           </p>
                         </div>
                         <Package className="w-8 h-8 text-blue-600 dark:text-blue-400" />
@@ -430,7 +487,7 @@ export default function Dashboard() {
                         <div>
                           <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Low-Stock</p>
                           <p className="text-xl font-bold text-gray-900 dark:text-white" data-testid="text-low-stock-alerts">
-                            {stockData.filter(item => item.qty > 0 && item.qty < 10).length}
+                            0
                           </p>
                         </div>
                         <AlertTriangle className="w-8 h-8 text-orange-600 dark:text-orange-400" />
@@ -445,6 +502,77 @@ export default function Dashboard() {
                           </p>
                         </div>
                         <TrendingUp className="w-8 h-8 text-purple-600 dark:text-purple-400" />
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Stock Movements - IN/OUT Activity */}
+              <Card className="bg-white/70 dark:bg-black/60 backdrop-blur-xl border border-white/30 dark:border-gray-700/50 shadow-lg">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-lg flex items-center gap-2 text-gray-900 dark:text-white">
+                    <TrendingUp className="w-5 h-5" />
+                    Stock Movements (Last 7 Days)
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* IN Movements */}
+                    <div className="space-y-3">
+                      <h4 className="font-medium text-green-700 dark:text-green-300 flex items-center gap-2">
+                        <Upload className="w-4 h-4" />
+                        Stock IN
+                      </h4>
+                      <div className="space-y-2 max-h-32 overflow-y-auto">
+                        {stockMovements?.in?.length > 0 ? (
+                          stockMovements.in.map((movement: any, index: number) => (
+                            <div key={index} className="flex justify-between items-center p-2 bg-green-50 dark:bg-green-900/20 rounded-lg">
+                              <span className="text-sm text-gray-700 dark:text-gray-300">
+                                {new Date(movement.date).toLocaleDateString()}
+                              </span>
+                              <span className="font-semibold text-green-700 dark:text-green-300">
+                                +{movement.count}
+                              </span>
+                            </div>
+                          ))
+                        ) : (
+                          <div className="text-center py-4 text-gray-500 dark:text-gray-400">
+                            No incoming stock movements
+                          </div>
+                        )}
+                      </div>
+                      <div className="text-xs text-center text-gray-600 dark:text-gray-400">
+                        Total IN: {stockMovements?.in?.reduce((sum: number, item: any) => sum + item.count, 0) || 0}
+                      </div>
+                    </div>
+
+                    {/* OUT Movements */}
+                    <div className="space-y-3">
+                      <h4 className="font-medium text-red-700 dark:text-red-300 flex items-center gap-2">
+                        <Download className="w-4 h-4" />
+                        Stock OUT
+                      </h4>
+                      <div className="space-y-2 max-h-32 overflow-y-auto">
+                        {stockMovements?.out?.length > 0 ? (
+                          stockMovements.out.map((movement: any, index: number) => (
+                            <div key={index} className="flex justify-between items-center p-2 bg-red-50 dark:bg-red-900/20 rounded-lg">
+                              <span className="text-sm text-gray-700 dark:text-gray-300">
+                                {new Date(movement.date).toLocaleDateString()}
+                              </span>
+                              <span className="font-semibold text-red-700 dark:text-red-300">
+                                -{movement.count}
+                              </span>
+                            </div>
+                          ))
+                        ) : (
+                          <div className="text-center py-4 text-gray-500 dark:text-gray-400">
+                            No outgoing stock movements
+                          </div>
+                        )}
+                      </div>
+                      <div className="text-xs text-center text-gray-600 dark:text-gray-400">
+                        Total OUT: {stockMovements?.out?.reduce((sum: number, item: any) => sum + item.count, 0) || 0}
                       </div>
                     </div>
                   </div>
@@ -713,19 +841,19 @@ export default function Dashboard() {
                   <CardContent>
                     <div className="space-y-3">
                       <div className="flex justify-between">
-                        <span className="text-sm text-gray-700 dark:text-gray-300">In Stock</span>
-                        <span className="font-semibold text-green-700 dark:text-green-300">{stockData.filter(item => item.qty >= 10).length}</span>
+                        <span className="text-sm text-gray-700 dark:text-gray-300">Top Items</span>
+                        <span className="font-semibold text-green-700 dark:text-green-300">{stockOverview?.activeStore?.topItems?.length || 0}</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-sm text-gray-700 dark:text-gray-300">Low Stock</span>
-                        <span className="font-semibold text-orange-700 dark:text-orange-300">{stockData.filter(item => item.qty > 0 && item.qty < 10).length}</span>
+                        <span className="text-sm text-gray-700 dark:text-gray-300">Total On-Hand</span>
+                        <span className="font-semibold text-blue-700 dark:text-blue-300">{stockOverview?.activeStore?.onHand || 0}</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-sm text-gray-700 dark:text-gray-300">Out of Stock</span>
-                        <span className="font-semibold text-red-700 dark:text-red-300">{stockData.filter(item => item.qty === 0).length}</span>
+                        <span className="text-sm text-gray-700 dark:text-gray-300">All Stores</span>
+                        <span className="font-semibold text-purple-700 dark:text-purple-300">{stockOverview?.stores?.length || 0}</span>
                       </div>
                       <div className="text-xs text-center text-gray-700 dark:text-gray-300">
-                        {stockData.filter(item => item.qty < 10).length > 20 ? '🔴 Critical' : stockData.filter(item => item.qty < 10).length > 10 ? '🟡 Monitor' : '🟢 Healthy'}
+                        {stockOverview?.activeStore?.onHand ? '🟢 Stock Available' : '🔴 No Stock Data'}
                       </div>
                     </div>
                   </CardContent>

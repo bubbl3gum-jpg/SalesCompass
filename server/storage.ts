@@ -15,6 +15,7 @@ import {
   edcSettlement,
   staff,
   positions,
+  stock,
   type User,
   type UpsertUser,
   type ReferenceSheet,
@@ -47,6 +48,8 @@ import {
   type InsertEdcSettlement,
   type InsertStaff,
   type InsertPosition,
+  type Stock,
+  type InsertStock,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, sql, desc, sum, or, ilike, inArray } from "drizzle-orm";
@@ -1028,6 +1031,97 @@ export class DatabaseStorage implements IStorage {
     }));
 
     return enhancedResults;
+  }
+
+  // Stock operations for new stock table
+  async getStockOverview(storeId?: string, limitItems: number = 10) {
+    // Get all stores on-hand totals (where tanggal_out IS NULL)
+    const storesOnHand = await db
+      .select({
+        kodeGudang: stock.kodeGudang,
+        onHand: sql<number>`SUM(${stock.qty})`.as('onHand')
+      })
+      .from(stock)
+      .where(sql`${stock.tanggalOut} IS NULL`)
+      .groupBy(stock.kodeGudang);
+
+    let activeStoreDetails = null;
+    if (storeId) {
+      // Get top items for the active store
+      const topItems = await db
+        .select({
+          kodeItem: stock.kodeItem,
+          qtyOnHand: sql<number>`SUM(${stock.qty})`.as('qtyOnHand')
+        })
+        .from(stock)
+        .where(
+          and(
+            eq(stock.kodeGudang, storeId),
+            sql`${stock.tanggalOut} IS NULL`
+          )
+        )
+        .groupBy(stock.kodeItem)
+        .orderBy(sql`SUM(${stock.qty}) DESC`)
+        .limit(limitItems);
+
+      const storeOnHand = storesOnHand.find(s => s.kodeGudang === storeId);
+      
+      activeStoreDetails = {
+        kodeGudang: storeId,
+        onHand: storeOnHand?.onHand || 0,
+        topItems
+      };
+    }
+
+    return {
+      stores: storesOnHand,
+      activeStore: activeStoreDetails
+    };
+  }
+
+  async getStockMovements(storeId?: string, from?: string, to?: string) {
+    const fromDate = from || new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const toDate = to || new Date().toISOString().split('T')[0];
+    
+    // Get IN movements (based on tanggal_in)
+    const inMovements = await db
+      .select({
+        date: stock.tanggalIn,
+        count: sql<number>`COUNT(*)`.as('count')
+      })
+      .from(stock)
+      .where(
+        and(
+          storeId ? eq(stock.kodeGudang, storeId) : sql`1=1`,
+          sql`${stock.tanggalIn} BETWEEN ${fromDate} AND ${toDate}`
+        )
+      )
+      .groupBy(stock.tanggalIn)
+      .orderBy(stock.tanggalIn);
+
+    // Get OUT movements (based on tanggal_out)
+    const outMovements = await db
+      .select({
+        date: stock.tanggalOut,
+        count: sql<number>`COUNT(*)`.as('count')
+      })
+      .from(stock)
+      .where(
+        and(
+          storeId ? eq(stock.kodeGudang, storeId) : sql`1=1`,
+          sql`${stock.tanggalOut} IS NOT NULL`,
+          sql`${stock.tanggalOut} BETWEEN ${fromDate} AND ${toDate}`
+        )
+      )
+      .groupBy(stock.tanggalOut)
+      .orderBy(stock.tanggalOut);
+
+    return {
+      range: { from: fromDate, to: toDate },
+      storeId,
+      in: inMovements,
+      out: outMovements
+    };
   }
 }
 

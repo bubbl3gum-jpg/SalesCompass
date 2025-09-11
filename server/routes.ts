@@ -2610,6 +2610,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Stock overview endpoint - shows on-hand totals per store and top items for active store
+  app.get('/api/stores/stock/overview', authenticate, async (req, res) => {
+    try {
+      const { store_id, limit_items = '10' } = req.query;
+      const storeId = store_id as string | undefined;
+      const limitItems = parseInt(limit_items as string) || 10;
+
+      const overview = await storage.getStockOverview(storeId, limitItems);
+      res.json(overview);
+    } catch (error) {
+      console.error('Stock overview error:', error);
+      res.status(500).json({ message: 'Failed to get stock overview' });
+    }
+  });
+
+  // Stock movements endpoint - shows IN/OUT activity by date range
+  app.get('/api/stock/movements', authenticate, async (req, res) => {
+    try {
+      const { store_id, from, to } = req.query;
+      const storeId = store_id as string | undefined;
+      const fromDate = from as string | undefined;
+      const toDate = to as string | undefined;
+
+      const movements = await storage.getStockMovements(storeId, fromDate, toDate);
+      res.json(movements);
+    } catch (error) {
+      console.error('Stock movements error:', error);
+      res.status(500).json({ message: 'Failed to get stock movements' });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

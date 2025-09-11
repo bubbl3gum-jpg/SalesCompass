@@ -317,6 +317,7 @@ export const stock = pgTable("stock", {
 }, (table) => [
   index("idx_stock_serial_number").on(table.serialNumber),
   index("idx_stock_kodegudang_kodeitem").on(table.kodeGudang, table.kodeItem),
+  index("idx_stock_tanggal_in").on(table.tanggalIn),
   index("idx_stock_tanggal_out").on(table.tanggalOut),
 ]);
 

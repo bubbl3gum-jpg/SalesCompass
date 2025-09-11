@@ -1,0 +1,195 @@
+Wire Home “Stores Overview” + “Stock Movements” to stock table (no other changes)
+
+Stack context (do not alter):
+
+Frontend: Next.js (TypeScript, React 18, Tailwind, shadcn/ui, TanStack Query)
+
+Backend: FastAPI + SQLAlchemy 2.x + Alembic
+
+DB: MySQL 8
+
+stock table already exists (columns: stock_id, kode_gudang, serial_number, kode_item, qty, tanggal_in, tanggal_out) with FK to stores.
+
+Scope guardrails
+
+✅ Implement only what’s listed below.
+
+❌ Do not reintroduce “Stores Overview” as a separate page. Keep it on Home.
+
+❌ No unrelated refactors, renames, or UI redesigns.
+
+Keep existing store-scoping logic and “active store” behavior as is (honor ALL_STORES_VIEW if present).
+
+Goals
+A) Home → “Stores Overview” must show stock data from stock
+
+Data source: stock table.
+
+Definition:
+
+On-hand = rows where tanggal_out IS NULL.
+
+Show per-store totals (on-hand count), and for the active store show top items by quantity (kode_item, sum of qty where tanggal_out IS NULL).
+
+Behavior:
+
+If user has ALL_STORES_VIEW: show a card/list of all stores with on-hand totals; the active store selector still filters details.
+
+If user is store-scoped: show only their store.
+
+B) Home → “Stock Movements” must reflect stock in/out activity
+
+Use tanggal_in as IN events, tanggal_out as OUT events.
+
+Date-range controls (use existing UI if present; otherwise default to last 7 days).
+
+Show per-day counts of IN and OUT for the active store (or aggregated if no store selected by an ALL user).
+
+Backend changes (add-only, minimal)
+
+Create 2 read-only endpoints. Do not break existing ones.
+
+GET /stores/stock/overview
+Query params:
+
+store_id (optional): kode_gudang. If omitted and user has ALL_STORES_VIEW, return overview for all stores; otherwise enforce user’s store.
+
+limit_items (optional, default 10): top items for the active store.
+
+Response shape:
+
+{
+  "stores": [
+    { "kode_gudang": "G01", "on_hand": 1234 },
+    { "kode_gudang": "G02", "on_hand": 987 }
+  ],
+  "active_store": {
+    "kode_gudang": "G01",
+    "on_hand": 1234,
+    "top_items": [
+      { "kode_item": "ITM001", "qty_on_hand": 120 },
+      { "kode_item": "ITM002", "qty_on_hand": 95 }
+    ]
+  }
+}
+
+
+SQL logic (illustrative):
+
+Per-store on-hand:
+
+SELECT kode_gudang, SUM(qty) AS on_hand
+FROM stock
+WHERE tanggal_out IS NULL
+GROUP BY kode_gudang;
+
+
+Active store top items:
+
+SELECT kode_item, SUM(qty) AS qty_on_hand
+FROM stock
+WHERE kode_gudang = :store AND tanggal_out IS NULL
+GROUP BY kode_item
+ORDER BY qty_on_hand DESC
+LIMIT :limit_items;
+
+
+GET /stock/movements
+Query params:
+
+store_id (optional): scope by store (same rules as above)
+
+from (YYYY-MM-DD), to (YYYY-MM-DD) inclusive; default last 7 days if omitted
+
+Response shape:
+
+{
+  "range": { "from": "2025-09-04", "to": "2025-09-11" },
+  "store_id": "G01",
+  "in": [ { "date": "2025-09-04", "count": 12 }, ... ],
+  "out": [ { "date": "2025-09-04", "count": 7 }, ... ]
+}
+
+
+SQL logic (illustrative):
+
+IN:
+
+SELECT DATE(tanggal_in) AS d, COUNT(*) AS cnt
+FROM stock
+WHERE (:store IS NULL OR kode_gudang = :store)
+  AND tanggal_in BETWEEN :from AND :to
+GROUP BY d ORDER BY d;
+
+
+OUT:
+
+SELECT DATE(tanggal_out) AS d, COUNT(*) AS cnt
+FROM stock
+WHERE (:store IS NULL OR kode_gudang = :store)
+  AND tanggal_out IS NOT NULL
+  AND tanggal_out BETWEEN :from AND :to
+GROUP BY d ORDER BY d;
+
+
+Performance notes (small, safe tweaks only):
+
+Ensure indexes exist for kode_gudang, kode_item, serial_number, tanggal_in, tanggal_out. If tanggal_in index is missing, add one Alembic revision to create INDEX ix_stock_tanggal_in (tanggal_in).
+
+Frontend changes (Home page only)
+
+Do not change routes or page structure.
+
+Use TanStack Query to call the two endpoints and render:
+
+Stores Overview card/list:
+
+For ALL users: show all store cards (kode_gudang, on-hand). Clicking a store or using the existing store switcher should set activeStoreId and refetch details for that store.
+
+For store-scoped users: show their store’s on-hand + top items.
+
+Stock Movements:
+
+Date range picker (reuse existing control).
+
+Line or bar chart for IN vs OUT per day (reuse existing chart component if available).
+
+Query keys (example):
+
+['stores','stock','overview',{storeId,limit}]
+
+['stock','movements',{storeId,from,to}]
+
+On store switch or date range change: queryClient.invalidateQueries for the matching keys. Do not navigate away or reset the page.
+
+Authorization & scoping rules
+
+If user has ALL_STORES_VIEW and no store_id is selected, backend returns aggregated per-store on-hand in stores, and active_store may be null until selected.
+
+If user lacks ALL_STORES_VIEW, enforce their store on the backend regardless of the param.
+
+Acceptance checks (I will verify)
+
+Home → Stores Overview shows correct on-hand totals sourced from stock.
+
+Selecting a store updates the active store details and top items without navigation.
+
+Home → Stock Movements shows daily IN/OUT counts for the chosen range and store; changing range or store refetches data in place.
+
+Non-ALL users see only their store; ALL users can see all-stores summary plus pick an active store.
+
+No other pages/components are modified.
+
+(If added) index on tanggal_in exists; queries are responsive.
+
+Deliverables
+
+New read-only endpoints: GET /stores/stock/overview, GET /stock/movements with input validation and tests.
+
+Home page wired to these endpoints with TanStack Query, preserving existing UI and behavior.
+
+(Optional if missing) Alembic migration adding ix_stock_tanggal_in.
+
+Short PR summary describing exactly what changed.
+
+Implement only the above. Nothing else should change.
