@@ -1123,6 +1123,115 @@ export class DatabaseStorage implements IStorage {
       out: outMovements
     };
   }
+
+  // Process transfer into stock movements (IN/OUT records)
+  async processTransferToStock(toNumber: string): Promise<{ processed: number; errors: string[] }> {
+    try {
+      // Check if transfer has already been processed (idempotency protection)
+      const existingStockRecords = await db
+        .select()
+        .from(stock)
+        .where(sql`${stock.serialNumber} LIKE ${toNumber + '-%'}`)
+        .limit(1);
+        
+      if (existingStockRecords.length > 0) {
+        console.log(`⚠️ Transfer ${toNumber} has already been processed - skipping`);
+        return {
+          processed: 0,
+          errors: [`Transfer ${toNumber} has already been processed`]
+        };
+      }
+
+      // Get transfer details
+      const transferOrder = await db
+        .select()
+        .from(transferOrders)
+        .where(eq(transferOrders.toNumber, toNumber))
+        .limit(1);
+      
+      if (transferOrder.length === 0) {
+        throw new Error(`Transfer ${toNumber} not found`);
+      }
+
+      const transfer = transferOrder[0];
+      console.log(`🔄 Processing transfer ${toNumber}: ${transfer.dariGudang} → ${transfer.keGudang}`);
+
+      // Get transfer items
+      const transferItems = await db
+        .select()
+        .from(toItemList)
+        .where(eq(toItemList.toNumber, toNumber));
+
+      if (transferItems.length === 0) {
+        throw new Error(`No items found for transfer ${toNumber}`);
+      }
+
+      console.log(`📦 Found ${transferItems.length} items to process`);
+
+      const stockRecords = [];
+      const errors = [];
+      const transferDate = transfer.tanggal || new Date().toISOString().split('T')[0];
+
+      for (const item of transferItems) {
+        try {
+          // Generate serial number if missing (use line number as fallback)
+          const serialNumber = item.sn && item.sn !== '-' ? item.sn : `${toNumber}-L${item.lineNo || 1}`;
+          
+          // Ensure we have valid warehouse codes
+          if (!transfer.dariGudang || !transfer.keGudang) {
+            throw new Error(`Invalid warehouse codes: ${transfer.dariGudang} -> ${transfer.keGudang}`);
+          }
+
+          // Create stock OUT record for source store (item leaves source store)
+          // For serial-tracked items, quantity is always 1 per record
+          stockRecords.push({
+            kodeGudang: transfer.dariGudang,
+            serialNumber: serialNumber,
+            kodeItem: item.kodeItem || 'UNKNOWN',
+            qty: 1, // Always 1 for serial-tracked items
+            tanggalIn: transferDate, // When it originally came into source store
+            tanggalOut: transferDate, // When it left source store (today)
+          });
+
+          // Create stock IN record for destination store (item arrives at destination)
+          // For serial-tracked items, quantity is always 1 per record
+          stockRecords.push({
+            kodeGudang: transfer.keGudang,
+            serialNumber: serialNumber,
+            kodeItem: item.kodeItem || 'UNKNOWN',
+            qty: 1, // Always 1 for serial-tracked items
+            tanggalIn: transferDate, // When it arrived at destination store (today)
+            tanggalOut: undefined, // Still in stock at destination
+          });
+
+          console.log(`✅ Prepared stock movements for item: ${item.kodeItem} (SN: ${serialNumber})`);
+        } catch (itemError) {
+          const errorMsg = `Failed to process item ${item.kodeItem}: ${itemError}`;
+          console.error(`❌ ${errorMsg}`);
+          errors.push(errorMsg);
+        }
+      }
+
+      // Bulk insert stock records
+      if (stockRecords.length > 0) {
+        console.log(`💾 Inserting ${stockRecords.length} stock records...`);
+        await db.insert(stock).values(stockRecords);
+        console.log(`✅ Successfully inserted ${stockRecords.length} stock records`);
+      }
+
+      const processed = stockRecords.length / 2; // Divide by 2 because each item creates 2 records (IN + OUT)
+      console.log(`🎉 Transfer ${toNumber} processed: ${processed} items, ${errors.length} errors`);
+
+      return {
+        processed,
+        errors
+      };
+
+    } catch (error) {
+      console.error(`❌ Failed to process transfer ${toNumber}:`, error);
+      throw error;
+    }
+  }
 }
 
 export const storage = new DatabaseStorage();

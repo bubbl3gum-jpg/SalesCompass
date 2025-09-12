@@ -119,13 +119,28 @@ function resolvePriceFromPricelist(
   return { price: 'TIDAK DITEMUKAN', source: 'not_found' };
 }
 
-// Simplified middleware for now - skip role checking until we implement user roles
+// Proper role checking middleware
 const checkRole = (allowedRoles: string[]) => {
   return async (req: any, res: any, next: any) => {
-    // For now, just check authentication
-    if (!req.user?.claims?.email) {
+    // Check authentication first
+    if (!req.auth?.email) {
       return res.status(401).json({ message: "User not authenticated" });
     }
+    
+    // Get user role from auth payload
+    const userRole = req.auth.role || req.auth.jabatan;
+    
+    // Check if user's role is in the allowed roles
+    if (!allowedRoles.includes(userRole)) {
+      console.log(`Access denied: User role '${userRole}' not in allowed roles: [${allowedRoles.join(', ')}]`);
+      return res.status(403).json({ 
+        message: "Access denied: Insufficient role permissions",
+        userRole: userRole,
+        requiredRoles: allowedRoles
+      });
+    }
+    
+    console.log(`Access granted: User role '${userRole}' matches allowed roles`);
     next();
   };
 };
@@ -1529,6 +1544,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('Get transfer items error:', error);
       res.status(500).json({ message: 'Failed to get transfer items' });
+    }
+  });
+
+  // Process transfer to stock movements
+  app.post('/api/transfers/:toNumber/process-to-stock', authenticate, checkRole(['System Administrator', 'Supervisor']), async (req, res) => {
+    try {
+      const toNumber = req.params.toNumber;
+      if (!toNumber) {
+        return res.status(400).json({ message: 'Invalid transfer order number' });
+      }
+
+      console.log(`🔄 Processing transfer ${toNumber} to stock movements...`);
+      const result = await storage.processTransferToStock(toNumber);
+      
+      res.json({
+        toNumber,
+        processed: result.processed,
+        errors: result.errors,
+        message: `Successfully processed ${result.processed} items to stock movements`
+      });
+    } catch (error) {
+      console.error('Process transfer to stock error:', error);
+      res.status(500).json({ 
+        message: error instanceof Error ? error.message : 'Failed to process transfer to stock' 
+      });
     }
   });
 
