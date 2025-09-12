@@ -42,17 +42,31 @@ export class TransferImportProcessor {
   
   // Extract TO number from the first column of the file  
   extractToNumber(records: any[], fileName?: string): string | null {
-    // Look for "Untuk nomor TO: <VALUE>" in the first column
-    const pattern = /untuk\s*nomor\s*to\s*:\s*(.+)/i;
+    // Look for different patterns of TO number in the first column
+    const patterns = [
+      // Original format: "Untuk nomor TO: 2509-249"
+      /untuk\s*nomor\s*to\s*:\s*(.+)/i,
+      // New format: "Untuk Nomor TO|Seq: 2509-108  -01" - extract the TO number part
+      /untuk\s*nomor\s*to\s*\|\s*seq\s*:\s*(\d{4}-\d{3})/i,
+      // Broader pattern to catch TO numbers in various formats
+      /untuk\s*nomor\s*to[|:\s]*(?:seq\s*:\s*)?(\d{4}-\d{3})/i
+    ];
     
     for (const record of records) {
       const keys = Object.keys(record);
       if (keys.length > 0) {
         const firstColValue = record[keys[0]];
         if (firstColValue && typeof firstColValue === 'string') {
-          const match = firstColValue.match(pattern);
-          if (match && match[1]) {
-            return match[1].trim();
+          console.log(`🔍 Checking first column value: "${firstColValue}"`);
+          
+          // Try each pattern
+          for (const pattern of patterns) {
+            const match = firstColValue.match(pattern);
+            if (match && match[1]) {
+              const toNumber = match[1].trim();
+              console.log(`📋 TO number extracted from file content: ${toNumber}`);
+              return toNumber;
+            }
           }
         }
       }
