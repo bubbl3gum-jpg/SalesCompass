@@ -1433,10 +1433,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Extract TO number from file
-      const toNumber = transferImportProcessor.extractToNumber(records);
+      const toNumber = transferImportProcessor.extractToNumber(records, fileName);
       if (!toNumber) {
         return res.status(400).json({ 
-          message: 'Could not extract TO number from file. File must contain "Untuk nomor TO: <NUMBER>" in the first column.' 
+          message: 'Could not extract TO number from file. File must contain "Untuk nomor TO: <NUMBER>" in the first column, or have a TO number pattern like "2509-249" in the filename.' 
         });
       }
 

@@ -41,7 +41,7 @@ const progressUpdateCallbacks = new Map<string, (progress: ImportProgress) => vo
 export class TransferImportProcessor {
   
   // Extract TO number from the first column of the file  
-  extractToNumber(records: any[]): string | null {
+  extractToNumber(records: any[], fileName?: string): string | null {
     // Look for "Untuk nomor TO: <VALUE>" in the first column
     const pattern = /untuk\s*nomor\s*to\s*:\s*(.+)/i;
     
@@ -55,6 +55,17 @@ export class TransferImportProcessor {
             return match[1].trim();
           }
         }
+      }
+    }
+    
+    // Fallback: Try to extract TO number from filename
+    // Look for patterns like "2509-249.xlsx" or "TO-2509-249.csv" etc.
+    if (fileName) {
+      const fileNamePattern = /(\d{4}-\d{3})/;
+      const fileNameMatch = fileName.match(fileNamePattern);
+      if (fileNameMatch && fileNameMatch[1]) {
+        console.log(`📋 TO number extracted from filename: ${fileNameMatch[1]}`);
+        return fileNameMatch[1].trim();
       }
     }
     
