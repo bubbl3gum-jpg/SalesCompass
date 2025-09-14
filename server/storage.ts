@@ -949,12 +949,13 @@ export class DatabaseStorage implements IStorage {
     await db.delete(transferOrders).where(eq(transferOrders.toNumber, toNumber));
   }
 
-  // Inventory search operations - searches actual store stock from transfer orders
+  // Inventory search operations - searches actual store stock from transfer orders AND stock table
   async searchInventoryBySerial(storeCode: string, serialNumber: string): Promise<any[]> {
     // Normalize serial number: trim whitespace and convert to uppercase for consistent matching
     const normalizedSerial = serialNumber.trim().toUpperCase();
     
-    const results = await db
+    // Search in transfer order items (for items in transfer/pending state)
+    const transferResults = await db
       .select({
         kodeItem: toItemList.kodeItem,
         namaItem: toItemList.namaItem,
@@ -972,13 +973,42 @@ export class DatabaseStorage implements IStorage {
         )
       );
 
+    // Search in stock table (for items currently in inventory where tanggal_out IS NULL)
+    const stockResults = await db
+      .select({
+        kodeItem: stock.kodeItem,
+        namaItem: sql<string>`NULL`.as('namaItem'), // We'll get this from reference sheet
+        sn: stock.serialNumber,
+        qty: stock.qty,
+        toNumber: sql<string>`NULL`.as('toNumber'),
+        keGudang: stock.kodeGudang,
+      })
+      .from(stock)
+      .where(
+        and(
+          sql`UPPER(TRIM(${stock.serialNumber})) = ${normalizedSerial}`,
+          sql`${stock.tanggalOut} IS NULL`, // Only items still in inventory
+          storeCode === 'ALL_STORE' ? sql`1=1` : eq(stock.kodeGudang, storeCode)
+        )
+      );
+
+    // Combine both result sets
+    const allResults = [...transferResults, ...stockResults];
+
     // Use enhanced price resolution for each item
-    const enhancedResults = await Promise.all(results.map(async (item) => {
+    const enhancedResults = await Promise.all(allResults.map(async (item) => {
       const priceInfo = item.kodeItem ? await this.getEnhancedPriceForItem(item.kodeItem, item.sn || undefined) : null;
+      
+      // Get item name from reference sheet if not available
+      let itemName = item.namaItem;
+      if (!itemName && item.kodeItem) {
+        const refItem = await this.getReferenceSheetByKodeItem(item.kodeItem);
+        itemName = refItem?.namaItem || null;
+      }
       
       return {
         kodeItem: item.kodeItem,
-        namaItem: item.namaItem,
+        namaItem: itemName,
         normalPrice: priceInfo?.normalPrice ? Number(priceInfo.normalPrice) : 0,
         sp: priceInfo?.sp ? Number(priceInfo.sp) : null,
         availableQuantity: item.qty,
