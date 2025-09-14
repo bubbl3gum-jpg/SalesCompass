@@ -165,6 +165,18 @@ export interface IStorage {
   // Inventory search operations
   searchInventoryBySerial(storeCode: string, serialNumber: string): Promise<any[]>;
   searchInventoryByDetails(storeCode: string, searchQuery: string): Promise<any[]>;
+
+  // Stock operations
+  getStockOverview(storeId?: string, limitItems?: number): Promise<{
+    stores: Array<{ kodeGudang: string; onHand: number }>;
+    activeStore: { kodeGudang: string; onHand: number; topItems: Array<{ kodeItem: string; qtyOnHand: number }> } | null;
+  }>;
+  getStockMovements(storeId?: string, from?: string, to?: string): Promise<{
+    range: { from: string; to: string };
+    storeId?: string;
+    in: Array<{ date: string; count: number }>;
+    out: Array<{ date: string; count: number }>;
+  }>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1086,7 +1098,7 @@ export class DatabaseStorage implements IStorage {
     // Get IN movements (based on tanggal_in)
     const inMovements = await db
       .select({
-        date: stock.tanggalIn,
+        date: sql<string>`${stock.tanggalIn}`.as('date'),
         count: sql<number>`COUNT(*)`.as('count')
       })
       .from(stock)
@@ -1102,7 +1114,7 @@ export class DatabaseStorage implements IStorage {
     // Get OUT movements (based on tanggal_out)
     const outMovements = await db
       .select({
-        date: stock.tanggalOut,
+        date: sql<string>`${stock.tanggalOut}`.as('date'),
         count: sql<number>`COUNT(*)`.as('count')
       })
       .from(stock)
