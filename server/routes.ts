@@ -1144,7 +1144,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Sales entry - SPG, Supervisors can create
-  app.post('/api/sales', authenticate, checkRole(['SPG', 'Supervisor', 'Sales Administrator']), async (req, res) => {
+  app.post('/api/sales', authenticate, checkRole(['SPG', 'Supervisor', 'Sales Administrator', 'System Administrator']), async (req, res) => {
     try {
       // Map frontend fields to database fields
       const mappedData = {

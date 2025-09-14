@@ -8,6 +8,11 @@ The system supports 6 different user roles (SPG, Supervisor, Stockist, Sales Adm
 
 **Recent Architecture Change (September 1, 2025)**: Completely transitioned from opening stock-based inventory tracking to a transfers-only system. All opening stock functionality has been removed from the frontend, backend, database schema, and user permissions. Stock levels are now determined exclusively through transfer orders between stores.
 
+**Critical Bug Fixes (September 14, 2025)**:
+- **Authorization Fix**: Added 'System Administrator' to sales endpoint allowed roles in server/routes.ts. System Administrator users can now record sales without 403 authorization errors.
+- **Frontend Routing Fix**: Fixed React Query cache synchronization issue in useStoreAuth.tsx by adding query invalidation after login success. Users now properly redirect to dashboard after login instead of getting 404 errors.
+- **Comprehensive Testing**: End-to-end tests confirm both authentication and sales recording functionality work correctly for all user roles including System Administrator.
+
 ## User Preferences
 
 Preferred communication style: Simple, everyday language.
