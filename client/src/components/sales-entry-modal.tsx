@@ -31,7 +31,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Search } from "lucide-react";
 
 const salesFormSchema = z.object({
-  kodeGudang: z.string().min(1, "Store is required"),
+  kodeGudang: z.string()
+    .min(1, "Store is required")
+    .refine((val) => val !== 'ALL_STORE', {
+      message: "Please select a specific store. Sales cannot be recorded for 'ALL_STORE'."
+    }),
   tanggal: z.string().min(1, "Date is required"),
   serialNumber: z.string().optional(),
   kodeItem: z.string().min(1, "Item code is required"),
@@ -405,6 +409,16 @@ export function SalesEntryModal({ isOpen, onClose, selectedStore, editingSale }:
 
   // Form submission
   const onSubmit = (data: SalesFormData) => {
+    // Additional validation to prevent ALL_STORE sales
+    if (data.kodeGudang === 'ALL_STORE') {
+      toast({
+        title: "Invalid Store Selection",
+        description: "Sales cannot be recorded for 'ALL_STORE'. Please select a specific store from the list.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     const submitData = {
       ...data,
       quantity: parseInt(data.quantity),
@@ -445,12 +459,30 @@ export function SalesEntryModal({ isOpen, onClose, selectedStore, editingSale }:
                         </FormControl>
                         <SelectContent>
                           {storesArray
-                            ?.filter((store: any) => store.kodeGudang && store.namaGudang && store.kodeGudang.trim() !== '' && store.namaGudang.trim() !== '')
+                            ?.filter((store: any) => 
+                              store.kodeGudang && 
+                              store.namaGudang && 
+                              store.kodeGudang.trim() !== '' && 
+                              store.namaGudang.trim() !== '' &&
+                              store.kodeGudang !== 'ALL_STORE' // Filter out ALL_STORE
+                            )
                             .map((store: any) => (
                             <SelectItem key={store.kodeGudang} value={store.kodeGudang}>
                               {store.namaGudang}
                             </SelectItem>
                           ))}
+                          {/* Show helpful message if no real stores available */}
+                          {storesArray?.filter((store: any) => 
+                            store.kodeGudang && 
+                            store.namaGudang && 
+                            store.kodeGudang.trim() !== '' && 
+                            store.namaGudang.trim() !== '' &&
+                            store.kodeGudang !== 'ALL_STORE'
+                          ).length === 0 && (
+                            <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                              No stores available for sales entry
+                            </div>
+                          )}
                         </SelectContent>
                       </Select>
                     ) : (

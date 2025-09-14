@@ -1162,6 +1162,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const validatedData = insertLaporanPenjualanSchema.parse(mappedData);
 
+      // Security check: Prevent sales creation for ALL_STORE
+      if (validatedData.kodeGudang === 'ALL_STORE') {
+        return res.status(400).json({ 
+          message: 'Cannot create sales for ALL_STORE - please select a specific store' 
+        });
+      }
+
       // Create the sale
       const sale = await storage.createSale(validatedData);
 

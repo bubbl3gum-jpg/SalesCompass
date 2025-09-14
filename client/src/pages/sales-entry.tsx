@@ -155,6 +155,11 @@ export default function SalesEntry() {
                 onClick={() => setShowSalesModal(true)}
                 className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700"
                 data-testid="button-new-sale"
+                disabled={effectiveStore === 'ALL_STORE'}
+                title={effectiveStore === 'ALL_STORE' ? 
+                  "Please select a specific store first to record sales" : 
+                  "Create a new sale transaction"
+                }
               >
                 <i className="fas fa-plus mr-2"></i>
                 New Sale
@@ -233,6 +238,26 @@ export default function SalesEntry() {
 
         {/* Content */}
         <main className="p-6">
+          {/* ALL_STORE Guidance Message */}
+          {effectiveStore === 'ALL_STORE' && (
+            <div className="mb-6">
+              <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800/50 rounded-lg p-4">
+                <div className="flex items-start space-x-3">
+                  <div className="flex-shrink-0">
+                    <i className="fas fa-info-circle text-yellow-600 dark:text-yellow-400 text-lg"></i>
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="text-sm font-medium text-yellow-800 dark:text-yellow-200">
+                      Select a Store to Record Sales
+                    </h3>
+                    <p className="text-sm text-yellow-700 dark:text-yellow-300 mt-1">
+                      Sales cannot be recorded for "ALL_STORE". Please select a specific store from the dropdown above to create sales transactions.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
           {/* Filters */}
           <Card className="bg-white/20 dark:bg-black/20 backdrop-blur-xl border border-white/20 dark:border-gray-800/50 mb-6">
             <CardContent className="p-6">

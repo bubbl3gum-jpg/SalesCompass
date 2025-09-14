@@ -1113,6 +1113,11 @@ export default function Dashboard() {
                       onClick={() => setShowSalesModal(true)}
                       variant="outline" 
                       className="h-20 flex flex-col items-center gap-2 bg-white/50 dark:bg-black/50 hover:bg-white/70 dark:hover:bg-black/70 border-white/30 dark:border-gray-600/30 text-gray-900 dark:text-white"
+                      disabled={selectedStore === 'ALL_STORE'}
+                      title={selectedStore === 'ALL_STORE' ? 
+                        "Please select a specific store first to record sales" : 
+                        "Create a quick sale transaction"
+                      }
                     >
                       <ShoppingCart className="w-6 h-6" />
                       <span className="text-sm">Quick Sale</span>
