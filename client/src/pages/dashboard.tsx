@@ -142,7 +142,7 @@ export default function Dashboard() {
     retry: false,
   });
 
-  // Stock overview from new stock table
+  // Stock overview from new stock table (for selected store)
   const { data: stockOverview, isLoading: stockOverviewLoading } = useQuery({
     queryKey: ['stores', 'stock', 'overview', { storeId: selectedStore, limit: 10 }],
     queryFn: async () => {
@@ -169,6 +169,30 @@ export default function Dashboard() {
       return response.json();
     },
     enabled: !!selectedStore,
+    retry: false,
+  });
+
+  // All stores overview data (for stores overview section)
+  const { data: allStoresOverview, isLoading: allStoresOverviewLoading } = useQuery({
+    queryKey: ['stores', 'stock', 'all-overview'],
+    queryFn: async () => {
+      const token = localStorage.getItem('accessToken');
+      const headers: HeadersInit = { 'Content-Type': 'application/json' };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+      
+      // Don't pass store_id parameter to get all stores data
+      const response = await fetch('/api/stores/stock/overview', {
+        credentials: 'include',
+        headers,
+      });
+      
+      if (!response.ok) {
+        throw new Error(`${response.status}: ${response.statusText}`);
+      }
+      return response.json();
+    },
     retry: false,
   });
 
@@ -268,7 +292,7 @@ export default function Dashboard() {
     setSettlementForm(prev => ({ ...prev, store: selectedStore }));
   }, [selectedStore]);
 
-  const isLoadingData = metricsLoading || salesLoading || stockOverviewLoading || stockMovementsLoading;
+  const isLoadingData = metricsLoading || salesLoading || stockOverviewLoading || stockMovementsLoading || allStoresOverviewLoading;
 
   // Helper functions - use top items from stock overview for filtering
   const filteredStock = stockOverview?.activeStore?.topItems?.filter((item: any) => 
@@ -450,6 +474,87 @@ export default function Dashboard() {
         <main className="p-6">
           {selectedStore ? (
             <div className="space-y-6">
+              {/* Stores Overview - Show all stores data */}
+              {user?.can_access_all_stores && (
+                <Card className="bg-white/70 dark:bg-black/60 backdrop-blur-xl border border-white/30 dark:border-gray-700/50 shadow-lg">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-lg flex items-center gap-2 text-gray-900 dark:text-white">
+                      <Package className="w-5 h-5" />
+                      Stores Overview
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {allStoresOverviewLoading ? (
+                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4">
+                        {[...Array(6)].map((_, i) => (
+                          <div key={i} className="bg-white/40 dark:bg-black/40 rounded-lg p-4 border border-white/20 dark:border-gray-600/30">
+                            <Skeleton className="h-4 w-20 mb-2" />
+                            <Skeleton className="h-6 w-16 mb-1" />
+                            <Skeleton className="h-3 w-12" />
+                          </div>
+                        ))}
+                      </div>
+                    ) : allStoresOverview?.stores?.length > 0 ? (
+                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4">
+                        {allStoresOverview.stores
+                          .filter((store: any) => store.kodeGudang && store.namaGudang && store.onHand !== undefined)
+                          .map((store: any) => {
+                            const totalOnHand = store.onHand || 0;
+                            const isLowStock = totalOnHand < 50;
+                            const isOutOfStock = totalOnHand === 0;
+                            
+                            return (
+                              <div 
+                                key={store.kodeGudang}
+                                className="bg-white/40 dark:bg-black/40 rounded-lg p-4 border border-white/20 dark:border-gray-600/30 hover:bg-white/60 dark:hover:bg-black/60 transition-colors cursor-pointer"
+                                onClick={() => setSelectedStore(store.kodeGudang)}
+                                data-testid={`store-overview-${store.kodeGudang}`}
+                              >
+                                <div className="flex items-center justify-between mb-2">
+                                  <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 truncate" title={store.namaGudang}>
+                                    {store.namaGudang}
+                                  </h4>
+                                  {isOutOfStock ? (
+                                    <AlertTriangle className="w-4 h-4 text-red-500" />
+                                  ) : isLowStock ? (
+                                    <AlertTriangle className="w-4 h-4 text-orange-500" />
+                                  ) : (
+                                    <Package className="w-4 h-4 text-green-500" />
+                                  )}
+                                </div>
+                                <div className="space-y-1">
+                                  <p className="text-lg font-bold text-gray-900 dark:text-white" data-testid={`text-onhand-${store.kodeGudang}`}>
+                                    {totalOnHand.toLocaleString()}
+                                  </p>
+                                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                                    {store.kodeGudang}
+                                  </p>
+                                  <Badge 
+                                    className={cn(
+                                      "text-xs px-2 py-1",
+                                      isOutOfStock 
+                                        ? "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300" 
+                                        : isLowStock 
+                                        ? "bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300"
+                                        : "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300"
+                                    )}
+                                  >
+                                    {isOutOfStock ? "Out" : isLowStock ? "Low" : "OK"}
+                                  </Badge>
+                                </div>
+                              </div>
+                            );
+                          })}
+                      </div>
+                    ) : (
+                      <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                        <Package className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                        <p>No store data available</p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
               {/* Store Overview - Compact KPIs */}
               <Card className="bg-white/70 dark:bg-black/60 backdrop-blur-xl border border-white/30 dark:border-gray-700/50 shadow-lg">
                 <CardHeader className="pb-3">
@@ -753,13 +858,13 @@ export default function Dashboard() {
                       {stockSearchTerm && filteredStock.length > 0 && (
                         <Card className="absolute z-10 w-64 max-h-48 overflow-y-auto">
                           <CardContent className="p-2">
-                            {filteredStock.slice(0, 5).map((item, index) => {
-                              const status = getStockStatus(item.qty);
+                            {filteredStock.slice(0, 5).map((item: any, index: number) => {
+                              const status = getStockStatus(item.qtyOnHand || item.qty || 0);
                               return (
                                 <div key={index} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded text-sm">
                                   <div className="flex justify-between items-center">
                                     <div className="font-medium">{item.kodeItem}</div>
-                                    <Badge className={status.color}>{item.qty}</Badge>
+                                    <Badge className={status.color}>{item.qtyOnHand || item.qty || 0}</Badge>
                                   </div>
                                 </div>
                               );
