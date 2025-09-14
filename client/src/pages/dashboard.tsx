@@ -19,7 +19,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Check, ChevronsUpDown, TrendingUp, TrendingDown, DollarSign, Package, AlertTriangle, Clock, Search, Plus, ArrowRightLeft, Calculator, ShoppingCart, Upload, Download, FileText, CheckCircle, XCircle, Loader2 } from "lucide-react";
+import { Check, ChevronsUpDown, TrendingUp, TrendingDown, DollarSign, Package, AlertTriangle, Clock, Search, Plus, ArrowRightLeft, Calculator, ShoppingCart, Upload, Download, FileText, CheckCircle, XCircle, Loader2, Calendar, BarChart3, Activity } from "lucide-react";
+import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
+import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, ResponsiveContainer, BarChart, Bar, ComposedChart } from "recharts";
+import { format, subDays, startOfDay, endOfDay } from "date-fns";
 import { cn } from "@/lib/utils";
 
 // Types for better type safety
@@ -90,6 +93,11 @@ export default function Dashboard() {
   const [priceSearchTerm, setPriceSearchTerm] = useState<string>('');
   const [stockSearchTerm, setStockSearchTerm] = useState<string>('');
   const [storeDropdownOpen, setStoreDropdownOpen] = useState(false);
+  const [dateRange, setDateRange] = useState({
+    from: subDays(new Date(), 7),
+    to: new Date()
+  });
+  const [movementsViewType, setMovementsViewType] = useState<'chart' | 'table'>('chart');
 
   // Transfer form state
   const [transferForm, setTransferForm] = useState({
@@ -196,9 +204,9 @@ export default function Dashboard() {
     retry: false,
   });
 
-  // Stock movements from new stock table  
-  const to = new Date().toISOString().split('T')[0];
-  const from = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+  // Stock movements from new stock table with dynamic date range
+  const to = format(endOfDay(dateRange.to), 'yyyy-MM-dd');
+  const from = format(startOfDay(dateRange.from), 'yyyy-MM-dd');
   
   const { data: stockMovements, isLoading: stockMovementsLoading } = useQuery({
     queryKey: ['stock', 'movements', { storeId: selectedStore, from, to }],
@@ -365,6 +373,76 @@ export default function Dashboard() {
     if (diffSecs < 60) return `${diffSecs}s`;
     if (diffSecs < 3600) return `${Math.floor(diffSecs / 60)}m ${diffSecs % 60}s`;
     return `${Math.floor(diffSecs / 3600)}h ${Math.floor((diffSecs % 3600) / 60)}m`;
+  };
+
+  // Data processing functions for stock movements
+  const processStockMovementsData = (data: any) => {
+    if (!data?.in || !data?.out) return [];
+    
+    // Create a map of all dates in the range
+    const dateMap = new Map();
+    
+    // Add IN data
+    data.in.forEach((item: any) => {
+      dateMap.set(item.date, {
+        date: item.date,
+        inCount: item.count,
+        outCount: 0,
+        netMovement: item.count
+      });
+    });
+    
+    // Add OUT data
+    data.out.forEach((item: any) => {
+      const existing = dateMap.get(item.date);
+      if (existing) {
+        existing.outCount = item.count;
+        existing.netMovement = existing.inCount - item.count;
+      } else {
+        dateMap.set(item.date, {
+          date: item.date,
+          inCount: 0,
+          outCount: item.count,
+          netMovement: -item.count
+        });
+      }
+    });
+    
+    // Convert to array and sort by date
+    return Array.from(dateMap.values())
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+      .map(item => ({
+        ...item,
+        dateFormatted: format(new Date(item.date), 'MMM dd'),
+        fullDate: format(new Date(item.date), 'MMM dd, yyyy')
+      }));
+  };
+
+  const getMovementsSummary = (data: any[]) => {
+    return {
+      totalIn: data.reduce((sum, item) => sum + item.inCount, 0),
+      totalOut: data.reduce((sum, item) => sum + item.outCount, 0),
+      netMovement: data.reduce((sum, item) => sum + item.netMovement, 0),
+      daysWithActivity: data.filter(item => item.inCount > 0 || item.outCount > 0).length
+    };
+  };
+
+  const chartData = processStockMovementsData(stockMovements);
+  const movementsSummary = getMovementsSummary(chartData);
+
+  const chartConfig = {
+    inCount: {
+      label: "Stock IN",
+      color: "hsl(142, 76%, 36%)", // Green for incoming
+    },
+    outCount: {
+      label: "Stock OUT", 
+      color: "hsl(0, 84%, 60%)", // Red for outgoing
+    },
+    netMovement: {
+      label: "Net Movement",
+      color: "hsl(217, 91%, 60%)", // Blue for net
+    },
   };
 
   if (isLoading) {
@@ -613,74 +691,218 @@ export default function Dashboard() {
                 </CardContent>
               </Card>
 
-              {/* Stock Movements - IN/OUT Activity */}
+              {/* Enhanced Stock Movements with Chart Visualization */}
               <Card className="bg-white/70 dark:bg-black/60 backdrop-blur-xl border border-white/30 dark:border-gray-700/50 shadow-lg">
                 <CardHeader className="pb-3">
-                  <CardTitle className="text-lg flex items-center gap-2 text-gray-900 dark:text-white">
-                    <TrendingUp className="w-5 h-5" />
-                    Stock Movements (Last 7 Days)
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {/* IN Movements */}
-                    <div className="space-y-3">
-                      <h4 className="font-medium text-green-700 dark:text-green-300 flex items-center gap-2">
-                        <Upload className="w-4 h-4" />
-                        Stock IN
-                      </h4>
-                      <div className="space-y-2 max-h-32 overflow-y-auto">
-                        {stockMovements?.in?.length > 0 ? (
-                          stockMovements.in.map((movement: any, index: number) => (
-                            <div key={index} className="flex justify-between items-center p-2 bg-green-50 dark:bg-green-900/20 rounded-lg">
-                              <span className="text-sm text-gray-700 dark:text-gray-300">
-                                {new Date(movement.date).toLocaleDateString()}
-                              </span>
-                              <span className="font-semibold text-green-700 dark:text-green-300">
-                                +{movement.count}
-                              </span>
-                            </div>
-                          ))
-                        ) : (
-                          <div className="text-center py-4 text-gray-500 dark:text-gray-400">
-                            No incoming stock movements
-                          </div>
-                        )}
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-lg flex items-center gap-2 text-gray-900 dark:text-white">
+                      <Activity className="w-5 h-5" />
+                      Stock Movements Analysis
+                    </CardTitle>
+                    <div className="flex items-center gap-2">
+                      {/* Date Range Controls */}
+                      <div className="flex items-center gap-2 text-sm">
+                        <Calendar className="w-4 h-4 text-gray-500" />
+                        <Input
+                          type="date"
+                          value={dateRange.from.toISOString().split('T')[0]}
+                          onChange={(e) => setDateRange(prev => ({ ...prev, from: new Date(e.target.value) }))}
+                          className="w-auto h-8 text-xs"
+                          data-testid="input-date-from"
+                        />
+                        <span className="text-gray-500">to</span>
+                        <Input
+                          type="date"
+                          value={dateRange.to.toISOString().split('T')[0]}
+                          onChange={(e) => setDateRange(prev => ({ ...prev, to: new Date(e.target.value) }))}
+                          className="w-auto h-8 text-xs"
+                          data-testid="input-date-to"
+                        />
                       </div>
-                      <div className="text-xs text-center text-gray-600 dark:text-gray-400">
-                        Total IN: {stockMovements?.in?.reduce((sum: number, item: any) => sum + item.count, 0) || 0}
-                      </div>
-                    </div>
-
-                    {/* OUT Movements */}
-                    <div className="space-y-3">
-                      <h4 className="font-medium text-red-700 dark:text-red-300 flex items-center gap-2">
-                        <Download className="w-4 h-4" />
-                        Stock OUT
-                      </h4>
-                      <div className="space-y-2 max-h-32 overflow-y-auto">
-                        {stockMovements?.out?.length > 0 ? (
-                          stockMovements.out.map((movement: any, index: number) => (
-                            <div key={index} className="flex justify-between items-center p-2 bg-red-50 dark:bg-red-900/20 rounded-lg">
-                              <span className="text-sm text-gray-700 dark:text-gray-300">
-                                {new Date(movement.date).toLocaleDateString()}
-                              </span>
-                              <span className="font-semibold text-red-700 dark:text-red-300">
-                                -{movement.count}
-                              </span>
-                            </div>
-                          ))
-                        ) : (
-                          <div className="text-center py-4 text-gray-500 dark:text-gray-400">
-                            No outgoing stock movements
-                          </div>
-                        )}
-                      </div>
-                      <div className="text-xs text-center text-gray-600 dark:text-gray-400">
-                        Total OUT: {stockMovements?.out?.reduce((sum: number, item: any) => sum + item.count, 0) || 0}
+                      {/* View Toggle */}
+                      <div className="flex rounded-lg border border-white/20 dark:border-gray-600/30 p-1">
+                        <Button
+                          variant={movementsViewType === 'chart' ? 'default' : 'ghost'}
+                          size="sm"
+                          onClick={() => setMovementsViewType('chart')}
+                          className="h-6 px-2 text-xs"
+                          data-testid="button-chart-view"
+                        >
+                          <BarChart3 className="w-3 h-3 mr-1" />
+                          Chart
+                        </Button>
+                        <Button
+                          variant={movementsViewType === 'table' ? 'default' : 'ghost'}
+                          size="sm"
+                          onClick={() => setMovementsViewType('table')}
+                          className="h-6 px-2 text-xs"
+                          data-testid="button-table-view"
+                        >
+                          <FileText className="w-3 h-3 mr-1" />
+                          Table
+                        </Button>
                       </div>
                     </div>
                   </div>
+                </CardHeader>
+                <CardContent>
+                  {stockMovementsLoading ? (
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        {[...Array(4)].map((_, i) => (
+                          <div key={i} className="space-y-2">
+                            <Skeleton className="h-4 w-16" />
+                            <Skeleton className="h-8 w-full" />
+                          </div>
+                        ))}
+                      </div>
+                      <Skeleton className="h-64 w-full" />
+                    </div>
+                  ) : chartData.length > 0 ? (
+                    <div className="space-y-6">
+                      {/* Summary Statistics */}
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div className="bg-white/40 dark:bg-black/40 rounded-lg p-3 border border-white/20 dark:border-gray-600/30">
+                          <div className="flex items-center gap-2">
+                            <Upload className="w-4 h-4 text-green-600" />
+                            <div>
+                              <p className="text-xs text-gray-600 dark:text-gray-400">Total IN</p>
+                              <p className="text-lg font-bold text-green-700 dark:text-green-300" data-testid="text-total-in">
+                                {movementsSummary.totalIn.toLocaleString()}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="bg-white/40 dark:bg-black/40 rounded-lg p-3 border border-white/20 dark:border-gray-600/30">
+                          <div className="flex items-center gap-2">
+                            <Download className="w-4 h-4 text-red-600" />
+                            <div>
+                              <p className="text-xs text-gray-600 dark:text-gray-400">Total OUT</p>
+                              <p className="text-lg font-bold text-red-700 dark:text-red-300" data-testid="text-total-out">
+                                {movementsSummary.totalOut.toLocaleString()}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="bg-white/40 dark:bg-black/40 rounded-lg p-3 border border-white/20 dark:border-gray-600/30">
+                          <div className="flex items-center gap-2">
+                            <TrendingUp className={`w-4 h-4 ${movementsSummary.netMovement >= 0 ? 'text-green-600' : 'text-red-600'}`} />
+                            <div>
+                              <p className="text-xs text-gray-600 dark:text-gray-400">Net Movement</p>
+                              <p className={`text-lg font-bold ${movementsSummary.netMovement >= 0 ? 'text-green-700 dark:text-green-300' : 'text-red-700 dark:text-red-300'}`} data-testid="text-net-movement">
+                                {movementsSummary.netMovement >= 0 ? '+' : ''}{movementsSummary.netMovement.toLocaleString()}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="bg-white/40 dark:bg-black/40 rounded-lg p-3 border border-white/20 dark:border-gray-600/30">
+                          <div className="flex items-center gap-2">
+                            <Activity className="w-4 h-4 text-blue-600" />
+                            <div>
+                              <p className="text-xs text-gray-600 dark:text-gray-400">Active Days</p>
+                              <p className="text-lg font-bold text-blue-700 dark:text-blue-300" data-testid="text-active-days">
+                                {movementsSummary.daysWithActivity}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      {/* Chart or Table View */}
+                      {movementsViewType === 'chart' ? (
+                        <div className="h-80">
+                          <ChartContainer config={chartConfig}>
+                            <ComposedChart data={chartData}>
+                              <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                              <XAxis 
+                                dataKey="dateFormatted" 
+                                className="fill-muted-foreground text-xs"
+                                tick={{ fontSize: 12 }}
+                              />
+                              <YAxis className="fill-muted-foreground text-xs" tick={{ fontSize: 12 }} />
+                              <ChartTooltip 
+                                content={<ChartTooltipContent />}
+                                formatter={(value: any, name: string) => [
+                                  `${value}`,
+                                  name === 'inCount' ? 'Stock IN' : name === 'outCount' ? 'Stock OUT' : 'Net Movement'
+                                ]}
+                                labelFormatter={(label: any, payload: any) => {
+                                  if (payload && payload[0] && payload[0].payload) {
+                                    return payload[0].payload.fullDate;
+                                  }
+                                  return label;
+                                }}
+                              />
+                              <Bar 
+                                dataKey="inCount" 
+                                fill="var(--color-inCount)" 
+                                name="Stock IN"
+                                radius={[2, 2, 0, 0]}
+                              />
+                              <Bar 
+                                dataKey="outCount" 
+                                fill="var(--color-outCount)" 
+                                name="Stock OUT"
+                                radius={[2, 2, 0, 0]}
+                              />
+                              <Line 
+                                type="monotone" 
+                                dataKey="netMovement" 
+                                stroke="var(--color-netMovement)" 
+                                strokeWidth={2}
+                                dot={{ fill: "var(--color-netMovement)", strokeWidth: 2, r: 4 }}
+                                name="Net Movement"
+                              />
+                            </ComposedChart>
+                          </ChartContainer>
+                        </div>
+                      ) : (
+                        <div className="space-y-2 max-h-80 overflow-y-auto">
+                          <div className="grid grid-cols-5 gap-4 p-3 bg-white/20 dark:bg-black/20 rounded-lg font-medium text-sm text-gray-700 dark:text-gray-300">
+                            <span>Date</span>
+                            <span className="text-green-700 dark:text-green-300">IN</span>
+                            <span className="text-red-700 dark:text-red-300">OUT</span>
+                            <span className="text-blue-700 dark:text-blue-300">Net</span>
+                            <span>Activity</span>
+                          </div>
+                          {chartData.map((item, index) => (
+                            <div key={index} className="grid grid-cols-5 gap-4 p-3 bg-white/40 dark:bg-black/40 rounded-lg border border-white/20 dark:border-gray-600/30 text-sm" data-testid={`row-movement-${index}`}>
+                              <span className="text-gray-700 dark:text-gray-300">{item.dateFormatted}</span>
+                              <span className="text-green-700 dark:text-green-300 font-medium">+{item.inCount}</span>
+                              <span className="text-red-700 dark:text-red-300 font-medium">-{item.outCount}</span>
+                              <span className={`font-medium ${item.netMovement >= 0 ? 'text-green-700 dark:text-green-300' : 'text-red-700 dark:text-red-300'}`}>
+                                {item.netMovement >= 0 ? '+' : ''}{item.netMovement}
+                              </span>
+                              <span className="text-gray-600 dark:text-gray-400">
+                                {item.inCount > 0 || item.outCount > 0 ? (
+                                  <Badge variant="secondary" className="text-xs">
+                                    Active
+                                  </Badge>
+                                ) : (
+                                  <span className="text-xs">Idle</span>
+                                )}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="text-center py-12">
+                      <Activity className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                      <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">No Movement Data</h3>
+                      <p className="text-gray-600 dark:text-gray-400 mb-4">No stock movements found for the selected date range.</p>
+                      <Button 
+                        onClick={() => setDateRange({ from: subDays(new Date(), 7), to: new Date() })}
+                        variant="outline"
+                        size="sm"
+                        data-testid="button-reset-dates"
+                      >
+                        <Calendar className="w-4 h-4 mr-2" />
+                        Reset to Last 7 Days
+                      </Button>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
 
