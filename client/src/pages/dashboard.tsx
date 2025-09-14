@@ -19,7 +19,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Check, ChevronsUpDown, TrendingUp, TrendingDown, DollarSign, Package, AlertTriangle, Clock, Search, Plus, ArrowRightLeft, Calculator, ShoppingCart, Upload, Download, FileText, CheckCircle, XCircle, Loader2, Calendar, BarChart3, Activity } from "lucide-react";
+import { Check, ChevronsUpDown, TrendingUp, TrendingDown, DollarSign, Package, AlertTriangle, Clock, Search, Plus, ArrowRightLeft, Calculator, ShoppingCart, Upload, Download, FileText, CheckCircle, XCircle, Loader2, Calendar, BarChart3, Activity, RefreshCw } from "lucide-react";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, ResponsiveContainer, BarChart, Bar, ComposedChart } from "recharts";
 import { format, subDays, startOfDay, endOfDay } from "date-fns";
@@ -181,7 +181,7 @@ export default function Dashboard() {
   });
 
   // All stores overview data (for stores overview section)
-  const { data: allStoresOverview, isLoading: allStoresOverviewLoading } = useQuery({
+  const { data: allStoresOverview, isLoading: allStoresOverviewLoading, refetch: refetchAllStores, isFetching: isRefreshingAllStores } = useQuery({
     queryKey: ['stores', 'stock', 'all-overview'],
     queryFn: async () => {
       const token = localStorage.getItem('accessToken');
@@ -556,9 +556,21 @@ export default function Dashboard() {
               {user?.can_access_all_stores && (
                 <Card className="bg-white/70 dark:bg-black/60 backdrop-blur-xl border border-white/30 dark:border-gray-700/50 shadow-lg">
                   <CardHeader className="pb-3">
-                    <CardTitle className="text-lg flex items-center gap-2 text-gray-900 dark:text-white">
-                      <Package className="w-5 h-5" />
-                      Stores Overview
+                    <CardTitle className="text-lg flex items-center justify-between text-gray-900 dark:text-white">
+                      <div className="flex items-center gap-2">
+                        <Package className="w-5 h-5" />
+                        Stores Overview
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => refetchAllStores()}
+                        disabled={isRefreshingAllStores}
+                        className="h-8 w-8 p-0 bg-white/20 dark:bg-black/20 hover:bg-white/40 dark:hover:bg-black/40 border-white/30 dark:border-gray-600/30"
+                        data-testid="button-refresh-stores"
+                      >
+                        <RefreshCw className={cn("h-4 w-4", isRefreshingAllStores && "animate-spin")} />
+                      </Button>
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
