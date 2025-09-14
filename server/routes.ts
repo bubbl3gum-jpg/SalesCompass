@@ -1172,6 +1172,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Create the sale
       const sale = await storage.createSale(validatedData);
 
+      // Update stock to reflect the sale (set tanggalOut to sale date)
+      if (sale.sn && sale.kodeGudang && sale.tanggal) {
+        try {
+          const stockUpdated = await storage.updateStockOnSale(
+            sale.sn, 
+            sale.kodeGudang, 
+            sale.tanggal
+          );
+          if (stockUpdated) {
+            console.log(`📦 Stock updated for sale ${sale.penjualanId}: ${sale.sn} at ${sale.kodeGudang}`);
+          } else {
+            console.warn(`⚠️ No stock record found for sale ${sale.penjualanId}: ${sale.sn} at ${sale.kodeGudang}`);
+          }
+        } catch (stockError) {
+          // Log the error but don't fail the sale
+          console.error(`❌ Failed to update stock for sale ${sale.penjualanId}:`, stockError);
+        }
+      } else {
+        console.warn(`⚠️ Sale ${sale.penjualanId} missing required fields for stock update: sn=${sale.sn}, kodeGudang=${sale.kodeGudang}, tanggal=${sale.tanggal}`);
+      }
+
       res.json(sale);
     } catch (error) {
       console.error('Sales creation error:', error);

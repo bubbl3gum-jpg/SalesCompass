@@ -177,6 +177,7 @@ export interface IStorage {
     in: Array<{ date: string; count: number }>;
     out: Array<{ date: string; count: number }>;
   }>;
+  updateStockOnSale(serialNumber: string, kodeGudang: string, saleDate: string): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1134,6 +1135,48 @@ export class DatabaseStorage implements IStorage {
       in: inMovements,
       out: outMovements
     };
+  }
+
+  async updateStockOnSale(serialNumber: string, kodeGudang: string, saleDate: string): Promise<boolean> {
+    try {
+      console.log(`📦 Updating stock on sale: ${serialNumber} at ${kodeGudang} on ${saleDate}`);
+      
+      // Find the stock record that matches the sale
+      const stockRecord = await db
+        .select()
+        .from(stock)
+        .where(
+          and(
+            eq(stock.serialNumber, serialNumber),
+            eq(stock.kodeGudang, kodeGudang),
+            sql`${stock.tanggalOut} IS NULL` // Item is still in stock
+          )
+        )
+        .limit(1);
+
+      if (stockRecord.length === 0) {
+        console.warn(`⚠️ No stock record found for sale: ${serialNumber} at ${kodeGudang}`);
+        return false;
+      }
+
+      // Update the stock record to mark as sold
+      const result = await db
+        .update(stock)
+        .set({ tanggalOut: saleDate })
+        .where(
+          and(
+            eq(stock.serialNumber, serialNumber),
+            eq(stock.kodeGudang, kodeGudang),
+            sql`${stock.tanggalOut} IS NULL`
+          )
+        );
+
+      console.log(`✅ Stock updated for sale: ${serialNumber} at ${kodeGudang}`);
+      return true;
+    } catch (error) {
+      console.error(`❌ Failed to update stock for sale ${serialNumber} at ${kodeGudang}:`, error);
+      return false;
+    }
   }
 
   // Process transfer into stock movements (IN/OUT records)
