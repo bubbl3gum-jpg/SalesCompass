@@ -374,15 +374,46 @@ export function SalesEntryModal({ isOpen, onClose, selectedStore, editingSale }:
     },
     onSuccess: async (response) => {
       const data = await response.json();
+      const storeCode = form.getValues('kodeGudang');
+      
       toast({
         title: "Success",
         description: "Sale recorded successfully",
       });
       
-      // Invalidate relevant queries
-      queryClient.invalidateQueries({ queryKey: ['/api/sales'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/stock'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/dashboard'] });
+      // Invalidate specific query keys to refresh dashboard and stock data
+      // Dashboard metrics
+      queryClient.invalidateQueries({ 
+        queryKey: ["/api/dashboard/metrics", storeCode] 
+      });
+      
+      // Sales data for both specific store and general sales queries
+      queryClient.invalidateQueries({ 
+        queryKey: ["/api/sales", storeCode] 
+      });
+      queryClient.invalidateQueries({ 
+        queryKey: ["/api/sales"] 
+      });
+      
+      // Stock overview data
+      queryClient.invalidateQueries({ 
+        queryKey: ['stores', 'stock', 'overview'] 
+      });
+      queryClient.invalidateQueries({ 
+        queryKey: ["/api/stock/onhand", storeCode] 
+      });
+      
+      // Inventory search and stock movements
+      queryClient.invalidateQueries({ 
+        queryKey: ['stock', 'movements'] 
+      });
+      queryClient.invalidateQueries({ 
+        predicate: (query) => 
+          query.queryKey[0] === '/api/inventory' ||
+          query.queryKey[0] === '/api/stock' ||
+          query.queryKey[0] === 'dashboard' ||
+          query.queryKey[0] === 'sales'
+      });
       
       onClose();
     },

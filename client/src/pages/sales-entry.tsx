@@ -55,7 +55,43 @@ export default function SalesEntry() {
       return await apiRequest('DELETE', `/api/sales/${saleId}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/sales"] });
+      // Invalidate specific query keys to refresh all relevant data
+      // Sales data with current filters
+      queryClient.invalidateQueries({ 
+        queryKey: ["/api/sales", effectiveStore, dateFilter] 
+      });
+      queryClient.invalidateQueries({ 
+        queryKey: ["/api/sales", effectiveStore] 
+      });
+      queryClient.invalidateQueries({ 
+        queryKey: ["/api/sales"] 
+      });
+      
+      // Dashboard metrics for the affected store
+      queryClient.invalidateQueries({ 
+        queryKey: ["/api/dashboard/metrics", effectiveStore] 
+      });
+      
+      // Stock overview and stock data
+      queryClient.invalidateQueries({ 
+        queryKey: ['stores', 'stock', 'overview'] 
+      });
+      queryClient.invalidateQueries({ 
+        queryKey: ["/api/stock/onhand", effectiveStore] 
+      });
+      queryClient.invalidateQueries({ 
+        queryKey: ['stock', 'movements'] 
+      });
+      
+      // Use predicate for broader invalidation of related queries
+      queryClient.invalidateQueries({ 
+        predicate: (query) => 
+          query.queryKey[0] === '/api/inventory' ||
+          query.queryKey[0] === '/api/stock' ||
+          query.queryKey[0] === 'dashboard' ||
+          query.queryKey[0] === 'sales'
+      });
+      
       toast({
         title: "Success",
         description: "Sales transaction deleted successfully",
