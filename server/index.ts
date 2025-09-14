@@ -44,8 +44,22 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: false, limit: '10mb' }));
+// Body parsing with error handling
+app.use(express.json({ 
+  limit: '10mb',
+  verify: (req, res, buf) => {
+    try {
+      JSON.parse(buf.toString());
+    } catch (e) {
+      throw new Error('Invalid JSON');
+    }
+  }
+}));
+app.use(express.urlencoded({ 
+  extended: false, 
+  limit: '10mb',
+  parameterLimit: 1000 // Prevent parameter pollution
+}));
 
 app.use((req, res, next) => {
   const start = Date.now();
@@ -77,36 +91,111 @@ app.use((req, res, next) => {
   next();
 });
 
-(async () => {
-  const server = await registerRoutes(app);
+// Global server instance for graceful shutdown
+let httpServer: any = null;
 
-  app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
-    const status = err.status || err.statusCode || 500;
-    const message = err.message || "Internal Server Error";
+// Graceful shutdown handler
+const gracefulShutdown = (signal: string) => {
+  log(`Received ${signal}. Starting graceful shutdown...`);
+  
+  if (httpServer) {
+    httpServer.close((err: any) => {
+      if (err) {
+        log(`Error during server shutdown: ${err.message}`);
+        process.exit(1);
+      }
+      log('HTTP server closed.');
+      process.exit(0);
+    });
 
-    res.status(status).json({ message });
-    throw err;
-  });
-
-  // importantly only setup vite in development and after
-  // setting up all the other routes so the catch-all route
-  // doesn't interfere with the other routes
-  if (app.get("env") === "development") {
-    await setupVite(app, server);
+    // Force close after 10 seconds
+    setTimeout(() => {
+      log('Forcing server shutdown after timeout');
+      process.exit(1);
+    }, 10000);
   } else {
-    serveStatic(app);
+    process.exit(0);
   }
+};
 
-  // ALWAYS serve the app on the port specified in the environment variable PORT
-  // Other ports are firewalled. Default to 5000 if not specified.
-  // this serves both the API and the client.
-  // It is the only port that is not firewalled.
-  const port = parseInt(process.env.PORT || '5000', 10);
-  server.listen({
-    port,
-    host: "0.0.0.0",
-    reusePort: true,
-  }, () => {
-    log(`serving on port ${port}`);
-  });
+// Register shutdown handlers
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+
+// Handle uncaught exceptions and rejections
+process.on('uncaughtException', (err) => {
+  log(`Uncaught Exception: ${err.message}`);
+  log(err.stack || '');
+  gracefulShutdown('uncaughtException');
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  log(`Unhandled Rejection at: ${promise}, reason: ${reason}`);
+  gracefulShutdown('unhandledRejection');
+});
+
+(async () => {
+  try {
+    const server = await registerRoutes(app);
+
+    app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
+      const status = err.status || err.statusCode || 500;
+      const message = err.message || "Internal Server Error";
+      
+      // Log server errors but don't crash
+      if (status >= 500) {
+        log(`Server Error ${status}: ${message}`);
+        if (err.stack) {
+          log(err.stack);
+        }
+      }
+
+      res.status(status).json({ message });
+      // Don't throw the error - this prevents server crashes
+    });
+
+    // importantly only setup vite in development and after
+    // setting up all the other routes so the catch-all route
+    // doesn't interfere with the other routes
+    if (app.get("env") === "development") {
+      await setupVite(app, server);
+    } else {
+      serveStatic(app);
+    }
+
+    // ALWAYS serve the app on the port specified in the environment variable PORT
+    // Other ports are firewalled. Default to 5000 if not specified.
+    // this serves both the API and the client.
+    // It is the only port that is not firewalled.
+    const port = parseInt(process.env.PORT || '5000', 10);
+    
+    // Validate port number
+    if (isNaN(port) || port < 1 || port > 65535) {
+      throw new Error(`Invalid port number: ${process.env.PORT}. Using default port 5000.`);
+    }
+    
+    httpServer = server.listen({
+      port,
+      host: "0.0.0.0",
+      reusePort: true,
+    }, () => {
+      log(`Server successfully started on port ${port}`);
+      log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+    });
+
+    // Handle server errors
+    httpServer.on('error', (err: any) => {
+      if (err.code === 'EADDRINUSE') {
+        log(`Port ${port} is already in use. Attempting graceful shutdown...`);
+        gracefulShutdown('EADDRINUSE');
+      } else {
+        log(`Server error: ${err.message}`);
+        gracefulShutdown('serverError');
+      }
+    });
+    
+  } catch (error: any) {
+    log(`Failed to start server: ${error.message}`);
+    process.exit(1);
+  }
 })();

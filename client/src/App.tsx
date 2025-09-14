@@ -52,17 +52,39 @@ const ProtectedRoute = ({
   permission: string; 
   [key: string]: any; 
 }) => {
-  const { hasPermission } = useStoreAuth();
-  
-  if (!hasPermission(permission)) {
+  // Handle potential context issues during hot reload
+  try {
+    const { hasPermission } = useStoreAuth();
+    
+    if (!hasPermission(permission)) {
+      return <AccessDenied />;
+    }
+    
+    return <Component {...props} />;
+  } catch (err) {
+    console.warn("AuthProvider context not available in ProtectedRoute, redirecting to access denied");
     return <AccessDenied />;
   }
-  
-  return <Component {...props} />;
 };
 
 function Router() {
-  const { user, isLoading } = useStoreAuth();
+  // Use a try-catch to handle potential context issues during hot reload
+  let user = null;
+  let isLoading = true;
+  let error = null;
+  
+  try {
+    const authResult = useStoreAuth();
+    user = authResult.user;
+    isLoading = authResult.isLoading;
+    error = authResult.error;
+  } catch (err) {
+    console.warn("AuthProvider context not available yet, showing login");
+    // If context is not available, treat as not authenticated
+    user = null;
+    isLoading = false;
+    error = null;
+  }
 
   return (
     <Suspense fallback={<PageLoader />}>

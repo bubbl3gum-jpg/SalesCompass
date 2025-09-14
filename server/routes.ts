@@ -752,13 +752,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         kode_motif as string
       );
 
-      let unitPrice = parseFloat(price === 'TIDAK DITEMUKAN' ? '0' : price);
+      // Parse price with robust error handling
+      let unitPrice = 0;
+      if (price && price !== 'TIDAK DITEMUKAN') {
+        const parsedPrice = parseFloat(price);
+        unitPrice = isNaN(parsedPrice) || parsedPrice < 0 ? 0 : parsedPrice;
+      }
       let normalPrice = unitPrice;
 
-      // Apply discount
+      // Apply discount with error handling
       let discountAmount = 0;
       if (disc_by_amount) {
-        discountAmount = parseFloat(disc_by_amount as string);
+        const parsedDiscount = parseFloat(disc_by_amount as string);
+        discountAmount = isNaN(parsedDiscount) || parsedDiscount < 0 ? 0 : parsedDiscount;
       } else if (discount_id) {
         // Get discount from database
         const discounts = await storage.getDiscountTypes();
@@ -766,12 +772,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (discount) {
           // For now, treat discount_type as percentage if it's a number
           const discountValue = parseFloat(discount.discountType || '0');
-          if (!isNaN(discountValue)) {
+          if (!isNaN(discountValue) && discountValue >= 0 && discountValue <= 100) {
             discountAmount = (unitPrice * discountValue) / 100;
           }
         }
       }
 
+      // Ensure discount doesn't exceed unit price
+      discountAmount = Math.min(discountAmount, unitPrice);
       const finalPrice = unitPrice - discountAmount;
 
       res.json({

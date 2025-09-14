@@ -209,15 +209,11 @@ export function SalesEntryModal({ isOpen, onClose, selectedStore, editingSale }:
       const store = form.getValues('kodeGudang');
       const searchType = searchMode;
       
-      // Use the new inventory search endpoint
-      const response = await fetch(
-        `/api/inventory/search?store=${encodeURIComponent(store)}&query=${encodeURIComponent(searchQuery)}&searchType=${searchType}`, 
-        { credentials: 'include' }
+      // Use the new inventory search endpoint with proper authentication
+      const response = await apiRequest(
+        'GET',
+        `/api/inventory/search?store=${encodeURIComponent(store)}&query=${encodeURIComponent(searchQuery)}&searchType=${searchType}`
       );
-
-      if (!response.ok) {
-        throw new Error('Failed to search inventory');
-      }
 
       const matchingItems: ItemLookup[] = await response.json();
 

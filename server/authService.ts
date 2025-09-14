@@ -51,7 +51,7 @@ const ROLE_PERMISSIONS = {
       "sales:create", "sales:read",
       "settlement:create", "settlement:read",
       "transfer:create", "transfer:read",
-      "stock:opname"
+      "stock:read", "stock:opname"
     ],
     canAccessAllStores: false
   },
@@ -125,10 +125,21 @@ export async function comparePasswords(supplied: string, stored: string): Promis
       return timingSafeEqual(hashedBuf, suppliedBuf);
     }
     
-    // Handle plain text passwords (for development/legacy data)
-    // TODO: In production, all passwords should be hashed
-    console.warn("Plain text password comparison - this should be hashed in production");
-    return supplied === stored;
+    // Handle plain text passwords (for development/legacy data only)
+    if (process.env.NODE_ENV === 'production') {
+      console.error("⚠️  Plain text password detected in production - this is a security risk");
+      return false;
+    }
+    
+    // Only allow plain text in development with explicit warning
+    if (process.env.NODE_ENV === 'development') {
+      console.warn("⚠️  Plain text password comparison - this should be hashed in production");
+      return supplied === stored;
+    }
+    
+    // Default: reject unknown password formats
+    console.error("Unknown password format - must be bcrypt or scrypt hashed");
+    return false;
   } catch (error) {
     console.error("Password comparison error:", error);
     return false;
