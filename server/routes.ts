@@ -1631,6 +1631,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get items without proper pricing
+  app.get('/api/items/missing-prices', authenticate, async (req, res) => {
+    try {
+      const result = await storage.getItemsWithMissingPrices();
+      res.json(result);
+    } catch (error) {
+      console.error('❌ Failed to get missing price items:', error);
+      res.status(500).json({ 
+        error: error instanceof Error ? error.message : 'Unknown error' 
+      });
+    }
+  });
+
   // Get unprocessed transfers
   app.get('/api/transfers/unprocessed', authenticate, checkRole(['System Administrator', 'Supervisor']), async (req, res) => {
     try {

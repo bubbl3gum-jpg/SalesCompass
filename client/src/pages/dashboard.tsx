@@ -254,6 +254,19 @@ export default function Dashboard() {
     staleTime: 30000, // Consider data fresh for 30 seconds
   });
 
+  // Get items with missing prices
+  const { data: missingPriceItems = [], isLoading: missingPricesLoading, error: missingPricesError } = useQuery<Array<{
+    kodeItem: string;
+    namaItem: string | null;
+    family: string | null;
+    deskripsiMaterial: string | null;
+    issue: 'no_pricelist' | 'zero_price' | 'null_price';
+  }>>({
+    queryKey: ["/api/items/missing-prices"],
+    retry: false,
+    staleTime: 300000, // Consider data fresh for 5 minutes
+  });
+
   useEffect(() => {
     if (metricsError && isUnauthorizedError(metricsError as Error)) {
       toast({
@@ -552,6 +565,67 @@ export default function Dashboard() {
         <main className="p-6">
           {selectedStore ? (
             <div className="space-y-6">
+              {/* Missing Price Items Notification */}
+              {missingPriceItems.length > 0 && (
+                <Card className="bg-amber-50/90 dark:bg-amber-900/20 backdrop-blur-xl border border-amber-200/50 dark:border-amber-700/30 shadow-lg">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-lg flex items-center gap-2 text-amber-800 dark:text-amber-200">
+                      <AlertTriangle className="w-5 h-5" />
+                      Pricing Issues Detected ({missingPriceItems.length} items)
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="mb-3">
+                      <p className="text-amber-700 dark:text-amber-300 text-sm">
+                        The following items are missing proper pricing information. Please update their pricelist entries.
+                      </p>
+                    </div>
+                    <div className="space-y-2 max-h-64 overflow-y-auto">
+                      {missingPriceItems.slice(0, 20).map((item) => (
+                        <div 
+                          key={item.kodeItem}
+                          className="flex items-center justify-between p-3 bg-white/60 dark:bg-black/20 rounded-lg border border-amber-200/30 dark:border-amber-700/20"
+                        >
+                          <div className="flex-1">
+                            <div className="font-medium text-gray-900 dark:text-white text-sm">
+                              {item.kodeItem}
+                            </div>
+                            <div className="text-xs text-gray-600 dark:text-gray-400">
+                              {item.namaItem || 'No name available'}
+                            </div>
+                            {(item.family || item.deskripsiMaterial) && (
+                              <div className="text-xs text-gray-500 dark:text-gray-500 mt-1">
+                                {item.family && `Family: ${item.family}`}
+                                {item.family && item.deskripsiMaterial && ' | '}
+                                {item.deskripsiMaterial && `Material: ${item.deskripsiMaterial}`}
+                              </div>
+                            )}
+                          </div>
+                          <Badge 
+                            variant="outline" 
+                            className={cn(
+                              "text-xs",
+                              item.issue === 'no_pricelist' && "border-red-300 text-red-700 bg-red-50 dark:border-red-700 dark:text-red-300 dark:bg-red-900/20",
+                              item.issue === 'zero_price' && "border-orange-300 text-orange-700 bg-orange-50 dark:border-orange-700 dark:text-orange-300 dark:bg-orange-900/20",
+                              item.issue === 'null_price' && "border-gray-300 text-gray-700 bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:bg-gray-900/20"
+                            )}
+                          >
+                            {item.issue === 'no_pricelist' && 'No Pricelist'}
+                            {item.issue === 'zero_price' && 'Zero Price'}
+                            {item.issue === 'null_price' && 'Null Price'}
+                          </Badge>
+                        </div>
+                      ))}
+                      {missingPriceItems.length > 20 && (
+                        <div className="text-center p-2 text-amber-600 dark:text-amber-400 text-sm">
+                          ... and {missingPriceItems.length - 20} more items
+                        </div>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
               {/* Stores Overview - Show all stores data */}
               {user?.can_access_all_stores && (
                 <Card className="bg-white/70 dark:bg-black/60 backdrop-blur-xl border border-white/30 dark:border-gray-700/50 shadow-lg">

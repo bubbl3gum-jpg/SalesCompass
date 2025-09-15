@@ -181,6 +181,15 @@ export interface IStorage {
     out: Array<{ date: string; count: number }>;
   }>;
   updateStockOnSale(serialNumber: string, kodeGudang: string, saleDate: string): Promise<boolean>;
+
+  // Missing price operations
+  getItemsWithMissingPrices(): Promise<Array<{
+    kodeItem: string;
+    namaItem: string | null;
+    family: string | null;
+    deskripsiMaterial: string | null;
+    issue: 'no_pricelist' | 'zero_price' | 'null_price';
+  }>>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1479,6 +1488,97 @@ export class DatabaseStorage implements IStorage {
 
     } catch (error) {
       console.error(`❌ Failed to process transfer ${toNumber}:`, error);
+      throw error;
+    }
+  }
+
+  // Missing price operations
+  async getItemsWithMissingPrices(): Promise<Array<{
+    kodeItem: string;
+    namaItem: string | null;
+    family: string | null;
+    deskripsiMaterial: string | null;
+    issue: 'no_pricelist' | 'zero_price' | 'null_price';
+  }>> {
+    try {
+      // Query to find reference sheet items with missing or zero prices
+      const itemsWithIssues = await db
+        .select({
+          kodeItem: referenceSheet.kodeItem,
+          namaItem: referenceSheet.namaItem,
+          family: referenceSheet.family,
+          deskripsiMaterial: referenceSheet.deskripsiMaterial,
+          normalPrice: pricelist.normalPrice,
+          sp: pricelist.sp,
+          pricelistId: pricelist.pricelistId,
+        })
+        .from(referenceSheet)
+        .leftJoin(pricelist, 
+          or(
+            eq(referenceSheet.kodeItem, pricelist.kodeItem),
+            and(
+              eq(referenceSheet.family, pricelist.family),
+              eq(referenceSheet.deskripsiMaterial, pricelist.deskripsiMaterial)
+            )
+          )
+        );
+
+      const missingPriceItems = itemsWithIssues
+        .map(item => {
+          // Check for missing pricelist entry
+          if (!item.pricelistId) {
+            return {
+              kodeItem: item.kodeItem,
+              namaItem: item.namaItem,
+              family: item.family,
+              deskripsiMaterial: item.deskripsiMaterial,
+              issue: 'no_pricelist' as const
+            };
+          }
+
+          // Check for zero prices
+          const normalPrice = parseFloat(item.normalPrice?.toString() || '0');
+          const sp = parseFloat(item.sp?.toString() || '0');
+          
+          if (normalPrice === 0 && sp === 0) {
+            return {
+              kodeItem: item.kodeItem,
+              namaItem: item.namaItem,
+              family: item.family,
+              deskripsiMaterial: item.deskripsiMaterial,
+              issue: 'zero_price' as const
+            };
+          }
+
+          // Check for null prices
+          if (!item.normalPrice && !item.sp) {
+            return {
+              kodeItem: item.kodeItem,
+              namaItem: item.namaItem,
+              family: item.family,
+              deskripsiMaterial: item.deskripsiMaterial,
+              issue: 'null_price' as const
+            };
+          }
+
+          return null;
+        })
+        .filter((item): item is NonNullable<typeof item> => item !== null);
+
+      // Remove duplicates by kodeItem (keep first occurrence)
+      const uniqueItems = missingPriceItems.reduce((acc, current) => {
+        const exists = acc.find(item => item.kodeItem === current.kodeItem);
+        if (!exists) {
+          acc.push(current);
+        }
+        return acc;
+      }, [] as typeof missingPriceItems);
+
+      console.log(`📊 Found ${uniqueItems.length} items with pricing issues`);
+      return uniqueItems;
+      
+    } catch (error) {
+      console.error('❌ Failed to get items with missing prices:', error);
       throw error;
     }
   }
