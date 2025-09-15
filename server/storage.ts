@@ -1403,22 +1403,22 @@ export class DatabaseStorage implements IStorage {
       console.log(`🔄 Processing transfer ${toNumber}: ${transfer.dariGudang} → ${transfer.keGudang}`);
 
       // Get transfer items
-      const transferItems = await db
+      const transferItemsToProcess = await db
         .select()
         .from(toItemList)
         .where(eq(toItemList.toNumber, toNumber));
 
-      if (transferItems.length === 0) {
+      if (transferItemsToProcess.length === 0) {
         throw new Error(`No items found for transfer ${toNumber}`);
       }
 
-      console.log(`📦 Found ${transferItems.length} items to process`);
+      console.log(`📦 Found ${transferItemsToProcess.length} items to process`);
 
       const stockRecords = [];
       const errors = [];
       const transferDate = transfer.tanggal || new Date().toISOString().split('T')[0];
 
-      for (const item of transferItems) {
+      for (const item of transferItemsToProcess) {
         try {
           // Generate serial number if missing (use line number as fallback)
           const serialNumber = item.sn && item.sn !== '-' ? item.sn : `${toNumber}-L${item.lineNo || 1}`;
