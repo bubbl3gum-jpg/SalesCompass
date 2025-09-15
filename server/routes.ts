@@ -1608,6 +1608,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Batch process all unprocessed transfers to stock
+  app.post('/api/transfers/batch-process-to-stock', authenticate, checkRole(['System Administrator']), async (req, res) => {
+    try {
+      console.log('🚀 Starting batch processing of all unprocessed transfers...');
+      const result = await storage.batchProcessTransfersToStock();
+      
+      res.json({
+        success: true,
+        totalProcessed: result.totalProcessed,
+        successfulTransfers: result.successfulTransfers,
+        failedTransfers: result.failedTransfers,
+        totalItems: result.totalItems,
+        message: `Batch processing complete: ${result.totalProcessed} transfers processed, ${result.totalItems} items added to stock`
+      });
+    } catch (error) {
+      console.error('Batch process transfers error:', error);
+      res.status(500).json({
+        success: false,
+        message: error instanceof Error ? error.message : 'Failed to batch process transfers'
+      });
+    }
+  });
+
+  // Get unprocessed transfers
+  app.get('/api/transfers/unprocessed', authenticate, checkRole(['System Administrator', 'Supervisor']), async (req, res) => {
+    try {
+      const unprocessedTransfers = await storage.getUnprocessedTransfers();
+      res.json({
+        count: unprocessedTransfers.length,
+        transfers: unprocessedTransfers
+      });
+    } catch (error) {
+      console.error('Get unprocessed transfers error:', error);
+      res.status(500).json({
+        message: error instanceof Error ? error.message : 'Failed to get unprocessed transfers'
+      });
+    }
+  });
+
   // Delete transfer item
   app.delete('/api/transfers/:toNumber/items/:toItemListId', authenticate, checkRole(['Supervisor', 'Stockist', 'System Administrator']), async (req, res) => {
     try {

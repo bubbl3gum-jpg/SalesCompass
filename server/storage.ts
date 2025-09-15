@@ -161,6 +161,9 @@ export interface IStorage {
   // Transfer order item list operations
   createToItemList(data: InsertToItemList): Promise<ToItemList>;
   getToItemListByTransferOrderNumber(toNumber: string): Promise<ToItemList[]>;
+  processTransferToStock(toNumber: string): Promise<{ processed: number; errors: string[] }>;
+  getUnprocessedTransfers(): Promise<{ toNumber: string; tanggal: string | null; dariGudang: string; keGudang: string; itemCount: number }[]>;
+  batchProcessTransfersToStock(): Promise<{ totalProcessed: number; successfulTransfers: string[]; failedTransfers: { toNumber: string; error: string }[]; totalItems: number }>;
 
   // Inventory search operations
   searchInventoryBySerial(storeCode: string, serialNumber: string): Promise<any[]>;
@@ -1171,8 +1174,8 @@ export class DatabaseStorage implements IStorage {
     try {
       console.log(`📦 Updating stock on sale: ${serialNumber} at ${kodeGudang} on ${saleDate}`);
       
-      // Find the stock record that matches the sale
-      const stockRecord = await db
+      // First, try to find the stock record with exact serial number match
+      let stockRecord = await db
         .select()
         .from(stock)
         .where(
@@ -1184,18 +1187,69 @@ export class DatabaseStorage implements IStorage {
         )
         .limit(1);
 
+      // If not found, try to find by synthetic serial number pattern
+      // This handles cases where the sale uses a transfer order number instead of the actual serial
+      if (stockRecord.length === 0 && serialNumber.includes('-')) {
+        // Try to find by synthetic serial pattern (e.g., '2509-249-L1')
+        stockRecord = await db
+          .select()
+          .from(stock)
+          .where(
+            and(
+              sql`${stock.serialNumber} LIKE ${serialNumber + '%'}`,
+              eq(stock.kodeGudang, kodeGudang),
+              sql`${stock.tanggalOut} IS NULL`
+            )
+          )
+          .limit(1);
+      }
+
+      // If still not found, try to find any item with matching kode_item in the store
+      // This is a fallback for cases where serial numbers don't match exactly
+      if (stockRecord.length === 0) {
+        // Get the kode_item from the sale or transfer
+        const itemQuery = await db
+          .select({ kodeItem: stock.kodeItem })
+          .from(stock)
+          .where(
+            or(
+              eq(stock.serialNumber, serialNumber),
+              sql`${stock.serialNumber} LIKE ${serialNumber + '%'}`
+            )
+          )
+          .limit(1);
+          
+        if (itemQuery.length > 0) {
+          // Find any available stock with same item code in the store
+          stockRecord = await db
+            .select()
+            .from(stock)
+            .where(
+              and(
+                eq(stock.kodeItem, itemQuery[0].kodeItem),
+                eq(stock.kodeGudang, kodeGudang),
+                sql`${stock.tanggalOut} IS NULL`
+              )
+            )
+            .limit(1);
+        }
+      }
+
       if (stockRecord.length === 0) {
         console.warn(`⚠️ No stock record found for sale: ${serialNumber} at ${kodeGudang}`);
         return false;
       }
 
       // Update the stock record to mark as sold
+      const actualSerialNumber = stockRecord[0].serialNumber;
+      console.log(`✅ Found stock record with serial: ${actualSerialNumber}`);
+      
       const result = await db
         .update(stock)
         .set({ tanggalOut: saleDate })
         .where(
           and(
-            eq(stock.serialNumber, serialNumber),
+            eq(stock.serialNumber, actualSerialNumber),
             eq(stock.kodeGudang, kodeGudang),
             sql`${stock.tanggalOut} IS NULL`
           )
@@ -1210,21 +1264,128 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Process transfer into stock movements (IN/OUT records)
+  async getUnprocessedTransfers(): Promise<{ toNumber: string; tanggal: string | null; dariGudang: string; keGudang: string; itemCount: number }[]> {
+    const result = await db.execute(sql`
+      WITH transfer_summary AS (
+        SELECT 
+          t.to_number,
+          t.tanggal,
+          t.dari_gudang,
+          t.ke_gudang,
+          COUNT(til.to_itemlist_id) as item_count
+        FROM transfer_order t
+        LEFT JOIN to_itemlist til ON t.to_number = til.to_number
+        GROUP BY t.to_number, t.tanggal, t.dari_gudang, t.ke_gudang
+      )
+      SELECT 
+        ts.to_number as "toNumber",
+        ts.tanggal,
+        ts.dari_gudang as "dariGudang",
+        ts.ke_gudang as "keGudang",
+        ts.item_count as "itemCount"
+      FROM transfer_summary ts
+      WHERE NOT EXISTS (
+        SELECT 1 FROM stock 
+        WHERE serial_number LIKE ts.to_number || '-%'
+      )
+      ORDER BY ts.tanggal DESC
+    `);
+    
+    return result.rows as any[];
+  }
+
+  async batchProcessTransfersToStock(): Promise<{ totalProcessed: number; successfulTransfers: string[]; failedTransfers: { toNumber: string; error: string }[]; totalItems: number }> {
+    console.log('🚀 Starting batch processing of unprocessed transfers...');
+    
+    const unprocessedTransfers = await this.getUnprocessedTransfers();
+    console.log(`📋 Found ${unprocessedTransfers.length} unprocessed transfers`);
+    
+    if (unprocessedTransfers.length === 0) {
+      return {
+        totalProcessed: 0,
+        successfulTransfers: [],
+        failedTransfers: [],
+        totalItems: 0
+      };
+    }
+    
+    const successfulTransfers: string[] = [];
+    const failedTransfers: { toNumber: string; error: string }[] = [];
+    let totalItems = 0;
+    
+    for (const transfer of unprocessedTransfers) {
+      try {
+        console.log(`\n📦 Processing transfer ${transfer.toNumber} (${transfer.itemCount} items)...`);
+        const result = await this.processTransferToStock(transfer.toNumber);
+        
+        if (result.processed > 0) {
+          successfulTransfers.push(transfer.toNumber);
+          totalItems += result.processed;
+          console.log(`✅ Successfully processed ${result.processed} items from transfer ${transfer.toNumber}`);
+        } else if (result.errors.length > 0 && result.errors[0].includes('already been processed')) {
+          console.log(`⏭️ Transfer ${transfer.toNumber} was already processed, skipping`);
+        } else {
+          failedTransfers.push({
+            toNumber: transfer.toNumber,
+            error: result.errors.join(', ')
+          });
+          console.log(`❌ Failed to process transfer ${transfer.toNumber}: ${result.errors.join(', ')}`);
+        }
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        failedTransfers.push({
+          toNumber: transfer.toNumber,
+          error: errorMessage
+        });
+        console.error(`❌ Error processing transfer ${transfer.toNumber}:`, error);
+      }
+    }
+    
+    console.log(`\n🎉 Batch processing complete:`);
+    console.log(`   ✅ Successful transfers: ${successfulTransfers.length}`);
+    console.log(`   ❌ Failed transfers: ${failedTransfers.length}`);
+    console.log(`   📦 Total items processed: ${totalItems}`);
+    
+    return {
+      totalProcessed: successfulTransfers.length,
+      successfulTransfers,
+      failedTransfers,
+      totalItems
+    };
+  }
+
   async processTransferToStock(toNumber: string): Promise<{ processed: number; errors: string[] }> {
     try {
       // Check if transfer has already been processed (idempotency protection)
-      const existingStockRecords = await db
-        .select()
-        .from(stock)
-        .where(sql`${stock.serialNumber} LIKE ${toNumber + '-%'}`)
+      // Check for both synthetic serial numbers AND real serial numbers from transfer items
+      const transferItems = await db
+        .select({ sn: toItemList.sn })
+        .from(toItemList)
+        .where(eq(toItemList.toNumber, toNumber))
         .limit(1);
         
-      if (existingStockRecords.length > 0) {
-        console.log(`⚠️ Transfer ${toNumber} has already been processed - skipping`);
-        return {
-          processed: 0,
-          errors: [`Transfer ${toNumber} has already been processed`]
-        };
+      if (transferItems.length > 0) {
+        // Check if any stock record exists from this transfer
+        const existingStockRecords = await db
+          .select()
+          .from(stock)
+          .where(
+            or(
+              // Check for synthetic serial numbers
+              sql`${stock.serialNumber} LIKE ${toNumber + '-%'}`,
+              // Check for real serial numbers from this transfer
+              transferItems[0].sn ? eq(stock.serialNumber, transferItems[0].sn) : sql`false`
+            )
+          )
+          .limit(1);
+          
+        if (existingStockRecords.length > 0) {
+          console.log(`⚠️ Transfer ${toNumber} has already been processed - skipping`);
+          return {
+            processed: 0,
+            errors: [`Transfer ${toNumber} has already been processed`]
+          };
+        }
       }
 
       // Get transfer details
