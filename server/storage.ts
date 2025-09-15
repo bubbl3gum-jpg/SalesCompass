@@ -1430,10 +1430,15 @@ export class DatabaseStorage implements IStorage {
 
           // Create individual stock records for each quantity unit
           for (let qtyIndex = 1; qtyIndex <= quantity; qtyIndex++) {
-            // Generate unique serial number for each individual item
-            const serialNumber = item.sn && item.sn !== '-' 
-              ? `${item.sn}-${qtyIndex}` // If real serial exists, append counter
-              : `${toNumber}-L${item.lineNo || 1}-${qtyIndex}`; // Otherwise use synthetic format
+            // Use actual serial number from to_itemlist, handle qty > 1 cases
+            let serialNumber: string;
+            if (item.sn && item.sn !== '-') {
+              // For real serial numbers, use as-is for qty=1, append counter for qty>1
+              serialNumber = quantity === 1 ? item.sn : `${item.sn}-${qtyIndex}`;
+            } else {
+              // Only use synthetic format when serial number is missing or is '-'
+              serialNumber = `${toNumber}-L${item.lineNo || 1}-${qtyIndex}`;
+            }
 
             // Create stock OUT record for source store (item leaves source store)
             stockRecords.push({
