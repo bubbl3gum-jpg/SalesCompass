@@ -1420,37 +1420,43 @@ export class DatabaseStorage implements IStorage {
 
       for (const item of transferItemsToProcess) {
         try {
-          // Generate serial number if missing (use line number as fallback)
-          const serialNumber = item.sn && item.sn !== '-' ? item.sn : `${toNumber}-L${item.lineNo || 1}`;
+          // Get quantity for this line item (default to 1 if not specified)
+          const quantity = item.qty || 1;
           
           // Ensure we have valid warehouse codes
           if (!transfer.dariGudang || !transfer.keGudang) {
             throw new Error(`Invalid warehouse codes: ${transfer.dariGudang} -> ${transfer.keGudang}`);
           }
 
-          // Create stock OUT record for source store (item leaves source store)
-          // For serial-tracked items, quantity is always 1 per record
-          stockRecords.push({
-            kodeGudang: transfer.dariGudang,
-            serialNumber: serialNumber,
-            kodeItem: item.kodeItem || 'UNKNOWN',
-            qty: 1, // Always 1 for serial-tracked items
-            tanggalIn: transferDate, // When it originally came into source store
-            tanggalOut: transferDate, // When it left source store (today)
-          });
+          // Create individual stock records for each quantity unit
+          for (let qtyIndex = 1; qtyIndex <= quantity; qtyIndex++) {
+            // Generate unique serial number for each individual item
+            const serialNumber = item.sn && item.sn !== '-' 
+              ? `${item.sn}-${qtyIndex}` // If real serial exists, append counter
+              : `${toNumber}-L${item.lineNo || 1}-${qtyIndex}`; // Otherwise use synthetic format
 
-          // Create stock IN record for destination store (item arrives at destination)
-          // For serial-tracked items, quantity is always 1 per record
-          stockRecords.push({
-            kodeGudang: transfer.keGudang,
-            serialNumber: serialNumber,
-            kodeItem: item.kodeItem || 'UNKNOWN',
-            qty: 1, // Always 1 for serial-tracked items
-            tanggalIn: transferDate, // When it arrived at destination store (today)
-            tanggalOut: undefined, // Still in stock at destination
-          });
+            // Create stock OUT record for source store (item leaves source store)
+            stockRecords.push({
+              kodeGudang: transfer.dariGudang,
+              serialNumber: serialNumber,
+              kodeItem: item.kodeItem || 'UNKNOWN',
+              qty: 1, // Always 1 for individual item record
+              tanggalIn: transferDate, // When it originally came into source store
+              tanggalOut: transferDate, // When it left source store (today)
+            });
 
-          console.log(`✅ Prepared stock movements for item: ${item.kodeItem} (SN: ${serialNumber})`);
+            // Create stock IN record for destination store (item arrives at destination)
+            stockRecords.push({
+              kodeGudang: transfer.keGudang,
+              serialNumber: serialNumber,
+              kodeItem: item.kodeItem || 'UNKNOWN',
+              qty: 1, // Always 1 for individual item record
+              tanggalIn: transferDate, // When it arrived at destination store (today)
+              tanggalOut: undefined, // Still in stock at destination
+            });
+          }
+
+          console.log(`✅ Prepared stock movements for item: ${item.kodeItem} (qty: ${quantity}, SNs: ${toNumber}-L${item.lineNo || 1}-1 to ${toNumber}-L${item.lineNo || 1}-${quantity})`);
         } catch (itemError) {
           const errorMsg = `Failed to process item ${item.kodeItem}: ${itemError}`;
           console.error(`❌ ${errorMsg}`);
