@@ -16,7 +16,6 @@ const Login = lazy(() => import("@/pages/login"));
 const Dashboard = lazy(() => import("@/pages/dashboard"));
 const SalesEntry = lazy(() => import("@/pages/sales-entry"));
 const Settlements = lazy(() => import("@/pages/settlements"));
-const StockDashboard = lazy(() => import("@/pages/stock-dashboard"));
 const StockOpname = lazy(() => import("@/pages/stock-opname"));
 const Transfers = lazy(() => import("@/pages/transfers"));
 const PriceLists = lazy(() => import("@/pages/price-lists"));
@@ -103,7 +102,6 @@ function Router() {
             <Route path="/" component={Dashboard} />
             <Route path="/sales-entry" component={SalesEntry} />
             <Route path="/settlements" component={Settlements} />
-            <Route path="/stock-dashboard" component={Dashboard} />
             <Route path="/stock-opname" component={StockOpname} />
             <Route path="/transfers" component={Transfers} />
             <Route path="/price-lists">
