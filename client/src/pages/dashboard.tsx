@@ -254,17 +254,19 @@ export default function Dashboard() {
     staleTime: 30000, // Consider data fresh for 30 seconds
   });
 
-  // Get items with missing prices
-  const { data: missingPriceItems = [], isLoading: missingPricesLoading, error: missingPricesError } = useQuery<Array<{
+  // Get actual stock data from stock table
+  const { data: stockData = [], isLoading: stockDataLoading, error: stockDataError } = useQuery<Array<{
+    stockId: number;
+    kodeGudang: string;
+    serialNumber: string;
     kodeItem: string;
-    namaItem: string | null;
-    family: string | null;
-    deskripsiMaterial: string | null;
-    issue: 'no_pricelist' | 'zero_price' | 'null_price';
+    qty: number;
+    tanggalIn: string | null;
   }>>({
-    queryKey: ["/api/items/missing-prices"],
+    queryKey: ["/api/stock/onhand", selectedStore],
+    enabled: !!selectedStore,
     retry: false,
-    staleTime: 300000, // Consider data fresh for 5 minutes
+    staleTime: 30000, // Consider data fresh for 30 seconds
   });
 
   useEffect(() => {
@@ -565,60 +567,57 @@ export default function Dashboard() {
         <main className="p-6">
           {selectedStore ? (
             <div className="space-y-6">
-              {/* Missing Price Items Notification */}
-              {missingPriceItems.length > 0 && (
-                <Card className="bg-amber-50/90 dark:bg-amber-900/20 backdrop-blur-xl border border-amber-200/50 dark:border-amber-700/30 shadow-lg">
+              {/* Stock on Hand - Actual inventory from stock table */}
+              {stockData.length > 0 && (
+                <Card className="bg-gradient-to-br from-blue-50/90 to-purple-50/90 dark:from-blue-900/20 dark:to-purple-900/20 backdrop-blur-xl border border-blue-200/50 dark:border-blue-700/30 shadow-lg">
                   <CardHeader className="pb-3">
-                    <CardTitle className="text-lg flex items-center gap-2 text-amber-800 dark:text-amber-200">
-                      <AlertTriangle className="w-5 h-5" />
-                      Pricing Issues Detected ({missingPriceItems.length} items)
+                    <CardTitle className="text-lg flex items-center gap-2 text-blue-800 dark:text-blue-200">
+                      <Package className="w-5 h-5" />
+                      Stock on Hand ({stockData.length} items)
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
                     <div className="mb-3">
-                      <p className="text-amber-700 dark:text-amber-300 text-sm">
-                        The following items are missing proper pricing information. Please update their pricelist entries.
+                      <p className="text-blue-700 dark:text-blue-300 text-sm">
+                        Current inventory items available in {selectedStore === 'ALL_STORE' ? 'all stores' : 'the selected store'}.
                       </p>
                     </div>
                     <div className="space-y-2 max-h-64 overflow-y-auto">
-                      {missingPriceItems.slice(0, 20).map((item) => (
-                        <div 
-                          key={item.kodeItem}
-                          className="flex items-center justify-between p-3 bg-white/60 dark:bg-black/20 rounded-lg border border-amber-200/30 dark:border-amber-700/20"
-                        >
-                          <div className="flex-1">
-                            <div className="font-medium text-gray-900 dark:text-white text-sm">
-                              {item.kodeItem}
-                            </div>
-                            <div className="text-xs text-gray-600 dark:text-gray-400">
-                              {item.namaItem || 'No name available'}
-                            </div>
-                            {(item.family || item.deskripsiMaterial) && (
-                              <div className="text-xs text-gray-500 dark:text-gray-500 mt-1">
-                                {item.family && `Family: ${item.family}`}
-                                {item.family && item.deskripsiMaterial && ' | '}
-                                {item.deskripsiMaterial && `Material: ${item.deskripsiMaterial}`}
-                              </div>
-                            )}
-                          </div>
-                          <Badge 
-                            variant="outline" 
-                            className={cn(
-                              "text-xs",
-                              item.issue === 'no_pricelist' && "border-red-300 text-red-700 bg-red-50 dark:border-red-700 dark:text-red-300 dark:bg-red-900/20",
-                              item.issue === 'zero_price' && "border-orange-300 text-orange-700 bg-orange-50 dark:border-orange-700 dark:text-orange-300 dark:bg-orange-900/20",
-                              item.issue === 'null_price' && "border-gray-300 text-gray-700 bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:bg-gray-900/20"
-                            )}
+                      {stockData.slice(0, 20).map((item) => {
+                        const stockStatus = item.qty === 0 ? 'Out of Stock' : 
+                                          item.qty < 10 ? 'Low Stock' : 'In Stock';
+                        const statusColor = item.qty === 0 ? 'bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-300' :
+                                          item.qty < 10 ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/20 dark:text-yellow-300' :
+                                          'bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-300';
+                        return (
+                          <div 
+                            key={`${item.stockId}-${item.kodeItem}`}
+                            className="flex items-center justify-between p-3 bg-white/60 dark:bg-black/20 rounded-lg border border-blue-200/30 dark:border-blue-700/20"
+                            data-testid={`row-stock-${item.kodeItem}`}
                           >
-                            {item.issue === 'no_pricelist' && 'No Pricelist'}
-                            {item.issue === 'zero_price' && 'Zero Price'}
-                            {item.issue === 'null_price' && 'Null Price'}
-                          </Badge>
-                        </div>
-                      ))}
-                      {missingPriceItems.length > 20 && (
-                        <div className="text-center p-2 text-amber-600 dark:text-amber-400 text-sm">
-                          ... and {missingPriceItems.length - 20} more items
+                            <div className="flex-1">
+                              <div className="font-medium text-gray-900 dark:text-white text-sm">
+                                {item.kodeItem}
+                              </div>
+                              <div className="text-xs text-gray-600 dark:text-gray-400">
+                                {item.serialNumber && item.serialNumber !== '-' ? `Serial: ${item.serialNumber}` : 'No Serial'}
+                              </div>
+                              <div className="text-xs text-gray-500 dark:text-gray-500 mt-1">
+                                Store: {item.kodeGudang} | Qty: {item.qty}
+                              </div>
+                            </div>
+                            <Badge 
+                              variant="outline" 
+                              className={cn("text-xs border-0", statusColor)}
+                            >
+                              {stockStatus}
+                            </Badge>
+                          </div>
+                        );
+                      })}
+                      {stockData.length > 20 && (
+                        <div className="text-center p-2 text-blue-600 dark:text-blue-400 text-sm">
+                          ... and {stockData.length - 20} more items
                         </div>
                       )}
                     </div>
