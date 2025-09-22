@@ -2769,6 +2769,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Stock on-hand endpoint - shows current available stock filtered by store
+  app.get('/api/stock/onhand', authenticate, async (req, res) => {
+    try {
+      const selectedStore = req.query.selectedStore as string | undefined;
+      
+      // Get stock data filtered by store
+      const stockData = await storage.getStockOnHand(selectedStore);
+      
+      res.json(stockData);
+    } catch (error) {
+      console.error('Stock onhand error:', error);
+      res.status(500).json({ message: 'Failed to get stock data' });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }
