@@ -170,6 +170,14 @@ export interface IStorage {
   searchInventoryByDetails(storeCode: string, searchQuery: string): Promise<any[]>;
 
   // Stock operations
+  getStockOnHand(kodeGudang?: string): Promise<Array<{
+    stockId: number;
+    kodeGudang: string;
+    serialNumber: string;
+    kodeItem: string;
+    qty: number;
+    tanggalIn: string | null;
+  }>>;
   getStockOverview(storeId?: string, limitItems?: number): Promise<{
     stores: Array<{ kodeGudang: string; onHand: number }>;
     activeStore: { kodeGudang: string; onHand: number; topItems: Array<{ kodeItem: string; qtyOnHand: number }> } | null;
@@ -1089,6 +1097,36 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Stock operations for new stock table
+  async getStockOnHand(kodeGudang?: string): Promise<Array<{
+    stockId: number;
+    kodeGudang: string;
+    serialNumber: string;
+    kodeItem: string;
+    qty: number;
+    tanggalIn: string | null;
+  }>> {
+    // Only get stock items that haven't been sold (tanggalOut is NULL)
+    const stockItems = await db
+      .select({
+        stockId: stock.stockId,
+        kodeGudang: stock.kodeGudang,
+        serialNumber: stock.serialNumber,
+        kodeItem: stock.kodeItem,
+        qty: stock.qty,
+        tanggalIn: stock.tanggalIn,
+      })
+      .from(stock)
+      .where(
+        and(
+          sql`${stock.tanggalOut} IS NULL`, // Only show available stock
+          kodeGudang && kodeGudang !== 'ALL_STORE' ? eq(stock.kodeGudang, kodeGudang) : sql`1=1`
+        )
+      )
+      .orderBy(stock.kodeItem, stock.serialNumber);
+
+    return stockItems;
+  }
+
   async getStockOverview(storeId?: string, limitItems: number = 10) {
     // Get all stores on-hand totals (where tanggal_out IS NULL)
     const storesOnHand = await db
