@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Sidebar } from "@/components/sidebar";
 import { useSidebar } from "@/hooks/useSidebar";
@@ -25,6 +25,13 @@ export default function StockDashboard() {
   // Use global store for all-store users, local state for individual store users
   const selectedStore = shouldUseGlobalStore ? globalSelectedStore : localSelectedStore;
   const setSelectedStore = shouldUseGlobalStore ? setGlobalSelectedStore : setLocalSelectedStore;
+
+  // Set default selection for all-store users to "All Stores" if no store is selected
+  useEffect(() => {
+    if (shouldUseGlobalStore && !selectedStore) {
+      setSelectedStore('ALL_STORE');
+    }
+  }, [shouldUseGlobalStore, selectedStore, setSelectedStore]);
 
   // Get stores
   const { data: stores = [] } = useQuery<any[]>({
@@ -102,9 +109,11 @@ export default function StockDashboard() {
                         className="w-full justify-between bg-white/10 dark:bg-black/10 border-white/20 dark:border-gray-800/50 text-gray-900 dark:text-white"
                         data-testid="select-store-filter"
                       >
-                        {selectedStore
-                          ? stores.find((store: any) => store.kodeGudang === selectedStore)?.namaGudang
-                          : "Search and select store..."}
+                        {selectedStore === 'ALL_STORE' 
+                          ? "All Stores"
+                          : selectedStore
+                            ? stores.find((store: any) => store.kodeGudang === selectedStore)?.namaGudang
+                            : "Search and select store..."}
                         <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                       </Button>
                     </PopoverTrigger>
@@ -117,6 +126,30 @@ export default function StockDashboard() {
                         <CommandList>
                           <CommandEmpty>No store found.</CommandEmpty>
                           <CommandGroup>
+                            {/* Add "All Stores" option for users with all-store access */}
+                            <CommandItem
+                              key="ALL_STORE"
+                              value="ALL_STORE All Stores"
+                              onSelect={() => {
+                                setSelectedStore('ALL_STORE');
+                                setStoreDropdownOpen(false);
+                              }}
+                              className="cursor-pointer"
+                            >
+                              <Check
+                                className={cn(
+                                  "mr-2 h-4 w-4",
+                                  selectedStore === 'ALL_STORE' ? "opacity-100" : "opacity-0"
+                                )}
+                              />
+                              <div className="flex flex-col">
+                                <span className="font-medium">All Stores</span>
+                                <span className="text-sm text-gray-500 dark:text-gray-400">
+                                  View stock from all stores combined
+                                </span>
+                              </div>
+                            </CommandItem>
+                            
                             {stores.map((store: any) => (
                               <CommandItem
                                 key={store.kodeGudang}

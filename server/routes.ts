@@ -2774,6 +2774,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const selectedStore = req.params.selectedStore as string;
       
+      // Security: If requesting ALL_STORE data, verify user has all-store access
+      if (selectedStore === 'ALL_STORE') {
+        const storeLoginType = (req.session as any).storeLoginType;
+        if (storeLoginType !== 'all_store') {
+          return res.status(403).json({ 
+            message: 'Access denied: All-store data requires all-store permissions',
+            selectedStore: selectedStore,
+            userStoreLoginType: storeLoginType
+          });
+        }
+      }
+      
       // Get stock data filtered by store
       const stockData = await storage.getStockOnHand(selectedStore);
       
