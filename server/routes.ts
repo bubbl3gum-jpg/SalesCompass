@@ -2770,9 +2770,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Stock on-hand endpoint - shows current available stock filtered by store
-  app.get('/api/stock/onhand', authenticate, async (req, res) => {
+  app.get('/api/stock/onhand/:selectedStore', authenticate, async (req, res) => {
     try {
-      const selectedStore = req.query.selectedStore as string | undefined;
+      const selectedStore = req.params.selectedStore as string;
       
       // Get stock data filtered by store
       const stockData = await storage.getStockOnHand(selectedStore);
