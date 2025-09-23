@@ -26,7 +26,9 @@ import { format, subDays, startOfDay, endOfDay } from "date-fns";
 import { cn } from "@/lib/utils";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 
 // Types for better type safety
 interface Store {
@@ -108,7 +110,7 @@ function ResolvePricingModal({
     defaultValues: {
       kodeItem: "",
       normalPrice: 0,
-      sp: 0,
+      sp: undefined,
     }
   });
 
@@ -121,8 +123,8 @@ function ResolvePricingModal({
       const payload = {
         sn: null,
         kodeItem: data.kodeItem,
-        normalPrice: data.normalPrice,
-        sp: data.sp,
+        normalPrice: data.normalPrice.toFixed(2),
+        sp: data.sp != null ? data.sp.toFixed(2) : null,
       };
 
       await apiRequest('/api/pricelist', {
@@ -153,7 +155,7 @@ function ResolvePricingModal({
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+    <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -836,7 +838,7 @@ export default function Dashboard() {
                       <p className="text-red-700 dark:text-red-300 text-sm">
                         These items are in stock but have no pricing information in the system.
                       </p>
-                      {selectedStore === 'ALL_STORE' && user?.can_access_all_stores && (
+                      {selectedStore === 'ALL_STORE' && user?.can_access_all_stores && hasPermission('pricelist:update') && (
                         <div className="mt-3">
                           <Button
                             onClick={() => setShowResolvePricingModal(true)}
