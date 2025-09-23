@@ -1157,7 +1157,7 @@ export class DatabaseStorage implements IStorage {
     return stockItems;
   }
 
-  // Get stock items without pricing
+  // Get stock items without pricing using full 6-level business logic
   async getStockWithoutPricing(kodeGudang?: string): Promise<Array<{
     stockId: number;
     kodeGudang: string;
@@ -1166,8 +1166,8 @@ export class DatabaseStorage implements IStorage {
     qty: number;
     tanggalIn: string | null;
   }>> {
-    // Get stock items that don't have corresponding pricelist entries
-    const stockItems = await db
+    // First get all available stock items
+    const allStockItems = await db
       .select({
         stockId: stock.stockId,
         kodeGudang: stock.kodeGudang,
@@ -1177,20 +1177,27 @@ export class DatabaseStorage implements IStorage {
         tanggalIn: stock.tanggalIn,
       })
       .from(stock)
-      .leftJoin(pricelist, or(
-        eq(pricelist.sn, stock.serialNumber),
-        eq(pricelist.kodeItem, stock.kodeItem)
-      ))
       .where(
         and(
           sql`${stock.tanggalOut} IS NULL`, // Only show available stock
-          sql`${pricelist.pricelistId} IS NULL`, // No pricing found
           kodeGudang && kodeGudang !== 'ALL_STORE' ? eq(stock.kodeGudang, kodeGudang) : sql`1=1`
         )
       )
       .orderBy(stock.kodeItem, stock.serialNumber);
 
-    return stockItems;
+    // Apply enhanced pricing business logic to filter items without pricing
+    const itemsWithoutPricing = [];
+    for (const item of allStockItems) {
+      // Use the full 6-level pricing hierarchy
+      const priceInfo = await this.getEnhancedPriceForItem(item.kodeItem, item.serialNumber);
+      
+      // If no pricing found through any of the 6 strategies, include in results
+      if (!priceInfo || !priceInfo.normalPrice) {
+        itemsWithoutPricing.push(item);
+      }
+    }
+
+    return itemsWithoutPricing;
   }
 
   // Get items sold today
