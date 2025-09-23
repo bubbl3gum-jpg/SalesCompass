@@ -82,7 +82,8 @@ interface ImportJob {
 // Schema for pricing form
 const pricelistSchema = z.object({
   kodeItem: z.string().min(1, "Item code is required"),
-  harga: z.number().min(0.01, "Price must be greater than 0"),
+  normalPrice: z.number().min(0.01, "Price must be greater than 0"),
+  sp: z.number().optional(),
 });
 
 type PricelistFormData = z.infer<typeof pricelistSchema>;
@@ -106,7 +107,8 @@ function ResolvePricingModal({
     resolver: zodResolver(pricelistSchema),
     defaultValues: {
       kodeItem: "",
-      harga: 0,
+      normalPrice: 0,
+      sp: 0,
     }
   });
 
@@ -119,7 +121,8 @@ function ResolvePricingModal({
       const payload = {
         sn: null,
         kodeItem: data.kodeItem,
-        harga: data.harga,
+        normalPrice: data.normalPrice,
+        sp: data.sp,
       };
 
       await apiRequest('/api/pricelist', {
@@ -187,22 +190,45 @@ function ResolvePricingModal({
               )}
             />
 
-            {/* Price */}
+            {/* Normal Price */}
             <FormField
               control={form.control}
-              name="harga"
+              name="normalPrice"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Price (Rp)</FormLabel>
+                  <FormLabel>Normal Price (Rp)</FormLabel>
                   <FormControl>
                     <Input
                       {...field}
                       type="number"
                       step="0.01"
                       min="0.01"
-                      placeholder="Enter price"
+                      placeholder="Enter normal price"
                       onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
-                      data-testid="input-price"
+                      data-testid="input-normal-price"
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            {/* Special Price */}
+            <FormField
+              control={form.control}
+              name="sp"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Special Price (Rp) - Optional</FormLabel>
+                  <FormControl>
+                    <Input
+                      {...field}
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      placeholder="Enter special price (optional)"
+                      onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
+                      data-testid="input-special-price"
                     />
                   </FormControl>
                   <FormMessage />
