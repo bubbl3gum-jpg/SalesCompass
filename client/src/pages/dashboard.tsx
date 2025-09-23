@@ -98,6 +98,7 @@ export default function Dashboard() {
     to: new Date()
   });
   const [movementsViewType, setMovementsViewType] = useState<'chart' | 'table'>('chart');
+  const [stockViewType, setStockViewType] = useState<'no-pricing' | 'on-hand' | 'sold-today' | 'low-stock' | 'inbound'>('no-pricing');
 
   // Transfer form state
   const [transferForm, setTransferForm] = useState({
@@ -254,8 +255,23 @@ export default function Dashboard() {
     staleTime: 30000, // Consider data fresh for 30 seconds
   });
 
+  // Get stock without pricing
+  const { data: stockWithoutPricing = [], isLoading: stockWithoutPricingLoading } = useQuery<Array<{
+    stockId: number;
+    kodeGudang: string;
+    serialNumber: string;
+    kodeItem: string;
+    qty: number;
+    tanggalIn: string | null;
+  }>>({  
+    queryKey: ["/api/stock/without-pricing", selectedStore],
+    enabled: !!selectedStore,
+    retry: false,
+    staleTime: 30000,
+  });
+  
   // Get actual stock data from stock table
-  const { data: stockData = [], isLoading: stockDataLoading, error: stockDataError } = useQuery<Array<{
+  const { data: stockData = [], isLoading: stockDataLoading } = useQuery<Array<{
     stockId: number;
     kodeGudang: string;
     serialNumber: string;
@@ -264,9 +280,52 @@ export default function Dashboard() {
     tanggalIn: string | null;
   }>>({
     queryKey: ["/api/stock/onhand", selectedStore],
-    enabled: !!selectedStore,
+    enabled: !!selectedStore && stockViewType === 'on-hand',
     retry: false,
-    staleTime: 30000, // Consider data fresh for 30 seconds
+    staleTime: 30000,
+  });
+
+  // Get sold today items
+  const { data: soldTodayItems = [], isLoading: soldTodayLoading } = useQuery<Array<{
+    kodeItem: string;
+    serialNumber: string;
+    qty: number;
+    tanggalOut: string | null;
+  }>>({  
+    queryKey: ["/api/stock/sold-today", selectedStore],
+    enabled: !!selectedStore && stockViewType === 'sold-today',
+    retry: false,
+    staleTime: 30000,
+  });
+
+  // Get low stock items
+  const { data: lowStockItems = [], isLoading: lowStockLoading } = useQuery<Array<{
+    stockId: number;
+    kodeGudang: string;
+    serialNumber: string;
+    kodeItem: string;
+    qty: number;
+    tanggalIn: string | null;
+  }>>({  
+    queryKey: ["/api/stock/low-stock", selectedStore],
+    enabled: !!selectedStore && stockViewType === 'low-stock',
+    retry: false,
+    staleTime: 30000,
+  });
+
+  // Get inbound items
+  const { data: inboundItems = [], isLoading: inboundLoading } = useQuery<Array<{
+    toNumber: string;
+    kodeItem: string;
+    namaItem: string | null;
+    qty: number;
+    fromStore: string;
+    tanggal: string | null;
+  }>>({  
+    queryKey: ["/api/stock/inbound", selectedStore],
+    enabled: !!selectedStore && stockViewType === 'inbound',
+    retry: false,
+    staleTime: 30000,
   });
 
   useEffect(() => {
@@ -567,23 +626,23 @@ export default function Dashboard() {
         <main className="p-6">
           {selectedStore ? (
             <div className="space-y-6">
-              {/* Stock on Hand - Actual inventory from stock table */}
-              {stockData.length > 0 && (
-                <Card className="bg-gradient-to-br from-blue-50/90 to-purple-50/90 dark:from-blue-900/20 dark:to-purple-900/20 backdrop-blur-xl border border-blue-200/50 dark:border-blue-700/30 shadow-lg">
+              {/* Stock without Pricing - Show items missing prices at the top */}
+              {stockWithoutPricing.length > 0 && (
+                <Card className="bg-gradient-to-br from-red-50/90 to-orange-50/90 dark:from-red-900/20 dark:to-orange-900/20 backdrop-blur-xl border border-red-200/50 dark:border-red-700/30 shadow-lg">
                   <CardHeader className="pb-3">
-                    <CardTitle className="text-lg flex items-center gap-2 text-blue-800 dark:text-blue-200">
-                      <Package className="w-5 h-5" />
-                      Stock on Hand ({stockData.length} items)
+                    <CardTitle className="text-lg flex items-center gap-2 text-red-800 dark:text-red-200">
+                      <AlertTriangle className="w-5 h-5" />
+                      Stock Without Pricing ({stockWithoutPricing.length} items)
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
                     <div className="mb-3">
-                      <p className="text-blue-700 dark:text-blue-300 text-sm">
-                        Current inventory items available in {selectedStore === 'ALL_STORE' ? 'all stores' : 'the selected store'}.
+                      <p className="text-red-700 dark:text-red-300 text-sm">
+                        These items are in stock but have no pricing information in the system.
                       </p>
                     </div>
                     <div className="space-y-2 max-h-64 overflow-y-auto">
-                      {stockData.slice(0, 20).map((item) => {
+                      {stockWithoutPricing.slice(0, 20).map((item) => {
                         const stockStatus = item.qty === 0 ? 'Out of Stock' : 
                                           item.qty < 10 ? 'Low Stock' : 'In Stock';
                         const statusColor = item.qty === 0 ? 'bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-300' :
@@ -615,9 +674,9 @@ export default function Dashboard() {
                           </div>
                         );
                       })}
-                      {stockData.length > 20 && (
-                        <div className="text-center p-2 text-blue-600 dark:text-blue-400 text-sm">
-                          ... and {stockData.length - 20} more items
+                      {stockWithoutPricing.length > 20 && (
+                        <div className="text-center p-2 text-red-600 dark:text-red-400 text-sm">
+                          ... and {stockWithoutPricing.length - 20} more items without pricing
                         </div>
                       )}
                     </div>
@@ -718,7 +777,7 @@ export default function Dashboard() {
                   </CardContent>
                 </Card>
               )}
-              {/* Store Overview - Compact KPIs */}
+              {/* Store Overview - Clickable KPIs */}
               <Card className="bg-white/70 dark:bg-black/60 backdrop-blur-xl border border-white/30 dark:border-gray-700/50 shadow-lg">
                 <CardHeader className="pb-3">
                   <CardTitle className="text-lg flex items-center gap-2 text-gray-900 dark:text-white">
@@ -728,7 +787,13 @@ export default function Dashboard() {
                 </CardHeader>
                 <CardContent>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div className="bg-white/40 dark:bg-black/40 rounded-lg p-4 border border-white/20 dark:border-gray-600/30">
+                    <button
+                      onClick={() => setStockViewType('on-hand')}
+                      className={cn(
+                        "bg-white/40 dark:bg-black/40 rounded-lg p-4 border border-white/20 dark:border-gray-600/30 text-left hover:bg-white/60 dark:hover:bg-black/60 transition-colors cursor-pointer",
+                        stockViewType === 'on-hand' && "ring-2 ring-blue-500"
+                      )}
+                    >
                       <div className="flex items-center justify-between">
                         <div>
                           <p className="text-sm font-medium text-gray-700 dark:text-gray-300">On-hand</p>
@@ -738,43 +803,186 @@ export default function Dashboard() {
                         </div>
                         <Package className="w-8 h-8 text-blue-600 dark:text-blue-400" />
                       </div>
-                    </div>
-                    <div className="bg-white/40 dark:bg-black/40 rounded-lg p-4 border border-white/20 dark:border-gray-600/30">
+                    </button>
+                    <button
+                      onClick={() => setStockViewType('sold-today')}
+                      className={cn(
+                        "bg-white/40 dark:bg-black/40 rounded-lg p-4 border border-white/20 dark:border-gray-600/30 text-left hover:bg-white/60 dark:hover:bg-black/60 transition-colors cursor-pointer",
+                        stockViewType === 'sold-today' && "ring-2 ring-green-500"
+                      )}
+                    >
                       <div className="flex items-center justify-between">
                         <div>
                           <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Sold Today</p>
                           <p className="text-xl font-bold text-gray-900 dark:text-white" data-testid="text-sold-today">
-                            Rp {(metrics?.todaySales || 0).toLocaleString()}
+                            {soldTodayItems.length}
                           </p>
                         </div>
                         <DollarSign className="w-8 h-8 text-green-600 dark:text-green-400" />
                       </div>
-                    </div>
-                    <div className="bg-white/40 dark:bg-black/40 rounded-lg p-4 border border-white/20 dark:border-gray-600/30">
+                    </button>
+                    <button
+                      onClick={() => setStockViewType('low-stock')}
+                      className={cn(
+                        "bg-white/40 dark:bg-black/40 rounded-lg p-4 border border-white/20 dark:border-gray-600/30 text-left hover:bg-white/60 dark:hover:bg-black/60 transition-colors cursor-pointer",
+                        stockViewType === 'low-stock' && "ring-2 ring-orange-500"
+                      )}
+                    >
                       <div className="flex items-center justify-between">
                         <div>
                           <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Low-Stock</p>
                           <p className="text-xl font-bold text-gray-900 dark:text-white" data-testid="text-low-stock-alerts">
-                            0
+                            {lowStockItems.length}
                           </p>
                         </div>
                         <AlertTriangle className="w-8 h-8 text-orange-600 dark:text-orange-400" />
                       </div>
-                    </div>
-                    <div className="bg-white/40 dark:bg-black/40 rounded-lg p-4 border border-white/20 dark:border-gray-600/30">
+                    </button>
+                    <button
+                      onClick={() => setStockViewType('inbound')}
+                      className={cn(
+                        "bg-white/40 dark:bg-black/40 rounded-lg p-4 border border-white/20 dark:border-gray-600/30 text-left hover:bg-white/60 dark:hover:bg-black/60 transition-colors cursor-pointer",
+                        stockViewType === 'inbound' && "ring-2 ring-purple-500"
+                      )}
+                    >
                       <div className="flex items-center justify-between">
                         <div>
                           <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Inbound</p>
                           <p className="text-xl font-bold text-gray-900 dark:text-white" data-testid="text-inbound">
-                            {metrics?.activeTransfers || 0}
+                            {inboundItems.length}
                           </p>
                         </div>
                         <TrendingUp className="w-8 h-8 text-purple-600 dark:text-purple-400" />
                       </div>
-                    </div>
+                    </button>
                   </div>
                 </CardContent>
               </Card>
+
+              {/* Filtered Stock Views - Show based on selected view */}
+              {stockViewType === 'on-hand' && stockData.length > 0 && (
+                <Card className="bg-white/70 dark:bg-black/60 backdrop-blur-xl border border-white/30 dark:border-gray-700/50 shadow-lg">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-lg flex items-center gap-2 text-gray-900 dark:text-white">
+                      <Package className="w-5 h-5" />
+                      All Stock on Hand ({stockData.length} items)
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-2 max-h-96 overflow-y-auto">
+                      {stockData.map((item) => (
+                        <div 
+                          key={`${item.stockId}-${item.kodeItem}`}
+                          className="flex items-center justify-between p-3 bg-white/60 dark:bg-black/20 rounded-lg"
+                        >
+                          <div className="flex-1">
+                            <div className="font-medium text-gray-900 dark:text-white text-sm">{item.kodeItem}</div>
+                            <div className="text-xs text-gray-600 dark:text-gray-400">
+                              {item.serialNumber && item.serialNumber !== '-' ? `Serial: ${item.serialNumber}` : 'No Serial'} | Store: {item.kodeGudang}
+                            </div>
+                          </div>
+                          <Badge variant="outline" className="text-xs">
+                            Qty: {item.qty}
+                          </Badge>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {stockViewType === 'sold-today' && soldTodayItems.length > 0 && (
+                <Card className="bg-white/70 dark:bg-black/60 backdrop-blur-xl border border-white/30 dark:border-gray-700/50 shadow-lg">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-lg flex items-center gap-2 text-gray-900 dark:text-white">
+                      <DollarSign className="w-5 h-5" />
+                      Items Sold Today ({soldTodayItems.length} items)
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-2 max-h-96 overflow-y-auto">
+                      {soldTodayItems.map((item, idx) => (
+                        <div 
+                          key={`${item.kodeItem}-${idx}`}
+                          className="flex items-center justify-between p-3 bg-green-50 dark:bg-green-900/20 rounded-lg"
+                        >
+                          <div className="flex-1">
+                            <div className="font-medium text-gray-900 dark:text-white text-sm">{item.kodeItem}</div>
+                            <div className="text-xs text-gray-600 dark:text-gray-400">
+                              {item.serialNumber || 'No Serial'}
+                            </div>
+                          </div>
+                          <Badge variant="outline" className="text-xs bg-green-100 dark:bg-green-900/40">
+                            Sold
+                          </Badge>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {stockViewType === 'low-stock' && lowStockItems.length > 0 && (
+                <Card className="bg-white/70 dark:bg-black/60 backdrop-blur-xl border border-white/30 dark:border-gray-700/50 shadow-lg">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-lg flex items-center gap-2 text-gray-900 dark:text-white">
+                      <AlertTriangle className="w-5 h-5" />
+                      Low Stock Items ({lowStockItems.length} items)
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-2 max-h-96 overflow-y-auto">
+                      {lowStockItems.map((item) => (
+                        <div 
+                          key={`${item.stockId}-${item.kodeItem}`}
+                          className="flex items-center justify-between p-3 bg-orange-50 dark:bg-orange-900/20 rounded-lg"
+                        >
+                          <div className="flex-1">
+                            <div className="font-medium text-gray-900 dark:text-white text-sm">{item.kodeItem}</div>
+                            <div className="text-xs text-gray-600 dark:text-gray-400">
+                              Store: {item.kodeGudang} | {item.serialNumber || 'No Serial'}
+                            </div>
+                          </div>
+                          <Badge variant="outline" className="text-xs bg-orange-100 dark:bg-orange-900/40">
+                            Only {item.qty} left
+                          </Badge>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {stockViewType === 'inbound' && inboundItems.length > 0 && (
+                <Card className="bg-white/70 dark:bg-black/60 backdrop-blur-xl border border-white/30 dark:border-gray-700/50 shadow-lg">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-lg flex items-center gap-2 text-gray-900 dark:text-white">
+                      <TrendingUp className="w-5 h-5" />
+                      Inbound Stock ({inboundItems.length} items)
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-2 max-h-96 overflow-y-auto">
+                      {inboundItems.map((item, idx) => (
+                        <div 
+                          key={`${item.toNumber}-${idx}`}
+                          className="flex items-center justify-between p-3 bg-purple-50 dark:bg-purple-900/20 rounded-lg"
+                        >
+                          <div className="flex-1">
+                            <div className="font-medium text-gray-900 dark:text-white text-sm">{item.namaItem || item.kodeItem}</div>
+                            <div className="text-xs text-gray-600 dark:text-gray-400">
+                              Transfer: {item.toNumber} | From: {item.fromStore}
+                            </div>
+                          </div>
+                          <Badge variant="outline" className="text-xs bg-purple-100 dark:bg-purple-900/40">
+                            Qty: {item.qty}
+                          </Badge>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
 
               {/* Enhanced Stock Movements with Chart Visualization */}
               <Card className="bg-white/70 dark:bg-black/60 backdrop-blur-xl border border-white/30 dark:border-gray-700/50 shadow-lg">
