@@ -99,6 +99,7 @@ export default function Dashboard() {
   });
   const [movementsViewType, setMovementsViewType] = useState<'chart' | 'table'>('chart');
   const [stockViewType, setStockViewType] = useState<'no-pricing' | 'on-hand' | 'sold-today' | 'low-stock' | 'inbound'>('no-pricing');
+  const [showResolvePricingModal, setShowResolvePricingModal] = useState(false);
 
   // Transfer form state
   const [transferForm, setTransferForm] = useState({
@@ -640,6 +641,19 @@ export default function Dashboard() {
                       <p className="text-red-700 dark:text-red-300 text-sm">
                         These items are in stock but have no pricing information in the system.
                       </p>
+                      {selectedStore === 'ALL_STORE' && user?.can_access_all_stores && (
+                        <div className="mt-3">
+                          <Button
+                            onClick={() => setShowResolvePricingModal(true)}
+                            className="bg-red-600 hover:bg-red-700 text-white"
+                            size="sm"
+                            data-testid="button-resolve-pricing"
+                          >
+                            <Plus className="w-4 h-4 mr-2" />
+                            Resolve Pricing
+                          </Button>
+                        </div>
+                      )}
                     </div>
                     <div className="space-y-2 max-h-64 overflow-y-auto">
                       {stockWithoutPricing.slice(0, 20).map((item) => {
