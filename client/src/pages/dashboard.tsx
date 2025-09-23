@@ -280,7 +280,7 @@ export default function Dashboard() {
     tanggalIn: string | null;
   }>>({
     queryKey: ["/api/stock/onhand", selectedStore],
-    enabled: !!selectedStore && stockViewType === 'on-hand',
+    enabled: !!selectedStore, // Always fetch when store is selected
     retry: false,
     staleTime: 30000,
   });
@@ -293,7 +293,7 @@ export default function Dashboard() {
     tanggalOut: string | null;
   }>>({  
     queryKey: ["/api/stock/sold-today", selectedStore],
-    enabled: !!selectedStore && stockViewType === 'sold-today',
+    enabled: !!selectedStore, // Always fetch when store is selected
     retry: false,
     staleTime: 30000,
   });
@@ -308,7 +308,7 @@ export default function Dashboard() {
     tanggalIn: string | null;
   }>>({  
     queryKey: ["/api/stock/low-stock", selectedStore],
-    enabled: !!selectedStore && stockViewType === 'low-stock',
+    enabled: !!selectedStore, // Always fetch when store is selected
     retry: false,
     staleTime: 30000,
   });
@@ -323,7 +323,7 @@ export default function Dashboard() {
     tanggal: string | null;
   }>>({  
     queryKey: ["/api/stock/inbound", selectedStore],
-    enabled: !!selectedStore && stockViewType === 'inbound',
+    enabled: !!selectedStore, // Always fetch when store is selected
     retry: false,
     staleTime: 30000,
   });
@@ -798,7 +798,7 @@ export default function Dashboard() {
                         <div>
                           <p className="text-sm font-medium text-gray-700 dark:text-gray-300">On-hand</p>
                           <p className="text-xl font-bold text-gray-900 dark:text-white" data-testid="text-onhand">
-                            {stockOverview?.activeStore?.onHand?.toLocaleString() || '0'}
+                            {stockData.length}
                           </p>
                         </div>
                         <Package className="w-8 h-8 text-blue-600 dark:text-blue-400" />
