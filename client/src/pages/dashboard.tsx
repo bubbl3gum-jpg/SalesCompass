@@ -19,11 +19,14 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Check, ChevronsUpDown, TrendingUp, TrendingDown, DollarSign, Package, AlertTriangle, Clock, Search, Plus, ArrowRightLeft, Calculator, ShoppingCart, Upload, Download, FileText, CheckCircle, XCircle, Loader2, Calendar, BarChart3, Activity, RefreshCw } from "lucide-react";
+import { Check, ChevronsUpDown, TrendingUp, TrendingDown, DollarSign, Package, AlertTriangle, Clock, Search, Plus, ArrowRightLeft, Calculator, ShoppingCart, Upload, Download, FileText, CheckCircle, XCircle, Loader2, Calendar, BarChart3, Activity, RefreshCw, X } from "lucide-react";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, ResponsiveContainer, BarChart, Bar, ComposedChart } from "recharts";
 import { format, subDays, startOfDay, endOfDay } from "date-fns";
 import { cn } from "@/lib/utils";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useForm } from "react-hook-form";
+import * as z from "zod";
 
 // Types for better type safety
 interface Store {
@@ -74,6 +77,172 @@ interface ImportJob {
   createdAt: string;
   startedAt?: string;
   completedAt?: string;
+}
+
+// Schema for pricing form
+const pricelistSchema = z.object({
+  kodeItem: z.string().min(1, "Item code is required"),
+  harga: z.number().min(0.01, "Price must be greater than 0"),
+});
+
+type PricelistFormData = z.infer<typeof pricelistSchema>;
+
+// Resolve Pricing Modal Component
+function ResolvePricingModal({
+  isOpen,
+  onClose,
+  stockWithoutPricing,
+  onPricingResolved
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  stockWithoutPricing: any[];
+  onPricingResolved: () => void;
+}) {
+  const { toast } = useToast();
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const form = useForm<PricelistFormData>({
+    resolver: zodResolver(pricelistSchema),
+    defaultValues: {
+      kodeItem: "",
+      harga: 0,
+    }
+  });
+
+  const uniqueItems = [...new Set(stockWithoutPricing.map(item => item.kodeItem))];
+
+  const handleSubmit = async (data: PricelistFormData) => {
+    try {
+      setIsSubmitting(true);
+
+      const payload = {
+        sn: null,
+        kodeItem: data.kodeItem,
+        harga: data.harga,
+      };
+
+      await apiRequest('/api/pricelist', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+
+      toast({
+        title: "Pricing Added",
+        description: `Successfully added pricing for ${data.kodeItem}`,
+      });
+
+      // Reset form and close modal
+      form.reset();
+      onClose();
+      onPricingResolved(); // Refresh stock data
+
+    } catch (error: any) {
+      console.error("Error adding pricing:", error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to add pricing",
+        variant: "destructive"
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <DollarSign className="w-5 h-5" />
+            Resolve Pricing Issue
+          </DialogTitle>
+        </DialogHeader>
+
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
+            {/* Item Selection */}
+            <FormField
+              control={form.control}
+              name="kodeItem"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Select Item Without Pricing</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger data-testid="select-item-code">
+                        <SelectValue placeholder="Choose an item to add pricing for" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {uniqueItems.map((itemCode) => (
+                        <SelectItem key={itemCode} value={itemCode}>
+                          {itemCode}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            {/* Price */}
+            <FormField
+              control={form.control}
+              name="harga"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Price (Rp)</FormLabel>
+                  <FormControl>
+                    <Input
+                      {...field}
+                      type="number"
+                      step="0.01"
+                      min="0.01"
+                      placeholder="Enter price"
+                      onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
+                      data-testid="input-price"
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <div className="flex justify-end gap-3 pt-4">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={onClose}
+                data-testid="button-cancel-pricing"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={isSubmitting}
+                className="bg-red-600 hover:bg-red-700"
+                data-testid="button-save-pricing"
+              >
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <Plus className="w-4 h-4 mr-2" />
+                    Add Pricing
+                  </>
+                )}
+              </Button>
+            </div>
+          </form>
+        </Form>
+      </DialogContent>
+    </Dialog>
+  );
 }
 
 export default function Dashboard() {
@@ -1661,6 +1830,17 @@ export default function Dashboard() {
       <SalesEntryModal 
         isOpen={showSalesModal} 
         onClose={() => setShowSalesModal(false)} 
+      />
+
+      {/* Resolve Pricing Modal */}
+      <ResolvePricingModal 
+        isOpen={showResolvePricingModal} 
+        onClose={() => setShowResolvePricingModal(false)} 
+        stockWithoutPricing={stockWithoutPricing}
+        onPricingResolved={() => {
+          // Refresh stock data after pricing is resolved
+          queryClient.invalidateQueries({ queryKey: ['/api/stock/without-pricing', selectedStore] });
+        }}
       />
     </div>
   );
