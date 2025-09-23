@@ -178,6 +178,36 @@ export interface IStorage {
     qty: number;
     tanggalIn: string | null;
   }>>;
+  getStockWithoutPricing(kodeGudang?: string): Promise<Array<{
+    stockId: number;
+    kodeGudang: string;
+    serialNumber: string;
+    kodeItem: string;
+    qty: number;
+    tanggalIn: string | null;
+  }>>;
+  getStockSoldToday(kodeGudang?: string): Promise<Array<{
+    kodeItem: string;
+    serialNumber: string;
+    qty: number;
+    tanggalOut: string | null;
+  }>>;
+  getLowStockItems(kodeGudang?: string): Promise<Array<{
+    stockId: number;
+    kodeGudang: string;
+    serialNumber: string;
+    kodeItem: string;
+    qty: number;
+    tanggalIn: string | null;
+  }>>;
+  getInboundStock(kodeGudang?: string): Promise<Array<{
+    toNumber: string;
+    kodeItem: string;
+    namaItem: string | null;
+    qty: number;
+    fromStore: string;
+    tanggal: string | null;
+  }>>;
   getStockOverview(storeId?: string, limitItems?: number): Promise<{
     stores: Array<{ kodeGudang: string; onHand: number }>;
     activeStore: { kodeGudang: string; onHand: number; topItems: Array<{ kodeItem: string; qtyOnHand: number }> } | null;
@@ -1125,6 +1155,140 @@ export class DatabaseStorage implements IStorage {
       .orderBy(stock.kodeItem, stock.serialNumber);
 
     return stockItems;
+  }
+
+  // Get stock items without pricing
+  async getStockWithoutPricing(kodeGudang?: string): Promise<Array<{
+    stockId: number;
+    kodeGudang: string;
+    serialNumber: string;
+    kodeItem: string;
+    qty: number;
+    tanggalIn: string | null;
+  }>> {
+    // Get stock items that don't have corresponding pricelist entries
+    const stockItems = await db
+      .select({
+        stockId: stock.stockId,
+        kodeGudang: stock.kodeGudang,
+        serialNumber: stock.serialNumber,
+        kodeItem: stock.kodeItem,
+        qty: stock.qty,
+        tanggalIn: stock.tanggalIn,
+      })
+      .from(stock)
+      .leftJoin(pricelist, or(
+        eq(pricelist.sn, stock.serialNumber),
+        eq(pricelist.kodeItem, stock.kodeItem)
+      ))
+      .where(
+        and(
+          sql`${stock.tanggalOut} IS NULL`, // Only show available stock
+          sql`${pricelist.pricelistId} IS NULL`, // No pricing found
+          kodeGudang && kodeGudang !== 'ALL_STORE' ? eq(stock.kodeGudang, kodeGudang) : sql`1=1`
+        )
+      )
+      .orderBy(stock.kodeItem, stock.serialNumber);
+
+    return stockItems;
+  }
+
+  // Get items sold today
+  async getStockSoldToday(kodeGudang?: string): Promise<Array<{
+    kodeItem: string;
+    serialNumber: string;
+    qty: number;
+    tanggalOut: string | null;
+  }>> {
+    const today = new Date().toISOString().split('T')[0];
+    
+    const soldItems = await db
+      .select({
+        kodeItem: stock.kodeItem,
+        serialNumber: stock.serialNumber,
+        qty: stock.qty,
+        tanggalOut: stock.tanggalOut,
+      })
+      .from(stock)
+      .where(
+        and(
+          sql`DATE(${stock.tanggalOut}) = ${today}`,
+          kodeGudang && kodeGudang !== 'ALL_STORE' ? eq(stock.kodeGudang, kodeGudang) : sql`1=1`
+        )
+      )
+      .orderBy(stock.tanggalOut);
+
+    return soldItems;
+  }
+
+  // Get low stock items (qty < 10 and still in stock)
+  async getLowStockItems(kodeGudang?: string): Promise<Array<{
+    stockId: number;
+    kodeGudang: string;
+    serialNumber: string;
+    kodeItem: string;
+    qty: number;
+    tanggalIn: string | null;
+  }>> {
+    const lowStockItems = await db
+      .select({
+        stockId: stock.stockId,
+        kodeGudang: stock.kodeGudang,
+        serialNumber: stock.serialNumber,
+        kodeItem: stock.kodeItem,
+        qty: stock.qty,
+        tanggalIn: stock.tanggalIn,
+      })
+      .from(stock)
+      .where(
+        and(
+          sql`${stock.tanggalOut} IS NULL`, // Only show available stock
+          sql`${stock.qty} < 10`, // Low stock threshold
+          sql`${stock.qty} > 0`, // But not out of stock
+          kodeGudang && kodeGudang !== 'ALL_STORE' ? eq(stock.kodeGudang, kodeGudang) : sql`1=1`
+        )
+      )
+      .orderBy(stock.qty, stock.kodeItem);
+
+    return lowStockItems;
+  }
+
+  // Get inbound stock (pending transfers to this store)
+  async getInboundStock(kodeGudang?: string): Promise<Array<{
+    toNumber: string;
+    kodeItem: string;
+    namaItem: string | null;
+    qty: number;
+    fromStore: string;
+    tanggal: string | null;
+  }>> {
+    // Get transfers that haven't been processed to stock yet
+    const inboundItems = await db
+      .select({
+        toNumber: toItemList.toNumber,
+        kodeItem: sql<string>`COALESCE(${toItemList.kodeItem}, '')`,
+        namaItem: toItemList.namaItem,
+        qty: sql<number>`COALESCE(${toItemList.qty}, 1)`,
+        fromStore: sql<string>`COALESCE(${transferOrders.dariGudang}, '')`,
+        tanggal: transferOrders.tanggal,
+      })
+      .from(toItemList)
+      .innerJoin(transferOrders, eq(toItemList.toNumber, transferOrders.toNumber))
+      .leftJoin(stock, and(
+        eq(stock.serialNumber, toItemList.toNumber),
+        eq(stock.kodeItem, toItemList.kodeItem)
+      ))
+      .where(
+        and(
+          kodeGudang && kodeGudang !== 'ALL_STORE' ? 
+            eq(transferOrders.keGudang, kodeGudang) : 
+            sql`1=1`,
+          sql`${stock.stockId} IS NULL` // Transfer not yet processed to stock
+        )
+      )
+      .orderBy(transferOrders.tanggal);
+
+    return inboundItems;
   }
 
   async getStockOverview(storeId?: string, limitItems: number = 10) {

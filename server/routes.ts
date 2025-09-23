@@ -2796,6 +2796,100 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Stock without pricing endpoint
+  app.get('/api/stock/without-pricing/:selectedStore', authenticate, async (req, res) => {
+    try {
+      const selectedStore = req.params.selectedStore as string;
+      
+      // Security: If requesting ALL_STORE data, verify user has all-store access
+      if (selectedStore === 'ALL_STORE') {
+        const storeLoginType = (req.session as any).storeLoginType;
+        if (storeLoginType !== 'all_store') {
+          return res.status(403).json({ 
+            message: 'Access denied: All-store data requires all-store permissions',
+            selectedStore: selectedStore,
+            userStoreLoginType: storeLoginType
+          });
+        }
+      }
+      
+      const stockData = await storage.getStockWithoutPricing(selectedStore);
+      res.json(stockData);
+    } catch (error) {
+      console.error('Stock without pricing error:', error);
+      res.status(500).json({ message: 'Failed to get stock without pricing' });
+    }
+  });
+
+  // Stock sold today endpoint
+  app.get('/api/stock/sold-today/:selectedStore', authenticate, async (req, res) => {
+    try {
+      const selectedStore = req.params.selectedStore as string;
+      
+      // Security: If requesting ALL_STORE data, verify user has all-store access
+      if (selectedStore === 'ALL_STORE') {
+        const storeLoginType = (req.session as any).storeLoginType;
+        if (storeLoginType !== 'all_store') {
+          return res.status(403).json({ 
+            message: 'Access denied: All-store data requires all-store permissions'
+          });
+        }
+      }
+      
+      const soldItems = await storage.getStockSoldToday(selectedStore);
+      res.json(soldItems);
+    } catch (error) {
+      console.error('Stock sold today error:', error);
+      res.status(500).json({ message: 'Failed to get sold items' });
+    }
+  });
+
+  // Low stock items endpoint
+  app.get('/api/stock/low-stock/:selectedStore', authenticate, async (req, res) => {
+    try {
+      const selectedStore = req.params.selectedStore as string;
+      
+      // Security: If requesting ALL_STORE data, verify user has all-store access
+      if (selectedStore === 'ALL_STORE') {
+        const storeLoginType = (req.session as any).storeLoginType;
+        if (storeLoginType !== 'all_store') {
+          return res.status(403).json({ 
+            message: 'Access denied: All-store data requires all-store permissions'
+          });
+        }
+      }
+      
+      const lowStockItems = await storage.getLowStockItems(selectedStore);
+      res.json(lowStockItems);
+    } catch (error) {
+      console.error('Low stock error:', error);
+      res.status(500).json({ message: 'Failed to get low stock items' });
+    }
+  });
+
+  // Inbound stock endpoint
+  app.get('/api/stock/inbound/:selectedStore', authenticate, async (req, res) => {
+    try {
+      const selectedStore = req.params.selectedStore as string;
+      
+      // Security: If requesting ALL_STORE data, verify user has all-store access
+      if (selectedStore === 'ALL_STORE') {
+        const storeLoginType = (req.session as any).storeLoginType;
+        if (storeLoginType !== 'all_store') {
+          return res.status(403).json({ 
+            message: 'Access denied: All-store data requires all-store permissions'
+          });
+        }
+      }
+      
+      const inboundItems = await storage.getInboundStock(selectedStore);
+      res.json(inboundItems);
+    } catch (error) {
+      console.error('Inbound stock error:', error);
+      res.status(500).json({ message: 'Failed to get inbound items' });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }
