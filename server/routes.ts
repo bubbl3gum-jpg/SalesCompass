@@ -1483,15 +1483,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      // Extract TO number from file
-      const toNumber = transferImportProcessor.extractToNumber(records, fileName);
+      // Extract TO number from file - if not found, auto-generate one
+      let toNumber = transferImportProcessor.extractToNumber(records, fileName);
       if (!toNumber) {
-        return res.status(400).json({ 
-          message: 'Could not extract TO number from file. File must contain "Untuk nomor TO: <NUMBER>" in the first column, or have a TO number pattern like "2509-249" in the filename.' 
-        });
+        // Auto-generate TO number: YYMM-NNN format (e.g., 2601-001)
+        const now = new Date();
+        const yearMonth = `${now.getFullYear().toString().slice(-2)}${(now.getMonth() + 1).toString().padStart(2, '0')}`;
+        
+        // Get existing transfer orders to determine next sequence number
+        const existingTransfers = await storage.getTransferOrders();
+        const sameMonthTransfers = existingTransfers.filter((t: any) => 
+          t.toNumber && t.toNumber.startsWith(yearMonth + '-')
+        );
+        
+        // Find the highest sequence number for this month
+        let maxSeq = 0;
+        for (const t of sameMonthTransfers) {
+          const seqMatch = t.toNumber.match(/-(\d+)$/);
+          if (seqMatch) {
+            const seq = parseInt(seqMatch[1]);
+            if (seq > maxSeq) maxSeq = seq;
+          }
+        }
+        
+        toNumber = `${yearMonth}-${(maxSeq + 1).toString().padStart(3, '0')}`;
+        console.log(`📋 Auto-generated TO number: ${toNumber}`);
       }
 
-      // Step 2: Create transfer order with extracted TO number
+      // Step 2: Create transfer order with extracted/generated TO number
       const transferOrder = await storage.createTransferOrder({
         toNumber,
         dariGudang,
