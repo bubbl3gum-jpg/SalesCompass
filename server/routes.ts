@@ -912,7 +912,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   const { pricelistImportProcessor } = await import('./pricelistImportProcessor');
   
   // Initiate transfer import - returns presigned URL for direct S3 upload
-  app.post('/api/transfer-imports/initiate', isAuthenticated, async (req, res) => {
+  app.post('/api/transfer-imports/initiate', authenticate, async (req, res) => {
     try {
       const { fileName, contentType, expectedSchema } = req.body;
       
@@ -1016,7 +1016,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Server-sent events for real-time progress updates
-  app.get('/api/transfer-imports/:uploadId/events', authenticate, (req, res) => {
+  // SSE endpoint - uses uploadId as security token (no auth header due to EventSource API limitations)
+  app.get('/api/transfer-imports/:uploadId/events', (req, res) => {
     const { uploadId } = req.params;
     const job = transferImportProcessor.getJob(uploadId);
     

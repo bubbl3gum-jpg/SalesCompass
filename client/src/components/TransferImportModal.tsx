@@ -185,14 +185,22 @@ export function TransferImportModal({ isOpen, onClose, transferId, onImportCompl
     }
   };
 
-  // Start progress updates via Server-Sent Events
+  // Start progress updates via polling (more reliable than SSE for quick imports)
   const startProgressUpdates = (uploadId: string) => {
-    const eventSource = new EventSource(`/api/transfer-imports/${uploadId}/events`);
-    eventSourceRef.current = eventSource;
-
-    eventSource.onmessage = (event) => {
+    const pollInterval = setInterval(async () => {
       try {
-        const progressData = JSON.parse(event.data);
+        const response = await fetch(`/api/transfer-imports/${uploadId}/status`, {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
+          }
+        });
+        
+        if (!response.ok) {
+          console.error('Status check failed:', response.status);
+          return;
+        }
+        
+        const progressData = await response.json();
         console.log('📊 Progress update:', progressData);
         
         setJob(prevJob => {
@@ -202,13 +210,21 @@ export function TransferImportModal({ isOpen, onClose, transferId, onImportCompl
             status: progressData.status || prevJob.status,
             progress: {
               ...prevJob.progress,
-              ...progressData
+              phase: progressData.phase,
+              rowsTotal: progressData.rowsTotal,
+              rowsParsed: progressData.rowsParsed,
+              rowsValid: progressData.rowsValid,
+              rowsWritten: progressData.rowsWritten,
+              rowsFailed: progressData.rowsFailed,
+              throughputRps: progressData.throughputRps,
+              etaSeconds: progressData.etaSeconds
             }
           };
         });
 
         // Complete import
         if (progressData.phase === 'done' || progressData.status === 'completed') {
+          clearInterval(pollInterval);
           setIsUploading(false);
           toast({
             title: "Import Complete",
@@ -223,6 +239,7 @@ export function TransferImportModal({ isOpen, onClose, transferId, onImportCompl
 
         // Handle failure
         if (progressData.phase === 'failed' || progressData.status === 'failed') {
+          clearInterval(pollInterval);
           setIsUploading(false);
           toast({
             title: "Import Failed",
@@ -231,14 +248,12 @@ export function TransferImportModal({ isOpen, onClose, transferId, onImportCompl
           });
         }
       } catch (error) {
-        console.error('Failed to parse progress update:', error);
+        console.error('Failed to poll progress:', error);
       }
-    };
-
-    eventSource.onerror = (error) => {
-      console.error('SSE connection error:', error);
-      eventSource.close();
-    };
+    }, 500); // Poll every 500ms
+    
+    // Store interval ref for cleanup
+    (eventSourceRef as any).current = { close: () => clearInterval(pollInterval) };
   };
 
   // Reset component state
