@@ -569,6 +569,7 @@ function TransferDetailsContent({ transfer, stores, onClose }: {
   const [isEditing, setIsEditing] = useState(false);
   const [editingItemId, setEditingItemId] = useState<number | null>(null);
   const [showAddItem, setShowAddItem] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -576,6 +577,18 @@ function TransferDetailsContent({ transfer, stores, onClose }: {
     queryKey: ['/api/transfers', transfer.toNumber, 'items'],
     enabled: !!transfer.toNumber,
   });
+
+  // Filter items based on search query
+  const filteredItems = transferItems && Array.isArray(transferItems) 
+    ? transferItems.filter((item: any) => {
+        if (!searchQuery.trim()) return true;
+        const query = searchQuery.toLowerCase().trim();
+        const kodeMatch = (item.kodeItem || '').toLowerCase().includes(query);
+        const namaMatch = (item.namaItem || '').toLowerCase().includes(query);
+        const snMatch = (item.sn || '').toLowerCase().includes(query);
+        return kodeMatch || namaMatch || snMatch;
+      })
+    : [];
 
   // Form for editing transfer basic info
   const transferForm = useForm<z.infer<typeof transferEditSchema>>({
@@ -884,6 +897,22 @@ function TransferDetailsContent({ transfer, stores, onClose }: {
           </Button>
         </div>
         
+        {/* Search Box */}
+        <div className="mb-4">
+          <Input
+            placeholder="Search by item code, name, or serial number..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full"
+            data-testid="input-search-items"
+          />
+          {searchQuery && filteredItems.length !== (Array.isArray(transferItems) ? transferItems.length : 0) && (
+            <p className="text-sm text-gray-500 mt-1">
+              Showing {filteredItems.length} of {Array.isArray(transferItems) ? transferItems.length : 0} items
+            </p>
+          )}
+        </div>
+        
         {itemsLoading ? (
           <div className="space-y-3">
             {Array.from({ length: 3 }).map((_, i) => (
@@ -898,9 +927,9 @@ function TransferDetailsContent({ transfer, stores, onClose }: {
               </div>
             ))}
           </div>
-        ) : transferItems && Array.isArray(transferItems) && transferItems.length > 0 ? (
+        ) : filteredItems.length > 0 ? (
           <div className="space-y-3 max-h-60 overflow-y-auto">
-            {transferItems.map((item: any, index: number) => (
+            {filteredItems.map((item: any, index: number) => (
               <div 
                 key={item.toItemListId || index} 
                 className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg"
@@ -1131,8 +1160,17 @@ function TransferDetailsContent({ transfer, stores, onClose }: {
         ) : (
           <div className="text-center py-8 text-gray-500 dark:text-gray-400">
             <i className="fas fa-inbox text-3xl mb-3 opacity-50"></i>
-            <p>No items found for this transfer order.</p>
-            <p className="text-sm">Items will appear here after importing from Excel files.</p>
+            {searchQuery ? (
+              <>
+                <p>No items match your search "{searchQuery}"</p>
+                <p className="text-sm">Try a different search term or clear the search box.</p>
+              </>
+            ) : (
+              <>
+                <p>No items found for this transfer order.</p>
+                <p className="text-sm">Items will appear here after importing from Excel files.</p>
+              </>
+            )}
           </div>
         )}
       </div>

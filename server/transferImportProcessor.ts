@@ -303,9 +303,8 @@ export class TransferImportProcessor {
     });
   }
 
-  // Parse Excel file
+  // Parse Excel file with intelligent header detection
   private async parseExcel(stream: NodeJS.ReadableStream, uploadId: string): Promise<any[]> {
-    // Read entire stream into buffer (for XLSX parsing)
     const chunks: Buffer[] = [];
     
     return new Promise((resolve, reject) => {
@@ -315,12 +314,102 @@ export class TransferImportProcessor {
           const buffer = Buffer.concat(chunks);
           const workbook = XLSX.read(buffer, { type: 'buffer' });
           
-          // Use first worksheet
           const sheetName = workbook.SheetNames[0];
           const worksheet = workbook.Sheets[sheetName];
-          const records = XLSX.utils.sheet_to_json(worksheet);
           
-          console.log(`📊 Excel parsed: ${records.length} records`);
+          // Parse as array of arrays to find header row
+          const rawData: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
+          
+          console.log(`📊 Excel raw rows: ${rawData.length}`);
+          
+          // Find the header row by searching for known column headers
+          const headerKeywords = {
+            kodeItem: ['kode item', 'kode_item', 'item_code', 'itemcode', 'sku', 'code', 'kode'],
+            namaItem: ['nama item', 'nama_item', 'item_name', 'itemname', 'nama barang', 'nama', 'description', 'product name'],
+            sn: ['s/n', 'sn', 'serial', 'serial_number', 'serial number', 'serialno'],
+            qty: ['q to tran', 'qty', 'quantity', 'jumlah', 'qtt', 'q to transfer']
+          };
+          
+          let headerRowIndex = -1;
+          let columnMap: { [key: string]: number } = {};
+          
+          // Scan each row to find the header row
+          for (let rowIdx = 0; rowIdx < Math.min(rawData.length, 20); rowIdx++) {
+            const row = rawData[rowIdx];
+            if (!row || row.length === 0) continue;
+            
+            let tempColumnMap: { [key: string]: number } = {};
+            let foundColumns = 0;
+            
+            for (let colIdx = 0; colIdx < row.length; colIdx++) {
+              const cellValue = String(row[colIdx] || '').toLowerCase().trim();
+              if (!cellValue) continue;
+              
+              // Check if this cell matches any header keyword
+              for (const [fieldName, keywords] of Object.entries(headerKeywords)) {
+                if (keywords.some(kw => cellValue === kw || cellValue.includes(kw))) {
+                  tempColumnMap[fieldName] = colIdx;
+                  foundColumns++;
+                  break;
+                }
+              }
+            }
+            
+            // Need at least 2 columns matched to consider it a header row
+            if (foundColumns >= 2) {
+              headerRowIndex = rowIdx;
+              columnMap = tempColumnMap;
+              console.log(`🎯 Found header row at index ${rowIdx}:`, row);
+              console.log(`📍 Column mapping:`, columnMap);
+              break;
+            }
+          }
+          
+          if (headerRowIndex === -1) {
+            // Fall back to default behavior
+            console.log(`⚠️ No header row found, using default parsing`);
+            const records = XLSX.utils.sheet_to_json(worksheet);
+            resolve(records);
+            return;
+          }
+          
+          // Extract data rows after the header
+          const records: any[] = [];
+          for (let rowIdx = headerRowIndex + 1; rowIdx < rawData.length; rowIdx++) {
+            const row = rawData[rowIdx];
+            if (!row || row.length === 0) continue;
+            
+            // Skip empty rows or rows that look like footers
+            const firstCell = String(row[0] || '').toLowerCase().trim();
+            if (firstCell.includes('printed') || firstCell.includes('total') || firstCell.includes('page')) {
+              console.log(`⏭️ Skipping footer row ${rowIdx}:`, firstCell);
+              continue;
+            }
+            
+            // Build record from column mapping
+            const record: any = {
+              kodeItem: columnMap.kodeItem !== undefined ? String(row[columnMap.kodeItem] || '').trim() : '',
+              namaItem: columnMap.namaItem !== undefined ? String(row[columnMap.namaItem] || '').trim() : '',
+              sn: columnMap.sn !== undefined ? String(row[columnMap.sn] || '').trim() : '',
+              qty: 1 // Default
+            };
+            
+            // Parse qty - could be in different format
+            if (columnMap.qty !== undefined) {
+              const qtyVal = row[columnMap.qty];
+              if (qtyVal !== undefined && qtyVal !== null && qtyVal !== '') {
+                const parsed = parseFloat(String(qtyVal));
+                record.qty = isNaN(parsed) ? 1 : Math.round(parsed);
+              }
+            }
+            
+            // Only include if we have at least some data
+            if (record.kodeItem || record.namaItem || record.sn) {
+              records.push(record);
+            }
+          }
+          
+          console.log(`📊 Excel parsed: ${records.length} data records (header at row ${headerRowIndex + 1})`);
           resolve(records);
         } catch (error) {
           reject(new Error(`Excel parsing error: ${error instanceof Error ? error.message : 'Unknown error'}`));
