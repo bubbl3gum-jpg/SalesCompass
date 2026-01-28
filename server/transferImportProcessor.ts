@@ -248,33 +248,128 @@ export class TransferImportProcessor {
     }
   }
   
-  // Parse CSV from buffer
+  // Parse CSV from buffer with intelligent header detection
   private async parseCSVBuffer(buffer: Buffer, uploadId: string): Promise<any[]> {
     return new Promise((resolve, reject) => {
-      const records: any[] = [];
+      const rawRows: string[][] = [];
       const content = buffer.toString('utf-8');
+      
+      // First parse as array of arrays (no headers)
       const parser = csvParse({
-        columns: true,
-        skip_empty_lines: true,
+        columns: false,
+        skip_empty_lines: false,
         trim: true,
         relax_column_count: true
       });
 
-      parser.on('data', (record) => {
-        records.push(record);
-        
-        if (records.length % 1000 === 0) {
-          const job = jobs.get(uploadId);
-          if (job) {
-            job.progress.rowsParsed = records.length;
-            this.calculateThroughput(job);
-            this.emitProgress(uploadId);
-          }
-        }
+      parser.on('data', (row: string[]) => {
+        rawRows.push(row);
       });
 
       parser.on('end', () => {
-        console.log(`📊 CSV parsed: ${records.length} records`);
+        console.log(`📊 CSV raw rows: ${rawRows.length}`);
+        
+        // Find the header row by searching for known column headers
+        const headerKeywords = {
+          kodeItem: ['kode item', 'kode_item', 'item_code', 'itemcode', 'sku', 'code', 'kode'],
+          namaItem: ['nama item', 'nama_item', 'item_name', 'itemname', 'nama barang', 'nama', 'description', 'product name'],
+          sn: ['s/n', 'sn', 'serial', 'serial_number', 'serial number', 'serialno'],
+          qty: ['q to tran', 'qty', 'quantity', 'jumlah', 'qtt', 'q to transfer', 'qty transfer']
+        };
+        
+        let headerRowIndex = -1;
+        let columnMap: { [key: string]: number } = {};
+        
+        // Scan each row to find the header row
+        for (let rowIdx = 0; rowIdx < Math.min(rawRows.length, 20); rowIdx++) {
+          const row = rawRows[rowIdx];
+          if (!row || row.length === 0) continue;
+          
+          let tempColumnMap: { [key: string]: number } = {};
+          let foundColumns = 0;
+          
+          for (let colIdx = 0; colIdx < row.length; colIdx++) {
+            const cellValue = String(row[colIdx] || '').toLowerCase().trim();
+            if (!cellValue) continue;
+            
+            // Check if this cell matches any header keyword
+            for (const [fieldName, keywords] of Object.entries(headerKeywords)) {
+              if (keywords.some(kw => cellValue === kw || cellValue.includes(kw))) {
+                tempColumnMap[fieldName] = colIdx;
+                foundColumns++;
+                break;
+              }
+            }
+          }
+          
+          // Need at least 2 columns matched to consider it a header row
+          if (foundColumns >= 2) {
+            headerRowIndex = rowIdx;
+            columnMap = tempColumnMap;
+            console.log(`🎯 CSV: Found header row at index ${rowIdx}:`, row);
+            console.log(`📍 CSV: Column mapping:`, columnMap);
+            break;
+          }
+        }
+        
+        if (headerRowIndex === -1) {
+          // Fall back to default behavior - use first row as headers
+          console.log(`⚠️ CSV: No header row found, using first row as headers`);
+          const records: any[] = [];
+          if (rawRows.length > 0) {
+            const headers = rawRows[0];
+            for (let i = 1; i < rawRows.length; i++) {
+              const row = rawRows[i];
+              const record: any = {};
+              for (let j = 0; j < headers.length; j++) {
+                record[headers[j] || `col${j}`] = row[j] || '';
+              }
+              records.push(record);
+            }
+          }
+          console.log(`📊 CSV parsed (fallback): ${records.length} records`);
+          resolve(records);
+          return;
+        }
+        
+        // Extract data rows after the header
+        const records: any[] = [];
+        for (let rowIdx = headerRowIndex + 1; rowIdx < rawRows.length; rowIdx++) {
+          const row = rawRows[rowIdx];
+          if (!row || row.length === 0 || row.every(cell => !cell || !cell.trim())) continue;
+          
+          // Skip footer rows
+          const firstCell = String(row[0] || '').toLowerCase().trim();
+          if (firstCell.includes('printed') || firstCell.includes('total') || firstCell.includes('page')) {
+            console.log(`⏭️ CSV: Skipping footer row ${rowIdx}:`, firstCell);
+            continue;
+          }
+          
+          // Build record from column mapping
+          const record: any = {
+            kodeItem: columnMap.kodeItem !== undefined ? String(row[columnMap.kodeItem] || '').trim() : '',
+            namaItem: columnMap.namaItem !== undefined ? String(row[columnMap.namaItem] || '').trim() : '',
+            sn: columnMap.sn !== undefined ? String(row[columnMap.sn] || '').trim() : '',
+            qty: 1 // Default
+          };
+          
+          // Parse qty
+          if (columnMap.qty !== undefined) {
+            const qtyVal = row[columnMap.qty];
+            if (qtyVal !== undefined && qtyVal !== null && qtyVal !== '') {
+              const parsed = parseFloat(String(qtyVal));
+              record.qty = isNaN(parsed) ? 1 : Math.round(parsed);
+            }
+          }
+          
+          // Only include if we have at least some data
+          if (record.kodeItem || record.namaItem || record.sn) {
+            records.push(record);
+            console.log(`✅ CSV: Record ${rowIdx}:`, record);
+          }
+        }
+        
+        console.log(`📊 CSV parsed: ${records.length} data records (header at row ${headerRowIndex + 1})`);
         resolve(records);
       });
 
