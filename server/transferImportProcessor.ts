@@ -356,12 +356,38 @@ export class TransferImportProcessor {
         return '';
       };
 
+      // Find qty column - look for numeric columns with reasonable values (1-99999)
+      // __EMPTY_4 is typically the quantity column in the Excel format
+      const findQtyValue = (obj: any): number => {
+        // First try explicit qty column names
+        for (const key of Object.keys(obj)) {
+          const normalizedKey = key.toLowerCase().replace(/[\s_-]/g, '');
+          if (['qtotran', 'qty', 'quantity', 'jumlah'].includes(normalizedKey)) {
+            const val = parseInt(obj[key]?.toString() || '1');
+            if (!isNaN(val) && val > 0 && val < 100000) return val;
+          }
+        }
+        // Then check __EMPTY_4 (typical qty position in Excel exports)
+        if (obj.__EMPTY_4 !== undefined) {
+          const val = parseInt(obj.__EMPTY_4?.toString() || '1');
+          if (!isNaN(val) && val > 0 && val < 100000) return val;
+        }
+        // Fallback to columns with small numeric values
+        for (const key of Object.keys(obj)) {
+          if (key.startsWith('__EMPTY')) {
+            const val = parseInt(obj[key]?.toString() || '');
+            if (!isNaN(val) && val > 0 && val < 100000) return val;
+          }
+        }
+        return 1;
+      };
+
       const mappedRecord = {
         lineNo: parseInt(normalizeKey(record, ['no. baris', 'no baris', 'line no', 'line_no', 'row no', 'row_no', 'PT. RANCANG INDAH SENTOSA']) || '0') || null,
         sn: normalizeKey(record, ['s/n', 'sn', 'serial_number', 'serial no', 'serial', 'serialno', '__EMPTY_2']),
         kodeItem: normalizeKey(record, ['kode_item', 'kode item', 'item_code', 'sku', 'itemcode', 'code', '__EMPTY']),
         namaItem: normalizeKey(record, ['nama_item', 'nama item', 'item_name', 'nama', 'itemname', 'product name', 'description', '__EMPTY_1']) || null,
-        qty: parseInt(normalizeKey(record, ['q to tran', 'q_to_tran', 'qty', 'quantity', 'jumlah', '__EMPTY_3']) || '1') || 1
+        qty: findQtyValue(record)
       };
 
       console.log(`📝 Record ${i + 1}:`, { original: record, mapped: mappedRecord });
@@ -375,12 +401,13 @@ export class TransferImportProcessor {
         const firstCol = record['PT. RANCANG INDAH SENTOSA'];
         if (firstCol && !isNaN(parseInt(firstCol))) {
           // It's a data row with mismatched headers, extract directly from __EMPTY columns
+          // Use __EMPTY_4 for qty (not __EMPTY_3 which contains serial codes)
           const fixedRecord = {
             lineNo: parseInt(firstCol) || null,
             sn: record.__EMPTY_2 || '',
             kodeItem: record.__EMPTY || '',
             namaItem: record.__EMPTY_1 || null,
-            qty: parseFloat(record.__EMPTY_3) || 1
+            qty: findQtyValue(record)
           };
           if (fixedRecord.sn || fixedRecord.kodeItem) {
             validRecords.push(fixedRecord);
