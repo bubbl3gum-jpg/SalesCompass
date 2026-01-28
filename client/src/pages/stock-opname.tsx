@@ -88,7 +88,7 @@ export default function StockOpname() {
   // Create new stock opname
   const createSoMutation = useMutation({
     mutationFn: async (data: InsertStockOpname) => {
-      return await apiRequest('/api/stock-opname', 'POST', data);
+      return await apiRequest('POST', '/api/stock-opname', data);
     },
     onSuccess: () => {
       toast({
@@ -122,7 +122,7 @@ export default function StockOpname() {
   // Add item to stock opname
   const addItemMutation = useMutation({
     mutationFn: async (data: InsertSoItemList) => {
-      return await apiRequest('/api/stock-opname-items', 'POST', data);
+      return await apiRequest('POST', '/api/stock-opname-items', data);
     },
     onSuccess: () => {
       toast({
