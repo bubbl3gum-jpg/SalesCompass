@@ -1484,22 +1484,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      // Extract TO number from file - if not found or duplicate, auto-generate one
+      // Extract TO number from file - if not found, auto-generate one
       let toNumber = transferImportProcessor.extractToNumber(records, fileName);
-      
-      // Check if extracted TO number already exists, if so generate a new one
-      const existingTransfers = await storage.getTransferOrders();
-      const existingToNumbers = new Set(existingTransfers.map((t: any) => t.toNumber));
-      
-      if (!toNumber || existingToNumbers.has(toNumber)) {
-        if (toNumber && existingToNumbers.has(toNumber)) {
-          console.log(`⚠️ TO number ${toNumber} already exists, generating new one`);
-        }
-        
+      if (!toNumber) {
         // Auto-generate TO number: YYMM-NNN format (e.g., 2601-001)
         const now = new Date();
         const yearMonth = `${now.getFullYear().toString().slice(-2)}${(now.getMonth() + 1).toString().padStart(2, '0')}`;
         
+        // Get existing transfer orders to determine next sequence number
+        const existingTransfers = await storage.getTransferOrders();
         const sameMonthTransfers = existingTransfers.filter((t: any) => 
           t.toNumber && t.toNumber.startsWith(yearMonth + '-')
         );
