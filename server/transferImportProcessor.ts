@@ -392,6 +392,21 @@ export class TransferImportProcessor {
 
       console.log(`📝 Record ${i + 1}:`, { original: record, mapped: mappedRecord });
 
+      // Skip header rows - check if values look like headers
+      const headerKeywords = ['kode', 'nama', 'item', 'barang', 'qty', 'quantity', 'serial', 's/n', 'sc', 'no.', 'jumlah'];
+      const isHeaderRow = headerKeywords.some(keyword => {
+        const kodeItemLower = (mappedRecord.kodeItem || '').toLowerCase().trim();
+        const namaItemLower = (mappedRecord.namaItem || '').toLowerCase().trim();
+        const snLower = (mappedRecord.sn || '').toLowerCase().trim();
+        return kodeItemLower === keyword || namaItemLower.startsWith(keyword) || snLower === keyword;
+      });
+      
+      if (isHeaderRow) {
+        console.log(`⏭️ Record ${i + 1} skipped - looks like header row:`, mappedRecord);
+        job.progress.rowsFailed++;
+        continue;
+      }
+
       // More lenient validation - accept any record with at least one field
       if (mappedRecord.sn || mappedRecord.kodeItem || mappedRecord.namaItem) {
         validRecords.push(mappedRecord);
@@ -442,7 +457,7 @@ export class TransferImportProcessor {
     const toNumber = job.toNumber;
     console.log(`💾 Writing ${records.length} records to database for TO: ${toNumber}`);
 
-    const batchSize = 1000; // Smaller batches for better error handling
+    const batchSize = 100; // Smaller batches for reliability
     let written = 0;
 
     for (let i = 0; i < records.length; i += batchSize) {
@@ -456,23 +471,24 @@ export class TransferImportProcessor {
         qty: record.qty || 1
       }));
 
-      console.log(`📝 Writing batch ${i / batchSize + 1} with ${batch.length} records...`);
-      console.log(`📋 Sample insert data:`, insertData[0]);
+      console.log(`📝 Writing batch ${Math.floor(i / batchSize) + 1} with ${batch.length} records...`);
+      if (i === 0) {
+        console.log(`📋 Sample insert data:`, insertData[0]);
+      }
 
       try {
-        const result = await db.insert(toItemList).values(insertData).returning();
+        // Use simple insert without returning for performance
+        await db.insert(toItemList).values(insertData);
         written += batch.length;
         
-        console.log(`✅ Batch ${i / batchSize + 1} written successfully: ${result.length} rows`);
+        console.log(`✅ Batch ${Math.floor(i / batchSize) + 1} written: ${batch.length} rows (total: ${written})`);
         
         // Update progress
         jobData.progress.rowsWritten = written;
         this.calculateThroughput(job);
         this.emitProgress(uploadId);
-        
-        console.log(`📊 Progress: ${written}/${records.length} records written`);
       } catch (error) {
-        console.error(`❌ Batch write error for batch ${i / batchSize + 1}:`, error);
+        console.error(`❌ Batch write error for batch ${Math.floor(i / batchSize) + 1}:`, error);
         console.error(`📋 Failed insert data sample:`, insertData[0]);
         throw error;
       }
