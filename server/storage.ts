@@ -572,47 +572,63 @@ export class DatabaseStorage implements IStorage {
 
     // Strategy 3: Get item details from reference_sheet for hierarchical lookup
     const [refItem] = await db.select().from(referenceSheet).where(eq(referenceSheet.kodeItem, kodeItem));
-    if (!refItem) {
-      return undefined;
-    }
+    
+    if (refItem) {
+      // Strategy 4: Try family + deskripsi_material match (best fit)
+      if (refItem.family && refItem.deskripsiMaterial) {
+        const [familyMaterialPrice] = await db.select().from(pricelist).where(
+          and(
+            eq(pricelist.family, refItem.family),
+            eq(pricelist.deskripsiMaterial, refItem.deskripsiMaterial),
+            sql`${pricelist.normalPrice} IS NOT NULL`
+          )
+        );
+        if (familyMaterialPrice) {
+          return familyMaterialPrice;
+        }
+      }
 
-    // Strategy 4: Try family + deskripsi_material match (best fit)
-    if (refItem.family && refItem.deskripsiMaterial) {
-      const [familyMaterialPrice] = await db.select().from(pricelist).where(
-        and(
-          eq(pricelist.family, refItem.family),
-          eq(pricelist.deskripsiMaterial, refItem.deskripsiMaterial),
-          sql`${pricelist.normalPrice} IS NOT NULL`
-        )
-      );
-      if (familyMaterialPrice) {
-        return familyMaterialPrice;
+      // Strategy 5: Try family match
+      if (refItem.family) {
+        const [familyPrice] = await db.select().from(pricelist).where(
+          and(
+            eq(pricelist.family, refItem.family),
+            sql`${pricelist.normalPrice} IS NOT NULL`
+          )
+        );
+        if (familyPrice) {
+          return familyPrice;
+        }
+      }
+
+      // Strategy 6: Try kelompok match
+      if (refItem.kelompok) {
+        const [kelompokPrice] = await db.select().from(pricelist).where(
+          and(
+            eq(pricelist.kelompok, refItem.kelompok),
+            sql`${pricelist.normalPrice} IS NOT NULL`
+          )
+        );
+        if (kelompokPrice) {
+          return kelompokPrice;
+        }
       }
     }
 
-    // Strategy 5: Try family match
-    if (refItem.family) {
+    // Strategy 7: Extract family code from kode_item pattern (e.g., A3FM8525213 -> A3)
+    // Pattern: Item codes typically start with family code like A1, A2, A3, A4, etc.
+    const familyMatch = kodeItem.match(/^(A\d+)/i);
+    if (familyMatch) {
+      const extractedFamily = familyMatch[1].toUpperCase();
       const [familyPrice] = await db.select().from(pricelist).where(
         and(
-          eq(pricelist.family, refItem.family),
+          eq(pricelist.family, extractedFamily),
           sql`${pricelist.normalPrice} IS NOT NULL`
         )
       );
       if (familyPrice) {
+        console.log(`Price found via extracted family ${extractedFamily} for item ${kodeItem}`);
         return familyPrice;
-      }
-    }
-
-    // Strategy 6: Try kelompok match
-    if (refItem.kelompok) {
-      const [kelompokPrice] = await db.select().from(pricelist).where(
-        and(
-          eq(pricelist.kelompok, refItem.kelompok),
-          sql`${pricelist.normalPrice} IS NOT NULL`
-        )
-      );
-      if (kelompokPrice) {
-        return kelompokPrice;
       }
     }
 
