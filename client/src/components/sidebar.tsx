@@ -75,6 +75,12 @@ const navigationItems = [
         icon: "fas fa-exchange-alt",
         permission: "transfer:read"
       },
+      {
+        name: "Virtual Store Inventory",
+        href: "/virtual-inventory",
+        icon: "fas fa-warehouse",
+        permission: "stock:opname"
+      },
     ]
   },
   {
