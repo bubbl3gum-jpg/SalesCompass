@@ -7,10 +7,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Search, Upload, Plus, Trash2, Package, Warehouse, FileSpreadsheet } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { Search, Upload, Plus, Trash2, Package, Warehouse, FileSpreadsheet, Check, ChevronsUpDown } from "lucide-react";
+import { cn } from "@/lib/utils";
 import {
   Dialog,
   DialogContent,
@@ -39,6 +41,7 @@ export default function VirtualInventory() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   const [selectedStore, setSelectedStore] = useState<string>("all");
+  const [storeSearchOpen, setStoreSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [showAddModal, setShowAddModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
@@ -266,19 +269,54 @@ export default function VirtualInventory() {
               <div className="flex items-center justify-between flex-wrap gap-4">
                 <CardTitle className="text-gray-900 dark:text-white">Inventory Items</CardTitle>
                 <div className="flex items-center gap-4">
-                  <Select value={selectedStore} onValueChange={setSelectedStore}>
-                    <SelectTrigger className="w-[200px]">
-                      <SelectValue placeholder="All Stores" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Stores</SelectItem>
-                      {stores?.map((store) => (
-                        <SelectItem key={store.kodeGudang} value={store.kodeGudang}>
-                          {store.namaGudang || store.kodeGudang}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Popover open={storeSearchOpen} onOpenChange={setStoreSearchOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        role="combobox"
+                        aria-expanded={storeSearchOpen}
+                        className="w-[220px] justify-between"
+                      >
+                        {selectedStore === "all" 
+                          ? "All Stores" 
+                          : stores?.find(s => s.kodeGudang === selectedStore)?.namaGudang || selectedStore}
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[220px] p-0" align="start">
+                      <Command>
+                        <CommandInput placeholder="Search stores..." className="h-9 border-0 focus:ring-0" />
+                        <CommandList>
+                          <CommandEmpty>No store found.</CommandEmpty>
+                          <CommandGroup>
+                            <CommandItem
+                              value="all"
+                              onSelect={() => {
+                                setSelectedStore("all");
+                                setStoreSearchOpen(false);
+                              }}
+                            >
+                              <Check className={cn("mr-2 h-4 w-4", selectedStore === "all" ? "opacity-100" : "opacity-0")} />
+                              All Stores
+                            </CommandItem>
+                            {stores?.map((store) => (
+                              <CommandItem
+                                key={store.kodeGudang}
+                                value={`${store.kodeGudang} ${store.namaGudang}`}
+                                onSelect={() => {
+                                  setSelectedStore(store.kodeGudang);
+                                  setStoreSearchOpen(false);
+                                }}
+                              >
+                                <Check className={cn("mr-2 h-4 w-4", selectedStore === store.kodeGudang ? "opacity-100" : "opacity-0")} />
+                                {store.namaGudang || store.kodeGudang}
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
                   
                   <div className="relative">
                     <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
@@ -372,18 +410,40 @@ export default function VirtualInventory() {
           <div className="space-y-4">
             <div>
               <Label>Store *</Label>
-              <Select value={selectedStore} onValueChange={setSelectedStore}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select store" />
-                </SelectTrigger>
-                <SelectContent>
-                  {stores?.map((store) => (
-                    <SelectItem key={store.kodeGudang} value={store.kodeGudang}>
-                      {store.namaGudang || store.kodeGudang}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    className="w-full justify-between"
+                  >
+                    {selectedStore === "all" 
+                      ? "Select store" 
+                      : stores?.find(s => s.kodeGudang === selectedStore)?.namaGudang || selectedStore}
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-full p-0" align="start">
+                  <Command>
+                    <CommandInput placeholder="Search stores..." className="h-9" />
+                    <CommandList>
+                      <CommandEmpty>No store found.</CommandEmpty>
+                      <CommandGroup>
+                        {stores?.map((store) => (
+                          <CommandItem
+                            key={store.kodeGudang}
+                            value={`${store.kodeGudang} ${store.namaGudang}`}
+                            onSelect={() => setSelectedStore(store.kodeGudang)}
+                          >
+                            <Check className={cn("mr-2 h-4 w-4", selectedStore === store.kodeGudang ? "opacity-100" : "opacity-0")} />
+                            {store.namaGudang || store.kodeGudang}
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
             </div>
             <div>
               <Label>Serial Number (SN) *</Label>
@@ -449,18 +509,40 @@ export default function VirtualInventory() {
           <div className="space-y-4">
             <div>
               <Label>Target Store *</Label>
-              <Select value={selectedStore} onValueChange={setSelectedStore}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select store" />
-                </SelectTrigger>
-                <SelectContent>
-                  {stores?.map((store) => (
-                    <SelectItem key={store.kodeGudang} value={store.kodeGudang}>
-                      {store.namaGudang || store.kodeGudang}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    className="w-full justify-between"
+                  >
+                    {selectedStore === "all" 
+                      ? "Select store" 
+                      : stores?.find(s => s.kodeGudang === selectedStore)?.namaGudang || selectedStore}
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-full p-0" align="start">
+                  <Command>
+                    <CommandInput placeholder="Search stores..." className="h-9" />
+                    <CommandList>
+                      <CommandEmpty>No store found.</CommandEmpty>
+                      <CommandGroup>
+                        {stores?.map((store) => (
+                          <CommandItem
+                            key={store.kodeGudang}
+                            value={`${store.kodeGudang} ${store.namaGudang}`}
+                            onSelect={() => setSelectedStore(store.kodeGudang)}
+                          >
+                            <Check className={cn("mr-2 h-4 w-4", selectedStore === store.kodeGudang ? "opacity-100" : "opacity-0")} />
+                            {store.namaGudang || store.kodeGudang}
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
             </div>
             
             <div className="border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-lg p-6 text-center">
