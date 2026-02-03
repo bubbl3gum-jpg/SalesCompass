@@ -1702,16 +1702,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put('/api/transfers/:toNumber', authenticate, checkRole(['Supervisor', 'Stockist', 'System Administrator']), async (req, res) => {
     try {
       const toNumber = req.params.toNumber;
-      const { dariGudang, keGudang, tanggal } = req.body;
+      const { dariGudang, keGudang, tanggal, status } = req.body;
       
       if (!toNumber) {
         return res.status(400).json({ message: 'Invalid transfer number' });
       }
 
+      // Validate status if provided
+      const validStatuses = ['pending', 'shipping', 'complete'];
+      if (status && !validStatuses.includes(status)) {
+        return res.status(400).json({ message: 'Invalid status. Must be pending, shipping, or complete' });
+      }
+
       const updatedTransfer = await storage.updateTransferOrder(toNumber, {
         dariGudang,
         keGudang,
-        tanggal
+        tanggal,
+        ...(status && { status })
       });
       
       res.json(updatedTransfer);

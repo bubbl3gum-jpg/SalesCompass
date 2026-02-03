@@ -198,10 +198,12 @@ export const transferOrders = pgTable("transfer_order", {
   dariGudang: varchar("dari_gudang", { length: 50 }).references(() => stores.kodeGudang),
   keGudang: varchar("ke_gudang", { length: 50 }).references(() => stores.kodeGudang),
   tanggal: date("tanggal"),
+  status: varchar("status", { length: 20 }).default("pending").notNull(),
 }, (table) => [
   index("idx_transfer_dari").on(table.dariGudang),
   index("idx_transfer_ke").on(table.keGudang),
   index("idx_transfer_tanggal").on(table.tanggal),
+  index("idx_transfer_status").on(table.status),
 ]);
 
 // Transfer Order Item List

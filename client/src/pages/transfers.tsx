@@ -136,9 +136,38 @@ export default function Transfers() {
   };
 
   const getTransferStatus = (transfer: any) => {
-    // Mock status logic - in real app this would come from API
-    return { status: 'Pending', color: 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300' };
+    const status = transfer.status || 'pending';
+    switch (status) {
+      case 'shipping':
+        return { status: 'Shipping', color: 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300' };
+      case 'complete':
+        return { status: 'Complete', color: 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300' };
+      case 'pending':
+      default:
+        return { status: 'Pending', color: 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300' };
+    }
   };
+
+  // Mutation to update transfer status
+  const updateStatusMutation = useMutation({
+    mutationFn: async ({ toNumber, status }: { toNumber: string; status: string }) => {
+      return await apiRequest('PUT', `/api/transfers/${toNumber}`, { status });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/transfers'] });
+      toast({
+        title: "Success",
+        description: "Transfer status updated successfully",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update status",
+        variant: "destructive",
+      });
+    },
+  });
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 dark:from-slate-900 dark:via-slate-800 dark:to-indigo-900">
@@ -228,9 +257,36 @@ export default function Transfers() {
                         </div>
 
                         <div className="flex items-center space-x-4">
-                          <Badge className={`${status.color} border-0`}>
-                            {status.status}
-                          </Badge>
+                          <Select
+                            value={transfer.status || 'pending'}
+                            onValueChange={(newStatus) => {
+                              updateStatusMutation.mutate({ toNumber: transfer.toNumber, status: newStatus });
+                            }}
+                          >
+                            <SelectTrigger className={`w-[120px] ${status.color} border-0`}>
+                              <SelectValue placeholder="Status" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="pending">
+                                <span className="flex items-center">
+                                  <span className="w-2 h-2 rounded-full bg-orange-500 mr-2"></span>
+                                  Pending
+                                </span>
+                              </SelectItem>
+                              <SelectItem value="shipping">
+                                <span className="flex items-center">
+                                  <span className="w-2 h-2 rounded-full bg-blue-500 mr-2"></span>
+                                  Shipping
+                                </span>
+                              </SelectItem>
+                              <SelectItem value="complete">
+                                <span className="flex items-center">
+                                  <span className="w-2 h-2 rounded-full bg-green-500 mr-2"></span>
+                                  Complete
+                                </span>
+                              </SelectItem>
+                            </SelectContent>
+                          </Select>
                           <div className="flex space-x-2">
                             <Button
                               size="sm"
