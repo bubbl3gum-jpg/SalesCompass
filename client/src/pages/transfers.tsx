@@ -163,6 +163,27 @@ export default function Transfers() {
     onError: (error: any) => {
       toast({
         title: "Error",
+        description: "Failed to update status",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Mutation to delete transfer order
+  const deleteTransferMutation = useMutation({
+    mutationFn: async (toNumber: string) => {
+      return await apiRequest('DELETE', `/api/transfers/${toNumber}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/transfers'] });
+      toast({
+        title: "Success",
+        description: "Transfer order deleted successfully",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
         description: error.message || "Failed to update status",
         variant: "destructive",
       });
@@ -312,6 +333,20 @@ export default function Transfers() {
                               data-testid={`button-view-transfer-${transfer.toNumber}`}
                             >
                               View Details
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                if (confirm(`Are you sure you want to delete transfer ${transfer.toNumber}? This will also delete all items in this transfer.`)) {
+                                  deleteTransferMutation.mutate(transfer.toNumber);
+                                }
+                              }}
+                              className="text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20"
+                              data-testid={`button-delete-transfer-${transfer.toNumber}`}
+                              disabled={deleteTransferMutation.isPending}
+                            >
+                              <Trash2 className="h-4 w-4" />
                             </Button>
                           </div>
                         </div>
