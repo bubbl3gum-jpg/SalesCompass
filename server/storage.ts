@@ -55,7 +55,7 @@ import {
   type InsertVirtualStoreInventory,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, sql, desc, sum, or, ilike, inArray } from "drizzle-orm";
+import { eq, and, sql, desc, sum, or, ilike, inArray, gt } from "drizzle-orm";
 
 export interface IStorage {
   // User operations (mandatory for Replit Auth)
@@ -1018,53 +1018,30 @@ export class DatabaseStorage implements IStorage {
     // Normalize serial number: trim whitespace and convert to uppercase for consistent matching
     const normalizedSerial = serialNumber.trim().toUpperCase();
     
-    // Search in transfer order items (for items in transfer/pending state)
-    const transferResults = await db
+    // Search in Virtual Store Inventory - this is the source of truth for available stock
+    const inventoryResults = await db
       .select({
-        kodeItem: toItemList.kodeItem,
-        namaItem: toItemList.namaItem,
-        sn: toItemList.sn,
-        qty: toItemList.qty,
-        toNumber: toItemList.toNumber,
-        keGudang: transferOrders.keGudang,
+        kodeItem: virtualStoreInventory.kodeItem,
+        namaBarang: virtualStoreInventory.namaBarang,
+        sn: virtualStoreInventory.sn,
+        qty: virtualStoreInventory.qty,
+        kodeGudang: virtualStoreInventory.kodeGudang,
       })
-      .from(toItemList)
-      .leftJoin(transferOrders, eq(toItemList.toNumber, transferOrders.toNumber))
+      .from(virtualStoreInventory)
       .where(
         and(
-          sql`UPPER(TRIM(${toItemList.sn})) = ${normalizedSerial}`,
-          storeCode === 'ALL_STORE' ? sql`1=1` : eq(transferOrders.keGudang, storeCode)
+          sql`UPPER(TRIM(${virtualStoreInventory.sn})) = ${normalizedSerial}`,
+          gt(virtualStoreInventory.qty, 0), // Only items with available quantity
+          storeCode === 'ALL_STORE' ? sql`1=1` : eq(virtualStoreInventory.kodeGudang, storeCode)
         )
       );
-
-    // Search in stock table (for items currently in inventory where tanggal_out IS NULL)
-    const stockResults = await db
-      .select({
-        kodeItem: stock.kodeItem,
-        namaItem: sql<string>`NULL`.as('namaItem'), // We'll get this from reference sheet
-        sn: stock.serialNumber,
-        qty: stock.qty,
-        toNumber: sql<string>`NULL`.as('toNumber'),
-        keGudang: stock.kodeGudang,
-      })
-      .from(stock)
-      .where(
-        and(
-          sql`UPPER(TRIM(${stock.serialNumber})) = ${normalizedSerial}`,
-          sql`${stock.tanggalOut} IS NULL`, // Only items still in inventory
-          storeCode === 'ALL_STORE' ? sql`1=1` : eq(stock.kodeGudang, storeCode)
-        )
-      );
-
-    // Combine both result sets
-    const allResults = [...transferResults, ...stockResults];
 
     // Use enhanced price resolution for each item
-    const enhancedResults = await Promise.all(allResults.map(async (item) => {
+    const enhancedResults = await Promise.all(inventoryResults.map(async (item) => {
       const priceInfo = item.kodeItem ? await this.getEnhancedPriceForItem(item.kodeItem, item.sn || undefined) : null;
       
       // Get item name from reference sheet if not available
-      let itemName = item.namaItem;
+      let itemName = item.namaBarang;
       if (!itemName && item.kodeItem) {
         const refItem = await this.getReferenceSheetByKodeItem(item.kodeItem);
         itemName = refItem?.namaItem || null;
@@ -1078,6 +1055,7 @@ export class DatabaseStorage implements IStorage {
         availableQuantity: item.qty,
         kelompok: priceInfo?.kelompok || null,
         family: priceInfo?.family || null,
+        serialNumber: item.sn,
         // Calculate sp discount percentage if sp exists and is less than normal price
         spDiscountPercentage: (priceInfo?.sp && priceInfo?.normalPrice && Number(priceInfo.sp) < Number(priceInfo.normalPrice)) 
           ? Math.round(((Number(priceInfo.normalPrice) - Number(priceInfo.sp)) / Number(priceInfo.normalPrice)) * 100) 
@@ -1089,47 +1067,59 @@ export class DatabaseStorage implements IStorage {
   }
 
   async searchInventoryByDetails(storeCode: string, searchQuery: string): Promise<any[]> {
-    const searchLower = searchQuery.toLowerCase();
-    
-    // First get inventory items, then join with reference_sheet for better search
+    // Search in Virtual Store Inventory joined with reference_sheet for better matching
+    // Item code pattern: material code + kode motif
     const results = await db
       .select({
-        kodeItem: toItemList.kodeItem,
-        namaItem: toItemList.namaItem,
-        sn: toItemList.sn,
-        qty: toItemList.qty,
-        toNumber: toItemList.toNumber,
-        keGudang: transferOrders.keGudang,
+        kodeItem: virtualStoreInventory.kodeItem,
+        namaBarang: virtualStoreInventory.namaBarang,
+        sn: virtualStoreInventory.sn,
+        qty: virtualStoreInventory.qty,
+        kodeGudang: virtualStoreInventory.kodeGudang,
+        refNamaItem: referenceSheet.namaItem,
         kelompok: referenceSheet.kelompok,
         family: referenceSheet.family,
+        kodeMotif: referenceSheet.kodeMotif,
+        deskripsiMaterial: referenceSheet.deskripsiMaterial,
       })
-      .from(toItemList)
-      .leftJoin(transferOrders, eq(toItemList.toNumber, transferOrders.toNumber))
-      .leftJoin(referenceSheet, eq(toItemList.kodeItem, referenceSheet.kodeItem))
+      .from(virtualStoreInventory)
+      .leftJoin(referenceSheet, eq(virtualStoreInventory.kodeItem, referenceSheet.kodeItem))
       .where(
         and(
           or(
-            ilike(toItemList.kodeItem, `%${searchQuery}%`),
-            ilike(toItemList.namaItem, `%${searchQuery}%`),
+            ilike(virtualStoreInventory.kodeItem, `%${searchQuery}%`),
+            ilike(virtualStoreInventory.namaBarang, `%${searchQuery}%`),
+            ilike(virtualStoreInventory.sn, `%${searchQuery}%`),
+            ilike(referenceSheet.namaItem, `%${searchQuery}%`),
             ilike(referenceSheet.kelompok, `%${searchQuery}%`),
-            ilike(referenceSheet.family, `%${searchQuery}%`)
+            ilike(referenceSheet.family, `%${searchQuery}%`),
+            ilike(referenceSheet.kodeMotif, `%${searchQuery}%`),
+            ilike(referenceSheet.deskripsiMaterial, `%${searchQuery}%`)
           ),
-          storeCode === 'ALL_STORE' ? sql`1=1` : eq(transferOrders.keGudang, storeCode)
+          gt(virtualStoreInventory.qty, 0), // Only items with available quantity
+          storeCode === 'ALL_STORE' ? sql`1=1` : eq(virtualStoreInventory.kodeGudang, storeCode)
         )
-      );
+      )
+      .limit(50); // Limit results for performance
 
     // Use enhanced price resolution for each item
     const enhancedResults = await Promise.all(results.map(async (item) => {
       const priceInfo = item.kodeItem ? await this.getEnhancedPriceForItem(item.kodeItem, item.sn || undefined) : null;
       
+      // Use reference sheet name if virtual inventory doesn't have it
+      const itemName = item.namaBarang || item.refNamaItem;
+      
       return {
         kodeItem: item.kodeItem,
-        namaItem: item.namaItem,
+        namaItem: itemName,
         normalPrice: priceInfo?.normalPrice ? Number(priceInfo.normalPrice) : 0,
         sp: priceInfo?.sp ? Number(priceInfo.sp) : null,
         availableQuantity: item.qty,
         kelompok: priceInfo?.kelompok || item.kelompok || null,
         family: priceInfo?.family || item.family || null,
+        serialNumber: item.sn,
+        kodeMotif: item.kodeMotif,
+        deskripsiMaterial: item.deskripsiMaterial,
         // Calculate sp discount percentage if sp exists and is less than normal price
         spDiscountPercentage: (priceInfo?.sp && priceInfo?.normalPrice && Number(priceInfo.sp) < Number(priceInfo.normalPrice)) 
           ? Math.round(((Number(priceInfo.normalPrice) - Number(priceInfo.sp)) / Number(priceInfo.normalPrice)) * 100) 
