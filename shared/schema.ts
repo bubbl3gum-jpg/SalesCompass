@@ -327,3 +327,26 @@ export type InsertStock = typeof stock.$inferInsert;
 export type Stock = typeof stock.$inferSelect;
 
 export const insertStockSchema = createInsertSchema(stock).omit({ stockId: true });
+
+// Virtual Store Inventory - tracks inventory per store with auto-updates from transfers and sales
+export const virtualStoreInventory = pgTable("virtual_store_inventory", {
+  inventoryId: serial("inventory_id").primaryKey(),
+  kodeGudang: varchar("kode_gudang", { length: 50 }).notNull().references(() => stores.kodeGudang),
+  sn: varchar("sn", { length: 100 }).notNull(),
+  kodeItem: varchar("kode_item", { length: 50 }),
+  sc: varchar("sc", { length: 100 }),
+  namaBarang: varchar("nama_barang", { length: 255 }),
+  qty: integer("qty").notNull().default(1),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_vsi_kode_gudang").on(table.kodeGudang),
+  index("idx_vsi_sn").on(table.sn),
+  index("idx_vsi_kode_item").on(table.kodeItem),
+  index("idx_vsi_gudang_sn").on(table.kodeGudang, table.sn),
+]);
+
+export type InsertVirtualStoreInventory = typeof virtualStoreInventory.$inferInsert;
+export type VirtualStoreInventory = typeof virtualStoreInventory.$inferSelect;
+
+export const insertVirtualStoreInventorySchema = createInsertSchema(virtualStoreInventory).omit({ inventoryId: true, createdAt: true, updatedAt: true });

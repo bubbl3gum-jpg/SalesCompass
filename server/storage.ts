@@ -16,6 +16,7 @@ import {
   staff,
   positions,
   stock,
+  virtualStoreInventory,
   type User,
   type UpsertUser,
   type ReferenceSheet,
@@ -50,6 +51,8 @@ import {
   type InsertPosition,
   type Stock,
   type InsertStock,
+  type VirtualStoreInventory,
+  type InsertVirtualStoreInventory,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, sql, desc, sum, or, ilike, inArray } from "drizzle-orm";
@@ -228,6 +231,16 @@ export interface IStorage {
     deskripsiMaterial: string | null;
     issue: 'no_pricelist' | 'zero_price' | 'null_price';
   }>>;
+
+  // Virtual Store Inventory operations
+  getVirtualStoreInventory(kodeGudang?: string): Promise<VirtualStoreInventory[]>;
+  getVirtualStoreInventoryBySn(kodeGudang: string, sn: string): Promise<VirtualStoreInventory | undefined>;
+  createVirtualStoreInventory(data: InsertVirtualStoreInventory): Promise<VirtualStoreInventory>;
+  bulkCreateVirtualStoreInventory(data: InsertVirtualStoreInventory[]): Promise<{ success: number; errors: string[] }>;
+  updateVirtualStoreInventory(inventoryId: number, data: Partial<InsertVirtualStoreInventory>): Promise<VirtualStoreInventory>;
+  deleteVirtualStoreInventory(inventoryId: number): Promise<void>;
+  adjustVirtualStoreInventoryQty(kodeGudang: string, sn: string, qtyChange: number): Promise<VirtualStoreInventory | null>;
+  transferVirtualInventory(fromStore: string, toStore: string, sn: string, qty: number): Promise<{ success: boolean; error?: string }>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1789,6 +1802,132 @@ export class DatabaseStorage implements IStorage {
     } catch (error) {
       console.error('❌ Failed to get items with missing prices:', error);
       throw error;
+    }
+  }
+
+  // Virtual Store Inventory operations
+  async getVirtualStoreInventory(kodeGudang?: string): Promise<VirtualStoreInventory[]> {
+    if (kodeGudang) {
+      return await db.select().from(virtualStoreInventory)
+        .where(eq(virtualStoreInventory.kodeGudang, kodeGudang))
+        .orderBy(desc(virtualStoreInventory.createdAt));
+    }
+    return await db.select().from(virtualStoreInventory)
+      .orderBy(desc(virtualStoreInventory.createdAt));
+  }
+
+  async getVirtualStoreInventoryBySn(kodeGudang: string, sn: string): Promise<VirtualStoreInventory | undefined> {
+    const [item] = await db.select().from(virtualStoreInventory)
+      .where(and(
+        eq(virtualStoreInventory.kodeGudang, kodeGudang),
+        eq(virtualStoreInventory.sn, sn)
+      ));
+    return item;
+  }
+
+  async createVirtualStoreInventory(data: InsertVirtualStoreInventory): Promise<VirtualStoreInventory> {
+    const [item] = await db.insert(virtualStoreInventory)
+      .values(data)
+      .returning();
+    return item;
+  }
+
+  async bulkCreateVirtualStoreInventory(data: InsertVirtualStoreInventory[]): Promise<{ success: number; errors: string[] }> {
+    const errors: string[] = [];
+    let success = 0;
+
+    for (const item of data) {
+      try {
+        // Check if item already exists
+        const existing = await this.getVirtualStoreInventoryBySn(item.kodeGudang, item.sn);
+        if (existing) {
+          // Update qty instead of inserting
+          await db.update(virtualStoreInventory)
+            .set({ 
+              qty: sql`${virtualStoreInventory.qty} + ${item.qty || 1}`,
+              updatedAt: new Date()
+            })
+            .where(eq(virtualStoreInventory.inventoryId, existing.inventoryId));
+          success++;
+        } else {
+          await db.insert(virtualStoreInventory).values(item);
+          success++;
+        }
+      } catch (error: any) {
+        errors.push(`SN ${item.sn}: ${error.message}`);
+      }
+    }
+
+    return { success, errors };
+  }
+
+  async updateVirtualStoreInventory(inventoryId: number, data: Partial<InsertVirtualStoreInventory>): Promise<VirtualStoreInventory> {
+    const [item] = await db.update(virtualStoreInventory)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(virtualStoreInventory.inventoryId, inventoryId))
+      .returning();
+    return item;
+  }
+
+  async deleteVirtualStoreInventory(inventoryId: number): Promise<void> {
+    await db.delete(virtualStoreInventory)
+      .where(eq(virtualStoreInventory.inventoryId, inventoryId));
+  }
+
+  async adjustVirtualStoreInventoryQty(kodeGudang: string, sn: string, qtyChange: number): Promise<VirtualStoreInventory | null> {
+    const existing = await this.getVirtualStoreInventoryBySn(kodeGudang, sn);
+    if (!existing) {
+      return null;
+    }
+
+    const newQty = existing.qty + qtyChange;
+    if (newQty <= 0) {
+      // Remove item if qty becomes 0 or negative
+      await this.deleteVirtualStoreInventory(existing.inventoryId);
+      return null;
+    }
+
+    const [updated] = await db.update(virtualStoreInventory)
+      .set({ qty: newQty, updatedAt: new Date() })
+      .where(eq(virtualStoreInventory.inventoryId, existing.inventoryId))
+      .returning();
+    return updated;
+  }
+
+  async transferVirtualInventory(fromStore: string, toStore: string, sn: string, qty: number): Promise<{ success: boolean; error?: string }> {
+    try {
+      // Find item in source store
+      const sourceItem = await this.getVirtualStoreInventoryBySn(fromStore, sn);
+      if (!sourceItem) {
+        return { success: false, error: `Item SN ${sn} not found in store ${fromStore}` };
+      }
+
+      if (sourceItem.qty < qty) {
+        return { success: false, error: `Insufficient qty for SN ${sn}. Available: ${sourceItem.qty}, Requested: ${qty}` };
+      }
+
+      // Deduct from source
+      await this.adjustVirtualStoreInventoryQty(fromStore, sn, -qty);
+
+      // Add to destination
+      const destItem = await this.getVirtualStoreInventoryBySn(toStore, sn);
+      if (destItem) {
+        await this.adjustVirtualStoreInventoryQty(toStore, sn, qty);
+      } else {
+        // Create new entry in destination
+        await this.createVirtualStoreInventory({
+          kodeGudang: toStore,
+          sn: sn,
+          kodeItem: sourceItem.kodeItem,
+          sc: sourceItem.sc,
+          namaBarang: sourceItem.namaBarang,
+          qty: qty
+        });
+      }
+
+      return { success: true };
+    } catch (error: any) {
+      return { success: false, error: error.message };
     }
   }
 }
