@@ -26,18 +26,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-
-interface VirtualInventoryItem {
-  inventoryId: number;
-  kodeGudang: string;
-  sn: string;
-  kodeItem: string | null;
-  sc: string | null;
-  namaBarang: string | null;
-  qty: number;
-  createdAt: string;
-  updatedAt: string;
-}
+import type { VirtualStoreInventory } from "@shared/schema";
 
 interface Store {
   kodeGudang: string;
@@ -68,26 +57,27 @@ export default function VirtualInventory() {
     queryKey: ['/api/stores'],
   });
 
-  const { data: inventory, isLoading: inventoryLoading } = useQuery<VirtualInventoryItem[]>({
-    queryKey: ['/api/virtual-inventory', selectedStore],
-    queryFn: async () => {
-      const url = selectedStore ? `/api/virtual-inventory?store=${selectedStore}` : '/api/virtual-inventory';
-      const response = await fetch(url, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
-        }
-      });
-      if (!response.ok) throw new Error('Failed to fetch inventory');
-      return response.json();
-    },
+  const inventoryUrl = selectedStore ? `/api/virtual-inventory?store=${selectedStore}` : '/api/virtual-inventory';
+  
+  const { data: inventory, isLoading: inventoryLoading } = useQuery<VirtualStoreInventory[]>({
+    queryKey: [inventoryUrl],
   });
+
+  const invalidateInventory = () => {
+    queryClient.invalidateQueries({ 
+      predicate: (query) => {
+        const key = query.queryKey[0];
+        return typeof key === 'string' && key.startsWith('/api/virtual-inventory');
+      }
+    });
+  };
 
   const createMutation = useMutation({
     mutationFn: async (data: any) => {
       return await apiRequest('POST', '/api/virtual-inventory', data);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/virtual-inventory'] });
+      invalidateInventory();
       setShowAddModal(false);
       setNewItem({ sn: "", kodeItem: "", sc: "", namaBarang: "", qty: 1 });
       toast({ title: "Success", description: "Inventory item added successfully" });
@@ -102,7 +92,7 @@ export default function VirtualInventory() {
       return await apiRequest('DELETE', `/api/virtual-inventory/${inventoryId}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/virtual-inventory'] });
+      invalidateInventory();
       toast({ title: "Success", description: "Item deleted successfully" });
     },
     onError: (error: any) => {
@@ -157,7 +147,7 @@ export default function VirtualInventory() {
         throw new Error(result.message || 'Upload failed');
       }
 
-      queryClient.invalidateQueries({ queryKey: ['/api/virtual-inventory'] });
+      invalidateInventory();
       setShowImportModal(false);
       setImportFile(null);
       
