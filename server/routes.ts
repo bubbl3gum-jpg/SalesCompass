@@ -1190,6 +1190,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Log the error but don't fail the sale
           console.error(`❌ Failed to update stock for sale ${sale.penjualanId}:`, stockError);
         }
+
+        // Also update virtual store inventory (deduct qty)
+        try {
+          const inventoryUpdated = await storage.adjustVirtualStoreInventoryQty(
+            sale.kodeGudang,
+            sale.sn,
+            -1 // Deduct 1 item for each sale
+          );
+          if (inventoryUpdated) {
+            console.log(`📦 Virtual inventory updated for sale ${sale.penjualanId}: ${sale.sn} at ${sale.kodeGudang}`);
+          } else {
+            console.log(`ℹ️ No virtual inventory record for sale ${sale.penjualanId}: ${sale.sn} at ${sale.kodeGudang}`);
+          }
+        } catch (inventoryError) {
+          console.error(`❌ Failed to update virtual inventory for sale ${sale.penjualanId}:`, inventoryError);
+        }
       } else {
         console.warn(`⚠️ Sale ${sale.penjualanId} missing required fields for stock update: sn=${sale.sn}, kodeGudang=${sale.kodeGudang}, tanggal=${sale.tanggal}`);
       }
@@ -1714,12 +1730,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: 'Invalid status. Must be pending, shipping, or complete' });
       }
 
+      // Get current transfer to check if status is changing to complete
+      const currentTransfers = await storage.getTransferOrders();
+      const currentTransfer = currentTransfers.find(t => t.toNumber === toNumber);
+      const wasComplete = currentTransfer?.status === 'complete';
+      const willBeComplete = status === 'complete';
+
       const updatedTransfer = await storage.updateTransferOrder(toNumber, {
         dariGudang,
         keGudang,
         tanggal,
         ...(status && { status })
       });
+
+      // If status changed to complete, update virtual store inventory
+      if (!wasComplete && willBeComplete && currentTransfer) {
+        console.log(`📦 Transfer ${toNumber} completed. Updating virtual inventory...`);
+        
+        try {
+          const transferItems = await storage.getToItemListByTransferOrderNumber(toNumber);
+          const fromStore = dariGudang || currentTransfer.dariGudang;
+          const toStore = keGudang || currentTransfer.keGudang;
+          
+          for (const item of transferItems) {
+            if (item.sn && fromStore && toStore) {
+              // Transfer inventory: deduct from origin, add to destination
+              const result = await storage.transferVirtualInventory(
+                fromStore,
+                toStore,
+                item.sn,
+                item.qty || 1
+              );
+              
+              if (!result.success) {
+                console.warn(`⚠️ Inventory transfer warning for SN ${item.sn}: ${result.error}`);
+              } else {
+                console.log(`✅ Transferred SN ${item.sn} from ${fromStore} to ${toStore}`);
+              }
+            }
+          }
+        } catch (inventoryError) {
+          console.error('Virtual inventory update error:', inventoryError);
+        }
+      }
       
       res.json(updatedTransfer);
     } catch (error) {
@@ -2618,6 +2671,148 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('SO item creation error:', error);
       res.status(400).json({ message: 'Failed to create SO item' });
+    }
+  });
+
+  // Virtual Store Inventory endpoints
+  app.get('/api/virtual-inventory', authenticate, async (req, res) => {
+    try {
+      const kodeGudang = req.query.store as string | undefined;
+      const inventory = await storage.getVirtualStoreInventory(kodeGudang);
+      res.json(inventory);
+    } catch (error) {
+      console.error('Virtual inventory fetch error:', error);
+      res.status(500).json({ message: 'Failed to get virtual inventory' });
+    }
+  });
+
+  app.post('/api/virtual-inventory', authenticate, checkRole(['Stockist', 'Supervisor', 'System Administrator']), async (req, res) => {
+    try {
+      const item = await storage.createVirtualStoreInventory(req.body);
+      res.json(item);
+    } catch (error) {
+      console.error('Virtual inventory creation error:', error);
+      res.status(400).json({ message: 'Failed to create inventory item' });
+    }
+  });
+
+  app.put('/api/virtual-inventory/:inventoryId', authenticate, checkRole(['Stockist', 'Supervisor', 'System Administrator']), async (req, res) => {
+    try {
+      const inventoryId = parseInt(req.params.inventoryId);
+      if (isNaN(inventoryId)) {
+        return res.status(400).json({ message: 'Invalid inventory ID' });
+      }
+      const item = await storage.updateVirtualStoreInventory(inventoryId, req.body);
+      res.json(item);
+    } catch (error) {
+      console.error('Virtual inventory update error:', error);
+      res.status(400).json({ message: 'Failed to update inventory item' });
+    }
+  });
+
+  app.delete('/api/virtual-inventory/:inventoryId', authenticate, checkRole(['Stockist', 'Supervisor', 'System Administrator']), async (req, res) => {
+    try {
+      const inventoryId = parseInt(req.params.inventoryId);
+      if (isNaN(inventoryId)) {
+        return res.status(400).json({ message: 'Invalid inventory ID' });
+      }
+      await storage.deleteVirtualStoreInventory(inventoryId);
+      res.json({ message: 'Inventory item deleted' });
+    } catch (error) {
+      console.error('Virtual inventory delete error:', error);
+      res.status(500).json({ message: 'Failed to delete inventory item' });
+    }
+  });
+
+  // Virtual inventory import endpoint with intelligent header scanning
+  app.post('/api/virtual-inventory/import', authenticate, checkRole(['Stockist', 'Supervisor', 'System Administrator']), async (req, res) => {
+    try {
+      const { kodeGudang, items } = req.body;
+      
+      if (!kodeGudang) {
+        return res.status(400).json({ message: 'Store code is required' });
+      }
+      
+      if (!items || !Array.isArray(items) || items.length === 0) {
+        return res.status(400).json({ message: 'Items array is required' });
+      }
+
+      // Prepare items for bulk insert
+      const inventoryItems = items.map((item: any) => ({
+        kodeGudang,
+        sn: item.sn || '',
+        kodeItem: item.kodeItem || item.kode_item || null,
+        sc: item.sc || item.serialCode || null,
+        namaBarang: item.namaBarang || item.nama_barang || item.namaItem || null,
+        qty: parseInt(item.qty) || 1
+      })).filter((item: any) => item.sn); // Filter out items without SN
+
+      const result = await storage.bulkCreateVirtualStoreInventory(inventoryItems);
+      res.json({
+        message: `Successfully imported ${result.success} items`,
+        success: result.success,
+        errors: result.errors
+      });
+    } catch (error) {
+      console.error('Virtual inventory import error:', error);
+      res.status(500).json({ message: 'Failed to import inventory' });
+    }
+  });
+
+  // Virtual inventory file upload endpoint with intelligent header scanning
+  app.post('/api/virtual-inventory/upload', authenticate, checkRole(['Stockist', 'Supervisor', 'System Administrator']), upload.single('file'), async (req, res) => {
+    try {
+      const { kodeGudang } = req.body;
+      
+      if (!kodeGudang) {
+        return res.status(400).json({ message: 'Store code is required' });
+      }
+      
+      if (!req.file) {
+        return res.status(400).json({ message: 'File is required' });
+      }
+
+      const { parseInventoryFile } = await import('./inventoryImportProcessor');
+      const buffer = req.file.buffer;
+      const fileName = req.file.originalname;
+      
+      console.log(`📁 Processing inventory file: ${fileName} for store ${kodeGudang}`);
+      
+      const parseResult = await parseInventoryFile(buffer, fileName);
+      
+      if (!parseResult.success) {
+        return res.status(400).json({ 
+          message: 'File parsing failed', 
+          errors: parseResult.errors 
+        });
+      }
+
+      if (parseResult.items.length === 0) {
+        return res.status(400).json({ message: 'No valid items found in file' });
+      }
+
+      // Prepare items for bulk insert
+      const inventoryItems = parseResult.items.map(item => ({
+        kodeGudang,
+        sn: item.sn,
+        kodeItem: item.kodeItem || null,
+        sc: item.sc || null,
+        namaBarang: item.namaBarang || null,
+        qty: item.qty || 1
+      }));
+
+      const result = await storage.bulkCreateVirtualStoreInventory(inventoryItems);
+      
+      res.json({
+        message: `Successfully imported ${result.success} items`,
+        success: result.success,
+        totalParsed: parseResult.items.length,
+        headerRowIndex: parseResult.headerRowIndex,
+        errors: result.errors
+      });
+    } catch (error: any) {
+      console.error('Virtual inventory file upload error:', error);
+      res.status(500).json({ message: error.message || 'Failed to process file' });
     }
   });
 
