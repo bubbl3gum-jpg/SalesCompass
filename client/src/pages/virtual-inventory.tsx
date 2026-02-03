@@ -38,7 +38,7 @@ export default function VirtualInventory() {
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
   
-  const [selectedStore, setSelectedStore] = useState<string>("");
+  const [selectedStore, setSelectedStore] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [showAddModal, setShowAddModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
@@ -57,7 +57,7 @@ export default function VirtualInventory() {
     queryKey: ['/api/stores'],
   });
 
-  const inventoryUrl = selectedStore ? `/api/virtual-inventory?store=${selectedStore}` : '/api/virtual-inventory';
+  const inventoryUrl = selectedStore && selectedStore !== "all" ? `/api/virtual-inventory?store=${selectedStore}` : '/api/virtual-inventory';
   
   const { data: inventory, isLoading: inventoryLoading } = useQuery<VirtualStoreInventory[]>({
     queryKey: [inventoryUrl],
@@ -101,8 +101,8 @@ export default function VirtualInventory() {
   });
 
   const handleAddItem = () => {
-    if (!selectedStore) {
-      toast({ title: "Error", description: "Please select a store first", variant: "destructive" });
+    if (!selectedStore || selectedStore === "all") {
+      toast({ title: "Error", description: "Please select a specific store first", variant: "destructive" });
       return;
     }
     if (!newItem.sn) {
@@ -116,8 +116,8 @@ export default function VirtualInventory() {
   };
 
   const handleFileUpload = async () => {
-    if (!selectedStore) {
-      toast({ title: "Error", description: "Please select a store first", variant: "destructive" });
+    if (!selectedStore || selectedStore === "all") {
+      toast({ title: "Error", description: "Please select a specific store first", variant: "destructive" });
       return;
     }
     if (!importFile) {
@@ -252,7 +252,7 @@ export default function VirtualInventory() {
                   <div>
                     <p className="text-sm text-gray-500 dark:text-gray-400">Active Store</p>
                     <p className="text-lg font-bold text-gray-900 dark:text-white">
-                      {selectedStore ? stores?.find(s => s.kodeGudang === selectedStore)?.namaGudang || selectedStore : 'All Stores'}
+                      {selectedStore && selectedStore !== "all" ? stores?.find(s => s.kodeGudang === selectedStore)?.namaGudang || selectedStore : 'All Stores'}
                     </p>
                   </div>
                   <Warehouse className="w-10 h-10 text-blue-500 opacity-50" />
@@ -271,7 +271,7 @@ export default function VirtualInventory() {
                       <SelectValue placeholder="All Stores" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">All Stores</SelectItem>
+                      <SelectItem value="all">All Stores</SelectItem>
                       {stores?.map((store) => (
                         <SelectItem key={store.kodeGudang} value={store.kodeGudang}>
                           {store.namaGudang || store.kodeGudang}
