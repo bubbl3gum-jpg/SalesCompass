@@ -1745,27 +1745,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // If status changed to complete, update virtual store inventory
       if (!wasComplete && willBeComplete && currentTransfer) {
-        console.log(`📦 Transfer ${toNumber} completed. Updating virtual inventory...`);
+        console.log(`📦 Transfer ${toNumber} completed. Adding items to destination virtual inventory...`);
         
         try {
           const transferItems = await storage.getToItemListByTransferOrderNumber(toNumber);
-          const fromStore = dariGudang || currentTransfer.dariGudang;
           const toStore = keGudang || currentTransfer.keGudang;
           
-          for (const item of transferItems) {
-            if (item.sn && fromStore && toStore) {
-              // Transfer inventory: deduct from origin, add to destination
-              const result = await storage.transferVirtualInventory(
-                fromStore,
-                toStore,
-                item.sn,
-                item.qty || 1
-              );
-              
-              if (!result.success) {
-                console.warn(`⚠️ Inventory transfer warning for SN ${item.sn}: ${result.error}`);
+          if (toStore) {
+            for (const item of transferItems) {
+              if (item.sn) {
+                // ADD items to destination store's virtual inventory (not replace)
+                await storage.addToVirtualInventory(toStore, {
+                  sn: item.sn,
+                  kodeItem: item.kodeItem,
+                  namaBarang: item.namaItem,
+                  qty: item.qty || 1
+                });
+                console.log(`✅ Added SN ${item.sn} (qty: ${item.qty || 1}) to ${toStore} virtual inventory`);
               } else {
-                console.log(`✅ Transferred SN ${item.sn} from ${fromStore} to ${toStore}`);
+                console.warn(`⚠️ Skipping item without SN: ${item.namaItem || item.kodeItem || 'unknown'}`);
               }
             }
           }

@@ -241,6 +241,7 @@ export interface IStorage {
   deleteVirtualStoreInventory(inventoryId: number): Promise<void>;
   adjustVirtualStoreInventoryQty(kodeGudang: string, sn: string, qtyChange: number): Promise<VirtualStoreInventory | null>;
   transferVirtualInventory(fromStore: string, toStore: string, sn: string, qty: number): Promise<{ success: boolean; error?: string }>;
+  addToVirtualInventory(kodeGudang: string, item: { sn: string; kodeItem?: string | null; namaBarang?: string | null; qty: number }): Promise<VirtualStoreInventory>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1928,6 +1929,39 @@ export class DatabaseStorage implements IStorage {
       return { success: true };
     } catch (error: any) {
       return { success: false, error: error.message };
+    }
+  }
+
+  async addToVirtualInventory(kodeGudang: string, item: { sn: string; kodeItem?: string | null; namaBarang?: string | null; qty: number }): Promise<VirtualStoreInventory> {
+    // Check if item with same SN already exists in this store
+    const existing = await this.getVirtualStoreInventoryBySn(kodeGudang, item.sn);
+    
+    if (existing) {
+      // ADD to existing quantity (not replace)
+      const newQty = existing.qty + item.qty;
+      const [updated] = await db.update(virtualStoreInventory)
+        .set({ 
+          qty: newQty, 
+          updatedAt: new Date(),
+          // Update other fields if they were empty before
+          kodeItem: existing.kodeItem || item.kodeItem,
+          namaBarang: existing.namaBarang || item.namaBarang
+        })
+        .where(eq(virtualStoreInventory.inventoryId, existing.inventoryId))
+        .returning();
+      return updated;
+    } else {
+      // Create new entry
+      const [created] = await db.insert(virtualStoreInventory)
+        .values({
+          kodeGudang,
+          sn: item.sn,
+          kodeItem: item.kodeItem || null,
+          namaBarang: item.namaBarang || null,
+          qty: item.qty
+        })
+        .returning();
+      return created;
     }
   }
 }
