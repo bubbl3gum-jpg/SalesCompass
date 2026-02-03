@@ -1744,8 +1744,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
 
       // If status changed to complete, update virtual store inventory
+      // Note: Items are ADDED to destination store only (not deducted from source)
+      // This is intentional as transfers may come from external warehouses not tracked in virtual inventory
       if (!wasComplete && willBeComplete && currentTransfer) {
         console.log(`📦 Transfer ${toNumber} completed. Adding items to destination virtual inventory...`);
+        
+        const inventoryResults = {
+          added: 0,
+          skippedNoSN: 0,
+          errors: [] as string[]
+        };
         
         try {
           const transferItems = await storage.getToItemListByTransferOrderNumber(toNumber);
@@ -1753,20 +1761,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
           
           if (toStore) {
             for (const item of transferItems) {
-              if (item.sn) {
-                // ADD items to destination store's virtual inventory (not replace)
-                await storage.addToVirtualInventory(toStore, {
-                  sn: item.sn,
-                  kodeItem: item.kodeItem,
-                  namaBarang: item.namaItem,
-                  qty: item.qty || 1
-                });
-                console.log(`✅ Added SN ${item.sn} (qty: ${item.qty || 1}) to ${toStore} virtual inventory`);
+              if (item.sn && item.sn.trim() !== '') {
+                try {
+                  // ADD items to destination store's virtual inventory (not replace)
+                  await storage.addToVirtualInventory(toStore, {
+                    sn: item.sn,
+                    kodeItem: item.kodeItem,
+                    namaBarang: item.namaItem,
+                    qty: item.qty || 1
+                  });
+                  inventoryResults.added++;
+                  console.log(`✅ Added SN ${item.sn} (qty: ${item.qty || 1}) to ${toStore} virtual inventory`);
+                } catch (itemError: any) {
+                  inventoryResults.errors.push(`SN ${item.sn}: ${itemError.message}`);
+                  console.error(`❌ Failed to add SN ${item.sn}:`, itemError.message);
+                }
               } else {
-                console.warn(`⚠️ Skipping item without SN: ${item.namaItem || item.kodeItem || 'unknown'}`);
+                inventoryResults.skippedNoSN++;
+                console.warn(`⚠️ Skipping item without SN: ${item.namaItem || item.kodeItem || 'unknown'} (line ${item.lineNo || 'unknown'})`);
               }
             }
           }
+          
+          console.log(`📊 Transfer ${toNumber} inventory update: ${inventoryResults.added} added, ${inventoryResults.skippedNoSN} skipped (no SN), ${inventoryResults.errors.length} errors`);
         } catch (inventoryError) {
           console.error('Virtual inventory update error:', inventoryError);
         }

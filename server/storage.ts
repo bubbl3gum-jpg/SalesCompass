@@ -1933,8 +1933,13 @@ export class DatabaseStorage implements IStorage {
   }
 
   async addToVirtualInventory(kodeGudang: string, item: { sn: string; kodeItem?: string | null; namaBarang?: string | null; qty: number }): Promise<VirtualStoreInventory> {
+    // Enforce SN requirement - SN is mandatory for virtual inventory
+    if (!item.sn || item.sn.trim() === '') {
+      throw new Error('SN (serial number) is required for virtual inventory');
+    }
+    
     // Check if item with same SN already exists in this store
-    const existing = await this.getVirtualStoreInventoryBySn(kodeGudang, item.sn);
+    const existing = await this.getVirtualStoreInventoryBySn(kodeGudang, item.sn.trim());
     
     if (existing) {
       // ADD to existing quantity (not replace)
