@@ -17,6 +17,7 @@ import {
   positions,
   stock,
   virtualStoreInventory,
+  bazars,
   type User,
   type UpsertUser,
   type ReferenceSheet,
@@ -53,6 +54,8 @@ import {
   type InsertStock,
   type VirtualStoreInventory,
   type InsertVirtualStoreInventory,
+  type Bazar,
+  type InsertBazar,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, sql, desc, sum, or, ilike, inArray, gt } from "drizzle-orm";
@@ -242,6 +245,14 @@ export interface IStorage {
   adjustVirtualStoreInventoryQty(kodeGudang: string, sn: string, qtyChange: number): Promise<VirtualStoreInventory | null>;
   transferVirtualInventory(fromStore: string, toStore: string, sn: string, qty: number): Promise<{ success: boolean; error?: string }>;
   addToVirtualInventory(kodeGudang: string, item: { sn: string; kodeItem?: string | null; namaBarang?: string | null; qty: number }): Promise<VirtualStoreInventory>;
+
+  // Bazar operations
+  getBazars(): Promise<Bazar[]>;
+  getBazarById(bazarId: number): Promise<Bazar | undefined>;
+  getActiveBazars(): Promise<Bazar[]>;
+  createBazar(data: InsertBazar): Promise<Bazar>;
+  updateBazar(bazarId: number, data: Partial<InsertBazar>): Promise<Bazar>;
+  deleteBazar(bazarId: number): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1974,6 +1985,37 @@ export class DatabaseStorage implements IStorage {
         .returning();
       return created;
     }
+  }
+
+  // Bazar operations
+  async getBazars(): Promise<Bazar[]> {
+    return db.select().from(bazars).orderBy(desc(bazars.startDate));
+  }
+
+  async getBazarById(bazarId: number): Promise<Bazar | undefined> {
+    const [result] = await db.select().from(bazars).where(eq(bazars.bazarId, bazarId));
+    return result;
+  }
+
+  async getActiveBazars(): Promise<Bazar[]> {
+    return db.select().from(bazars).where(eq(bazars.status, 'active')).orderBy(desc(bazars.startDate));
+  }
+
+  async createBazar(data: InsertBazar): Promise<Bazar> {
+    const [result] = await db.insert(bazars).values(data).returning();
+    return result;
+  }
+
+  async updateBazar(bazarId: number, data: Partial<InsertBazar>): Promise<Bazar> {
+    const [result] = await db.update(bazars)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(bazars.bazarId, bazarId))
+      .returning();
+    return result;
+  }
+
+  async deleteBazar(bazarId: number): Promise<void> {
+    await db.delete(bazars).where(eq(bazars.bazarId, bazarId));
   }
 }
 
