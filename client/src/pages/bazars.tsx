@@ -30,7 +30,7 @@ import {
 } from "@/components/ui/select";
 import { apiRequest } from "@/lib/queryClient";
 import { Sidebar } from "@/components/sidebar";
-import { Edit3, Trash2, Plus, Search, Store, Calendar, MapPin } from "lucide-react";
+import { Edit3, Trash2, Plus, Search, Store, Calendar, MapPin, RotateCcw, History, LayoutGrid, DollarSign } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 
@@ -41,6 +41,19 @@ interface Bazar {
   startDate: string;
   endDate: string;
   status: 'upcoming' | 'active' | 'ended';
+}
+
+interface Settlement {
+  settlementId: number;
+  bazarId: number | null;
+  setorTunai: string;
+  setorNonTunai: string;
+}
+
+interface LocationGroup {
+  location: string;
+  bazars: Bazar[];
+  totalRevenue: number;
 }
 
 export default function Bazars() {
@@ -61,6 +74,7 @@ export default function Bazars() {
   });
   const [searchQuery, setSearchQuery] = useState('');
   const [deletingBazar, setDeletingBazar] = useState<Bazar | null>(null);
+  const [viewMode, setViewMode] = useState<'grid' | 'history'>('grid');
 
   const isAdmin = user?.role === 'System Administrator';
 
@@ -69,10 +83,38 @@ export default function Bazars() {
     retry: false,
   });
 
+  const { data: settlements } = useQuery<Settlement[]>({
+    queryKey: ['/api/settlements'],
+    retry: false,
+  });
+
   const filteredBazars = Array.isArray(bazars) ? bazars.filter((bazar: Bazar) =>
     bazar.bazarName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
     bazar.location?.toLowerCase().includes(searchQuery.toLowerCase())
   ) : [];
+
+  const getBazarRevenue = (bazarId: number): number => {
+    if (!settlements) return 0;
+    return settlements
+      .filter(s => s.bazarId === bazarId)
+      .reduce((total, s) => total + parseFloat(s.setorTunai || '0') + parseFloat(s.setorNonTunai || '0'), 0);
+  };
+
+  const locationGroups: LocationGroup[] = (() => {
+    if (!Array.isArray(bazars)) return [];
+    const groups = new Map<string, Bazar[]>();
+    
+    filteredBazars.forEach((bazar: Bazar) => {
+      const existing = groups.get(bazar.location) || [];
+      groups.set(bazar.location, [...existing, bazar]);
+    });
+
+    return Array.from(groups.entries()).map(([location, locationBazars]) => ({
+      location,
+      bazars: locationBazars.sort((a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime()),
+      totalRevenue: locationBazars.reduce((sum, b) => sum + getBazarRevenue(b.bazarId), 0),
+    }));
+  })();
 
   const createMutation = useMutation({
     mutationFn: async (data: Partial<Bazar>) => {
@@ -211,6 +253,23 @@ export default function Bazars() {
     setShowCreateModal(true);
   };
 
+  const handleRepeatBazar = (bazar: Bazar) => {
+    const today = new Date().toISOString().split('T')[0];
+    const nextWeek = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    setFormData({
+      bazarName: bazar.bazarName,
+      location: bazar.location,
+      startDate: today,
+      endDate: nextWeek,
+      status: 'upcoming',
+    });
+    setShowCreateModal(true);
+  };
+
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(amount);
+  };
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'upcoming':
@@ -252,7 +311,27 @@ export default function Bazars() {
                   <Store className="h-5 w-5" />
                   Bazars ({filteredBazars.length})
                 </CardTitle>
-                <div className="flex gap-2 w-full sm:w-auto">
+                <div className="flex gap-2 w-full sm:w-auto flex-wrap">
+                  <div className="flex border rounded-lg overflow-hidden">
+                    <Button
+                      variant={viewMode === 'grid' ? 'default' : 'ghost'}
+                      size="sm"
+                      onClick={() => setViewMode('grid')}
+                      className="rounded-none"
+                    >
+                      <LayoutGrid className="h-4 w-4 mr-1" />
+                      Grid
+                    </Button>
+                    <Button
+                      variant={viewMode === 'history' ? 'default' : 'ghost'}
+                      size="sm"
+                      onClick={() => setViewMode('history')}
+                      className="rounded-none"
+                    >
+                      <History className="h-4 w-4 mr-1" />
+                      History
+                    </Button>
+                  </div>
                   <div className="relative flex-1 sm:flex-none">
                     <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
                     <Input
@@ -282,7 +361,7 @@ export default function Bazars() {
                 <div className="text-center py-12 text-gray-500">
                   {searchQuery ? 'No bazars found matching your search' : 'No bazars created yet'}
                 </div>
-              ) : (
+              ) : viewMode === 'grid' ? (
                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                   {filteredBazars.map((bazar: Bazar) => (
                     <Card key={bazar.bazarId} className="relative hover:shadow-md transition-shadow">
@@ -302,6 +381,10 @@ export default function Bazars() {
                             <Calendar className="h-4 w-4" />
                             <span>{formatDate(bazar.startDate)} - {formatDate(bazar.endDate)}</span>
                           </div>
+                          <div className="flex items-center gap-2">
+                            <DollarSign className="h-4 w-4" />
+                            <span className="font-medium text-green-600">{formatCurrency(getBazarRevenue(bazar.bazarId))}</span>
+                          </div>
                         </div>
                         {isAdmin && (
                           <div className="flex gap-2 mt-4 pt-3 border-t">
@@ -314,6 +397,17 @@ export default function Bazars() {
                               <Edit3 className="h-4 w-4 mr-1" />
                               Edit
                             </Button>
+                            {bazar.status === 'ended' && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleRepeatBazar(bazar)}
+                                className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                                title="Create new bazar at this location"
+                              >
+                                <RotateCcw className="h-4 w-4" />
+                              </Button>
+                            )}
                             <Button
                               variant="outline"
                               size="sm"
@@ -324,6 +418,84 @@ export default function Bazars() {
                             </Button>
                           </div>
                         )}
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {locationGroups.map((group) => (
+                    <Card key={group.location} className="border-l-4 border-l-blue-500">
+                      <CardContent className="p-4">
+                        <div className="flex justify-between items-start mb-4">
+                          <div>
+                            <div className="flex items-center gap-2 mb-1">
+                              <MapPin className="h-5 w-5 text-blue-600" />
+                              <h3 className="font-semibold text-lg text-gray-900">{group.location}</h3>
+                            </div>
+                            <p className="text-sm text-gray-500">
+                              {group.bazars.length} event{group.bazars.length !== 1 ? 's' : ''} at this location
+                            </p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-sm text-gray-500">Total Revenue</p>
+                            <p className="font-bold text-lg text-green-600">{formatCurrency(group.totalRevenue)}</p>
+                          </div>
+                        </div>
+                        <div className="space-y-3">
+                          {group.bazars.map((bazar) => (
+                            <div
+                              key={bazar.bazarId}
+                              className={cn(
+                                "flex items-center justify-between p-3 rounded-lg border",
+                                bazar.status === 'active' ? 'bg-green-50 border-green-200' :
+                                bazar.status === 'upcoming' ? 'bg-blue-50 border-blue-200' :
+                                'bg-gray-50 border-gray-200'
+                              )}
+                            >
+                              <div className="flex items-center gap-4">
+                                <div>
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-medium">{bazar.bazarName}</span>
+                                    {getStatusBadge(bazar.status)}
+                                  </div>
+                                  <div className="flex items-center gap-1 text-sm text-gray-500 mt-1">
+                                    <Calendar className="h-3 w-3" />
+                                    <span>{formatDate(bazar.startDate)} - {formatDate(bazar.endDate)}</span>
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-3">
+                                <div className="text-right">
+                                  <p className="text-xs text-gray-500">Revenue</p>
+                                  <p className="font-medium text-green-600">{formatCurrency(getBazarRevenue(bazar.bazarId))}</p>
+                                </div>
+                                {isAdmin && (
+                                  <div className="flex gap-1">
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => handleEdit(bazar)}
+                                    >
+                                      <Edit3 className="h-4 w-4" />
+                                    </Button>
+                                    {bazar.status === 'ended' && (
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => handleRepeatBazar(bazar)}
+                                        className="text-blue-600"
+                                        title="Repeat this bazar"
+                                      >
+                                        <RotateCcw className="h-4 w-4" />
+                                      </Button>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
                       </CardContent>
                     </Card>
                   ))}
