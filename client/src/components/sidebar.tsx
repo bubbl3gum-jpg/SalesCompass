@@ -98,6 +98,12 @@ const navigationItems = [
         icon: "fas fa-cogs",
         permission: "admin:settings"
       },
+      {
+        name: "Bazars",
+        href: "/bazars",
+        icon: "fas fa-store",
+        permission: "admin:settings"
+      },
     ]
   }
 ];

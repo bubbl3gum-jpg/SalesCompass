@@ -24,6 +24,7 @@ const PaymentMethods = lazy(() => import("@/pages/payment-methods"));
 const ReferenceSheet = lazy(() => import("@/pages/reference-sheet"));
 const Discounts = lazy(() => import("@/pages/discounts"));
 const AdminSettings = lazy(() => import("@/pages/admin-settings"));
+const Bazars = lazy(() => import("@/pages/bazars"));
 const NotFound = lazy(() => import("@/pages/not-found"));
 const AccessDenied = lazy(() => import("@/pages/access-denied"));
 
@@ -122,6 +123,9 @@ function Router() {
             </Route>
             <Route path="/admin-settings">
               {(params) => <ProtectedRoute component={AdminSettings} permission="admin:settings" {...params} />}
+            </Route>
+            <Route path="/bazars">
+              {(params) => <ProtectedRoute component={Bazars} permission="admin:settings" {...params} />}
             </Route>
             <Route component={NotFound} />
           </>
