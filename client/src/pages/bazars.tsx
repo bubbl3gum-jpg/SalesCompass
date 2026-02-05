@@ -41,8 +41,6 @@ interface Bazar {
   startDate: string;
   endDate: string;
   status: 'upcoming' | 'active' | 'ended';
-  createdAt: string;
-  updatedAt: string;
 }
 
 export default function Bazars() {

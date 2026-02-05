@@ -27,6 +27,7 @@ import {
   insertStaffSchema,
   insertPositionSchema,
   insertToItemListSchema,
+  insertBazarSchema,
   toItemList,
   type Pricelist 
 } from "@shared/schema";
@@ -2694,10 +2695,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post('/api/bazars', authenticate, checkRole(['System Administrator']), async (req, res) => {
     try {
-      const bazar = await storage.createBazar(req.body);
+      const validatedData = insertBazarSchema.parse(req.body);
+      const bazar = await storage.createBazar(validatedData);
       res.json(bazar);
     } catch (error) {
       console.error('Bazar creation error:', error);
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: 'Validation error', errors: error.errors });
+      }
       res.status(400).json({ message: 'Failed to create bazar' });
     }
   });
@@ -2705,10 +2710,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put('/api/bazars/:bazarId', authenticate, checkRole(['System Administrator']), async (req, res) => {
     try {
       const { bazarId } = req.params;
-      const bazar = await storage.updateBazar(parseInt(bazarId), req.body);
+      const validatedData = insertBazarSchema.partial().parse(req.body);
+      const bazar = await storage.updateBazar(parseInt(bazarId), validatedData);
       res.json(bazar);
     } catch (error) {
       console.error('Bazar update error:', error);
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: 'Validation error', errors: error.errors });
+      }
       res.status(400).json({ message: 'Failed to update bazar' });
     }
   });

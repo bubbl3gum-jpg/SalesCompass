@@ -13,6 +13,12 @@ The system supports 6 different user roles (SPG, Supervisor, Stockist, Sales Adm
 - **Frontend Routing Fix**: Fixed React Query cache synchronization issue in useStoreAuth.tsx by adding query invalidation after login success. Users now properly redirect to dashboard after login instead of getting 404 errors.
 - **Comprehensive Testing**: End-to-end tests confirm both authentication and sales recording functionality work correctly for all user roles including System Administrator.
 
+**Bazar Management (February 2026)**:
+- **Database Schema**: Added `bazars` table with fields: bazarId, bazarName, location, startDate, endDate, status (upcoming/active/ended), createdAt, updatedAt
+- **API Routes**: Full CRUD endpoints at `/api/bazars` with admin-only access for mutations
+- **Frontend**: New Bazars management page at `/bazars` under Administration section in sidebar
+- **Status Control**: Admin-controlled status (upcoming, active, ended) - will integrate with settlements for daily revenue tracking
+
 ## User Preferences
 
 Preferred communication style: Simple, everyday language.
