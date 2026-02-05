@@ -24,14 +24,15 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
 
-// Define the settlement form schema based on the database structure
 const settlementFormSchema = z.object({
   kodeGudang: z.string().min(1, "Store is required"),
   tanggal: z.string().min(1, "Date is required"),
   cashAwal: z.string().min(1, "Starting cash amount is required"),
   cashAkhir: z.string().min(1, "Ending cash amount is required"),
   variance: z.string().optional().default("0"),
+  bazarId: z.string().optional(),
 });
 
 type SettlementFormData = z.infer<typeof settlementFormSchema>;
@@ -39,6 +40,15 @@ type SettlementFormData = z.infer<typeof settlementFormSchema>;
 interface Store {
   kodeGudang: string;
   namaGudang: string;
+}
+
+interface Bazar {
+  bazarId: number;
+  bazarName: string;
+  location: string;
+  startDate: string;
+  endDate: string;
+  status: 'upcoming' | 'active' | 'ended';
 }
 
 interface SettlementModalProps {
@@ -51,9 +61,13 @@ export function SettlementModal({ isOpen, onClose }: SettlementModalProps) {
   const { user } = useStoreAuth();
   const queryClient = useQueryClient();
 
-  // Fetch available stores
   const { data: stores = [], isLoading: storesLoading } = useQuery<Store[]>({
     queryKey: ["/api/stores"],
+    retry: false,
+  });
+
+  const { data: activeBazars = [] } = useQuery<Bazar[]>({
+    queryKey: ["/api/bazars/active"],
     retry: false,
   });
 
@@ -65,14 +79,13 @@ export function SettlementModal({ isOpen, onClose }: SettlementModalProps) {
       cashAwal: "",
       cashAkhir: "",
       variance: "0",
+      bazarId: "",
     },
   });
 
-  // Calculate variance when cash amounts change
   const watchCashAwal = form.watch("cashAwal");
   const watchCashAkhir = form.watch("cashAkhir");
 
-  // Auto-calculate variance when cash amounts change
   useEffect(() => {
     if (watchCashAwal && watchCashAkhir) {
       const awal = parseFloat(watchCashAwal) || 0;
@@ -90,6 +103,7 @@ export function SettlementModal({ isOpen, onClose }: SettlementModalProps) {
         cashAwal: data.cashAwal,
         cashAkhir: data.cashAkhir,
         variance: data.variance,
+        bazarId: data.bazarId ? parseInt(data.bazarId) : null,
       });
       return response.json();
     },
@@ -99,12 +113,8 @@ export function SettlementModal({ isOpen, onClose }: SettlementModalProps) {
         description: "Settlement has been created successfully",
       });
       
-      // Reset form
       form.reset();
-      
-      // Refresh settlements data
       queryClient.invalidateQueries({ queryKey: ['/api/settlements'] });
-      
       onClose();
     },
     onError: (error: any) => {
@@ -125,7 +135,6 @@ export function SettlementModal({ isOpen, onClose }: SettlementModalProps) {
     onClose();
   };
 
-  // Filter stores based on user permissions
   const availableStores = user?.can_access_all_stores 
     ? stores 
     : stores.filter(store => store.kodeGudang === user?.store_id);
@@ -139,7 +148,6 @@ export function SettlementModal({ isOpen, onClose }: SettlementModalProps) {
         
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            {/* Store Selection */}
             <FormField
               control={form.control}
               name="kodeGudang"
@@ -171,7 +179,45 @@ export function SettlementModal({ isOpen, onClose }: SettlementModalProps) {
               )}
             />
 
-            {/* Date */}
+            {activeBazars.length > 0 && (
+              <FormField
+                control={form.control}
+                name="bazarId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="flex items-center gap-2">
+                      Bazar Event 
+                      <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200 text-xs">
+                        Optional
+                      </Badge>
+                    </FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger data-testid="select-bazar">
+                          <SelectValue placeholder="Not a bazar settlement" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="">Not a bazar settlement</SelectItem>
+                        {activeBazars.map((bazar) => (
+                          <SelectItem key={bazar.bazarId} value={bazar.bazarId.toString()}>
+                            <span className="flex items-center gap-2">
+                              <span className="w-2 h-2 rounded-full bg-green-500" />
+                              {bazar.bazarName} - {bazar.location}
+                            </span>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      Link this settlement to an active bazar event for tracking
+                    </p>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
+
             <FormField
               control={form.control}
               name="tanggal"
@@ -190,7 +236,6 @@ export function SettlementModal({ isOpen, onClose }: SettlementModalProps) {
               )}
             />
 
-            {/* Starting Cash */}
             <FormField
               control={form.control}
               name="cashAwal"
@@ -211,7 +256,6 @@ export function SettlementModal({ isOpen, onClose }: SettlementModalProps) {
               )}
             />
 
-            {/* Ending Cash */}
             <FormField
               control={form.control}
               name="cashAkhir"
@@ -232,7 +276,6 @@ export function SettlementModal({ isOpen, onClose }: SettlementModalProps) {
               )}
             />
 
-            {/* Variance (auto-calculated) */}
             <FormField
               control={form.control}
               name="variance"
