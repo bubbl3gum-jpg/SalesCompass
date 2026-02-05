@@ -17,7 +17,8 @@ The system supports 6 different user roles (SPG, Supervisor, Stockist, Sales Adm
 - **Database Schema**: Added `bazars` table with fields: bazarId, bazarName, location, startDate, endDate, status (upcoming/active/ended), createdAt, updatedAt
 - **API Routes**: Full CRUD endpoints at `/api/bazars` with admin-only access for mutations
 - **Frontend**: New Bazars management page at `/bazars` under Administration section in sidebar
-- **Status Control**: Admin-controlled status (upcoming, active, ended) - will integrate with settlements for daily revenue tracking
+- **Status Control**: Admin-controlled status (upcoming, active, ended)
+- **Settlement Integration**: Settlements can now optionally be linked to active bazars via bazarId field. Settlement modal shows bazar selection when active bazars exist. Settlements list shows bazar indicator badges and supports filtering by bazar type (all/regular/bazar/specific bazar)
 
 ## User Preferences
 
