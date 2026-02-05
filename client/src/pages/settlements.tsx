@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Sidebar } from "@/components/sidebar";
 import { useSidebar } from "@/hooks/useSidebar";
@@ -24,7 +24,7 @@ import {
 import { cn } from "@/lib/utils";
 import { SettlementModal } from "@/components/settlement-modal";
 import { format } from "date-fns";
-import { Search, Store, Calendar, DollarSign } from "lucide-react";
+import { Search, Store, Calendar, DollarSign, CreditCard } from "lucide-react";
 
 interface Settlement {
   settlementId: number;
@@ -43,6 +43,12 @@ interface Bazar {
   status: string;
 }
 
+interface EdcSettlement {
+  edcSettlementId: number;
+  settlementId: number;
+  settlementValue: string;
+}
+
 export default function Settlements() {
   const { isExpanded } = useSidebar();
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -58,6 +64,32 @@ export default function Settlements() {
     queryKey: ['/api/bazars'],
     retry: false,
   });
+
+  const settlementIds = useMemo(() => 
+    settlements.map(s => s.settlementId).join(','), 
+    [settlements]
+  );
+
+  const { data: edcSettlements = [] } = useQuery<EdcSettlement[]>({
+    queryKey: ['/api/edc-settlements', { settlement_ids: settlementIds }],
+    queryFn: async () => {
+      if (!settlementIds) return [];
+      const response = await fetch(`/api/edc-settlements?settlement_ids=${settlementIds}`);
+      if (!response.ok) return [];
+      return response.json();
+    },
+    enabled: settlements.length > 0,
+    retry: false,
+  });
+
+  const edcTotalsBySettlement = useMemo(() => {
+    const map = new Map<number, number>();
+    edcSettlements.forEach(edc => {
+      const current = map.get(edc.settlementId) || 0;
+      map.set(edc.settlementId, current + parseFloat(edc.settlementValue || '0'));
+    });
+    return map;
+  }, [edcSettlements]);
 
   const bazarMap = new Map(bazars.map(b => [b.bazarId, b]));
 
@@ -195,10 +227,11 @@ export default function Settlements() {
                     <TableHeader>
                       <TableRow>
                         <TableHead>Date</TableHead>
-                        <TableHead>Store</TableHead>
+                        <TableHead>Store/Bazar</TableHead>
                         <TableHead>Type</TableHead>
                         <TableHead className="text-right">Starting Cash</TableHead>
                         <TableHead className="text-right">Ending Cash</TableHead>
+                        <TableHead className="text-right">EDC Total</TableHead>
                         <TableHead className="text-right">Variance</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -206,6 +239,7 @@ export default function Settlements() {
                       {filteredSettlements.map((settlement) => {
                         const bazar = settlement.bazarId ? bazarMap.get(settlement.bazarId) : null;
                         const variance = parseFloat(settlement.variance || "0");
+                        const edcTotal = edcTotalsBySettlement.get(settlement.settlementId) || 0;
                         return (
                           <TableRow key={settlement.settlementId}>
                             <TableCell className="font-medium">
@@ -217,14 +251,14 @@ export default function Settlements() {
                             <TableCell>
                               <div className="flex items-center gap-2">
                                 <Store className="h-4 w-4 text-gray-400" />
-                                {settlement.kodeGudang}
+                                {bazar ? bazar.bazarName : settlement.kodeGudang}
                               </div>
                             </TableCell>
                             <TableCell>
                               {bazar ? (
                                 <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200">
                                   <span className="w-2 h-2 rounded-full bg-purple-500 mr-1.5" />
-                                  {bazar.bazarName}
+                                  Bazar
                                 </Badge>
                               ) : (
                                 <Badge variant="outline" className="bg-gray-50 text-gray-600 border-gray-200">
@@ -237,6 +271,16 @@ export default function Settlements() {
                             </TableCell>
                             <TableCell className="text-right font-mono">
                               {formatCurrency(settlement.cashAkhir)}
+                            </TableCell>
+                            <TableCell className="text-right font-mono">
+                              {edcTotal > 0 ? (
+                                <div className="flex items-center justify-end gap-1">
+                                  <CreditCard className="h-3 w-3 text-blue-500" />
+                                  <span className="text-blue-600">{formatCurrency(edcTotal)}</span>
+                                </div>
+                              ) : (
+                                <span className="text-gray-400">-</span>
+                              )}
                             </TableCell>
                             <TableCell className={cn(
                               "text-right font-mono font-medium",

@@ -1408,6 +1408,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get EDC settlements for multiple settlement IDs
+  app.get('/api/edc-settlements', authenticate, async (req, res) => {
+    try {
+      const { settlement_ids } = req.query;
+      if (!settlement_ids) {
+        return res.json([]);
+      }
+      const ids = (settlement_ids as string).split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id));
+      const edcSettlements = await storage.getEdcSettlementsBySettlementIds(ids);
+      res.json(edcSettlements);
+    } catch (error) {
+      console.error('Get EDC settlements error:', error);
+      res.status(500).json({ message: 'Failed to get EDC settlements' });
+    }
+  });
+
   // Reconciliation endpoint
   app.get('/api/settlements/reconcile', authenticate, async (req, res) => {
     try {

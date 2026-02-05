@@ -145,6 +145,7 @@ export interface IStorage {
   getStoreEdc(): Promise<StoreEdc[]>;
   createStoreEdc(data: InsertStoreEdc): Promise<StoreEdc>;
   createEdcSettlement(data: InsertEdcSettlement): Promise<EdcSettlement>;
+  getEdcSettlementsBySettlementIds(settlementIds: number[]): Promise<EdcSettlement[]>;
 
   // Staff operations
   getStaff(): Promise<Staff[]>;
@@ -810,6 +811,11 @@ export class DatabaseStorage implements IStorage {
   async createEdcSettlement(data: InsertEdcSettlement): Promise<EdcSettlement> {
     const [result] = await db.insert(edcSettlement).values(data).returning();
     return result;
+  }
+
+  async getEdcSettlementsBySettlementIds(settlementIds: number[]): Promise<EdcSettlement[]> {
+    if (settlementIds.length === 0) return [];
+    return await db.select().from(edcSettlement).where(inArray(edcSettlement.settlementId, settlementIds));
   }
 
   // Staff operations
