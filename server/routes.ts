@@ -2657,6 +2657,73 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Bazar Management endpoints
+  app.get('/api/bazars', authenticate, async (req, res) => {
+    try {
+      const bazars = await storage.getBazars();
+      res.json(bazars);
+    } catch (error) {
+      console.error('Bazar fetch error:', error);
+      res.status(500).json({ message: 'Failed to get bazars' });
+    }
+  });
+
+  app.get('/api/bazars/active', authenticate, async (req, res) => {
+    try {
+      const bazars = await storage.getActiveBazars();
+      res.json(bazars);
+    } catch (error) {
+      console.error('Active bazars fetch error:', error);
+      res.status(500).json({ message: 'Failed to get active bazars' });
+    }
+  });
+
+  app.get('/api/bazars/:bazarId', authenticate, async (req, res) => {
+    try {
+      const { bazarId } = req.params;
+      const bazar = await storage.getBazarById(parseInt(bazarId));
+      if (!bazar) {
+        return res.status(404).json({ message: 'Bazar not found' });
+      }
+      res.json(bazar);
+    } catch (error) {
+      console.error('Bazar fetch error:', error);
+      res.status(500).json({ message: 'Failed to get bazar' });
+    }
+  });
+
+  app.post('/api/bazars', authenticate, checkRole(['System Administrator']), async (req, res) => {
+    try {
+      const bazar = await storage.createBazar(req.body);
+      res.json(bazar);
+    } catch (error) {
+      console.error('Bazar creation error:', error);
+      res.status(400).json({ message: 'Failed to create bazar' });
+    }
+  });
+
+  app.put('/api/bazars/:bazarId', authenticate, checkRole(['System Administrator']), async (req, res) => {
+    try {
+      const { bazarId } = req.params;
+      const bazar = await storage.updateBazar(parseInt(bazarId), req.body);
+      res.json(bazar);
+    } catch (error) {
+      console.error('Bazar update error:', error);
+      res.status(400).json({ message: 'Failed to update bazar' });
+    }
+  });
+
+  app.delete('/api/bazars/:bazarId', authenticate, checkRole(['System Administrator']), async (req, res) => {
+    try {
+      const { bazarId } = req.params;
+      await storage.deleteBazar(parseInt(bazarId));
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Bazar deletion error:', error);
+      res.status(500).json({ message: 'Failed to delete bazar' });
+    }
+  });
+
   // Stock Opname endpoints
   app.get('/api/stock-opname', authenticate, async (req, res) => {
     try {
