@@ -350,3 +350,24 @@ export type InsertVirtualStoreInventory = typeof virtualStoreInventory.$inferIns
 export type VirtualStoreInventory = typeof virtualStoreInventory.$inferSelect;
 
 export const insertVirtualStoreInventorySchema = createInsertSchema(virtualStoreInventory).omit({ inventoryId: true, createdAt: true, updatedAt: true });
+
+// Bazar status enum
+export const bazarStatusEnum = pgEnum('bazar_status', ['upcoming', 'active', 'ended']);
+
+// Bazars - for managing bazar events and their settlements
+export const bazars = pgTable("bazars", {
+  bazarId: serial("bazar_id").primaryKey(),
+  bazarName: varchar("bazar_name", { length: 255 }).notNull(),
+  location: varchar("location", { length: 500 }),
+  startDate: date("start_date").notNull(),
+  endDate: date("end_date").notNull(),
+  status: bazarStatusEnum("status").notNull().default('upcoming'),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export type InsertBazar = typeof bazars.$inferInsert;
+export type Bazar = typeof bazars.$inferSelect;
+
+export const insertBazarSchema = createInsertSchema(bazars).omit({ bazarId: true, createdAt: true, updatedAt: true });
