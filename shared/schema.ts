@@ -137,6 +137,22 @@ export const laporanPenjualan = pgTable("laporan_penjualan", {
   preOrder: boolean("pre_order").default(false),
 });
 
+// Bazar status enum
+export const bazarStatusEnum = pgEnum('bazar_status', ['upcoming', 'active', 'ended']);
+
+// Bazars - for managing bazar events and their settlements
+export const bazars = pgTable("bazars", {
+  bazarId: serial("bazar_id").primaryKey(),
+  bazarName: varchar("bazar_name", { length: 255 }).notNull(),
+  location: varchar("location", { length: 500 }),
+  startDate: date("start_date").notNull(),
+  endDate: date("end_date").notNull(),
+  status: bazarStatusEnum("status").notNull().default('upcoming'),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 // Settlements
 export const settlements = pgTable("settlement", {
   settlementId: integer("settlement_id").primaryKey().generatedByDefaultAsIdentity(),
@@ -145,6 +161,7 @@ export const settlements = pgTable("settlement", {
   cashAwal: decimal("cash_awal", { precision: 12, scale: 2 }),
   cashAkhir: decimal("cash_akhir", { precision: 12, scale: 2 }),
   variance: decimal("variance", { precision: 12, scale: 2 }),
+  bazarId: integer("bazar_id").references(() => bazars.bazarId),
 }, (table) => [
   index("uq_settlement_gudang_tanggal").on(table.kodeGudang, table.tanggal),
 ]);
@@ -258,6 +275,9 @@ export type Pricelist = typeof pricelist.$inferSelect;
 export type InsertLaporanPenjualan = typeof laporanPenjualan.$inferInsert;
 export type LaporanPenjualan = typeof laporanPenjualan.$inferSelect;
 
+export type InsertBazar = typeof bazars.$inferInsert;
+export type Bazar = typeof bazars.$inferSelect;
+
 export type InsertSettlement = typeof settlements.$inferInsert;
 export type Settlement = typeof settlements.$inferSelect;
 
@@ -296,6 +316,7 @@ export const insertDiscountTypeSchema = createInsertSchema(discountTypes).omit({
 });
 export const insertPricelistSchema = createInsertSchema(pricelist).omit({ pricelistId: true });
 export const insertLaporanPenjualanSchema = createInsertSchema(laporanPenjualan).omit({ penjualanId: true });
+export const insertBazarSchema = createInsertSchema(bazars).omit({ bazarId: true, createdAt: true, updatedAt: true });
 export const insertSettlementSchema = createInsertSchema(settlements).omit({ settlementId: true });
 export const insertTransferOrderSchema = createInsertSchema(transferOrders);
 export const insertToItemListSchema = createInsertSchema(toItemList).omit({ toItemListId: true });
@@ -350,24 +371,3 @@ export type InsertVirtualStoreInventory = typeof virtualStoreInventory.$inferIns
 export type VirtualStoreInventory = typeof virtualStoreInventory.$inferSelect;
 
 export const insertVirtualStoreInventorySchema = createInsertSchema(virtualStoreInventory).omit({ inventoryId: true, createdAt: true, updatedAt: true });
-
-// Bazar status enum
-export const bazarStatusEnum = pgEnum('bazar_status', ['upcoming', 'active', 'ended']);
-
-// Bazars - for managing bazar events and their settlements
-export const bazars = pgTable("bazars", {
-  bazarId: serial("bazar_id").primaryKey(),
-  bazarName: varchar("bazar_name", { length: 255 }).notNull(),
-  location: varchar("location", { length: 500 }),
-  startDate: date("start_date").notNull(),
-  endDate: date("end_date").notNull(),
-  status: bazarStatusEnum("status").notNull().default('upcoming'),
-  notes: text("notes"),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-});
-
-export type InsertBazar = typeof bazars.$inferInsert;
-export type Bazar = typeof bazars.$inferSelect;
-
-export const insertBazarSchema = createInsertSchema(bazars).omit({ bazarId: true, createdAt: true, updatedAt: true });
