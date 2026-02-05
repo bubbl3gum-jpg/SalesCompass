@@ -25,14 +25,28 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
+import { Plus, Trash2, CreditCard } from "lucide-react";
 
 const settlementFormSchema = z.object({
-  kodeGudang: z.string().min(1, "Store is required"),
+  settlementType: z.enum(["store", "bazar"]),
+  kodeGudang: z.string().optional(),
+  bazarId: z.string().optional(),
   tanggal: z.string().min(1, "Date is required"),
   cashAwal: z.string().min(1, "Starting cash amount is required"),
   cashAkhir: z.string().min(1, "Ending cash amount is required"),
   variance: z.string().optional().default("0"),
-  bazarId: z.string().optional(),
+}).refine((data) => {
+  if (data.settlementType === "store" && !data.kodeGudang) {
+    return false;
+  }
+  if (data.settlementType === "bazar" && !data.bazarId) {
+    return false;
+  }
+  return true;
+}, {
+  message: "Please select a store or bazar",
+  path: ["kodeGudang"],
 });
 
 type SettlementFormData = z.infer<typeof settlementFormSchema>;
@@ -51,6 +65,17 @@ interface Bazar {
   status: 'upcoming' | 'active' | 'ended';
 }
 
+interface Edc {
+  edcId: number;
+  namaEdc: string;
+  edcType: string;
+}
+
+interface EdcEntry {
+  edcId: string;
+  amount: string;
+}
+
 interface SettlementModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -60,6 +85,7 @@ export function SettlementModal({ isOpen, onClose }: SettlementModalProps) {
   const { toast } = useToast();
   const { user } = useStoreAuth();
   const queryClient = useQueryClient();
+  const [edcEntries, setEdcEntries] = useState<EdcEntry[]>([]);
 
   const { data: stores = [], isLoading: storesLoading } = useQuery<Store[]>({
     queryKey: ["/api/stores"],
@@ -71,20 +97,33 @@ export function SettlementModal({ isOpen, onClose }: SettlementModalProps) {
     retry: false,
   });
 
+  const { data: edcOptions = [] } = useQuery<Edc[]>({
+    queryKey: ["/api/edc"],
+    retry: false,
+  });
+
   const form = useForm<SettlementFormData>({
     resolver: zodResolver(settlementFormSchema),
     defaultValues: {
+      settlementType: activeBazars.length > 0 ? "bazar" : "store",
       kodeGudang: user?.store_id || "",
+      bazarId: "",
       tanggal: new Date().toISOString().split('T')[0],
       cashAwal: "",
       cashAkhir: "",
       variance: "0",
-      bazarId: "",
     },
   });
 
+  const settlementType = form.watch("settlementType");
   const watchCashAwal = form.watch("cashAwal");
   const watchCashAkhir = form.watch("cashAkhir");
+
+  useEffect(() => {
+    if (isOpen && activeBazars.length > 0) {
+      form.setValue("settlementType", "bazar");
+    }
+  }, [isOpen, activeBazars.length, form]);
 
   useEffect(() => {
     if (watchCashAwal && watchCashAkhir) {
@@ -95,16 +134,45 @@ export function SettlementModal({ isOpen, onClose }: SettlementModalProps) {
     }
   }, [watchCashAwal, watchCashAkhir, form]);
 
+  const addEdcEntry = () => {
+    setEdcEntries([...edcEntries, { edcId: "", amount: "" }]);
+  };
+
+  const removeEdcEntry = (index: number) => {
+    setEdcEntries(edcEntries.filter((_, i) => i !== index));
+  };
+
+  const updateEdcEntry = (index: number, field: keyof EdcEntry, value: string) => {
+    const updated = [...edcEntries];
+    updated[index][field] = value;
+    setEdcEntries(updated);
+  };
+
+  const getTotalEdc = () => {
+    return edcEntries.reduce((sum, entry) => sum + (parseFloat(entry.amount) || 0), 0);
+  };
+
   const createSettlementMutation = useMutation({
     mutationFn: async (data: SettlementFormData) => {
-      const response = await apiRequest('POST', '/api/settlements', {
-        kodeGudang: data.kodeGudang,
+      const payload: any = {
         tanggal: data.tanggal,
         cashAwal: data.cashAwal,
         cashAkhir: data.cashAkhir,
         variance: data.variance,
-        bazarId: data.bazarId ? parseInt(data.bazarId) : null,
-      });
+        edcEntries: edcEntries.filter(e => e.edcId && e.amount).map(e => ({
+          edcId: parseInt(e.edcId),
+          amount: e.amount,
+        })),
+      };
+
+      if (data.settlementType === "bazar" && data.bazarId) {
+        payload.bazarId = parseInt(data.bazarId);
+        payload.kodeGudang = `BAZAR-${data.bazarId}`;
+      } else {
+        payload.kodeGudang = data.kodeGudang;
+      }
+
+      const response = await apiRequest('POST', '/api/settlements', payload);
       return response.json();
     },
     onSuccess: () => {
@@ -114,6 +182,7 @@ export function SettlementModal({ isOpen, onClose }: SettlementModalProps) {
       });
       
       form.reset();
+      setEdcEntries([]);
       queryClient.invalidateQueries({ queryKey: ['/api/settlements'] });
       onClose();
     },
@@ -132,6 +201,7 @@ export function SettlementModal({ isOpen, onClose }: SettlementModalProps) {
 
   const handleClose = () => {
     form.reset();
+    setEdcEntries([]);
     onClose();
   };
 
@@ -139,79 +209,115 @@ export function SettlementModal({ isOpen, onClose }: SettlementModalProps) {
     ? stores 
     : stores.filter(store => store.kodeGudang === user?.store_id);
 
+  const getEdcName = (edcId: string) => {
+    const edc = edcOptions.find(e => e.edcId.toString() === edcId);
+    return edc ? `${edc.namaEdc} (${edc.edcType})` : "";
+  };
+
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Create New Settlement</DialogTitle>
         </DialogHeader>
         
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            <FormField
-              control={form.control}
-              name="kodeGudang"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Store</FormLabel>
-                  <Select onValueChange={field.onChange} defaultValue={field.value}>
-                    <FormControl>
-                      <SelectTrigger data-testid="select-store">
-                        <SelectValue placeholder="Select a store" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {storesLoading ? (
-                        <SelectItem value="" disabled>Loading stores...</SelectItem>
-                      ) : availableStores.length === 0 ? (
-                        <SelectItem value="" disabled>No stores available</SelectItem>
-                      ) : (
-                        availableStores.map((store) => (
-                          <SelectItem key={store.kodeGudang} value={store.kodeGudang}>
-                            {store.namaGudang} ({store.kodeGudang})
-                          </SelectItem>
-                        ))
-                      )}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
             {activeBazars.length > 0 && (
+              <FormField
+                control={form.control}
+                name="settlementType"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Settlement Type</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select type" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="bazar">
+                          <span className="flex items-center gap-2">
+                            <span className="w-2 h-2 rounded-full bg-purple-500" />
+                            Bazar Settlement
+                          </span>
+                        </SelectItem>
+                        <SelectItem value="store">
+                          <span className="flex items-center gap-2">
+                            <span className="w-2 h-2 rounded-full bg-blue-500" />
+                            Regular Store Settlement
+                          </span>
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
+
+            {settlementType === "store" && (
+              <FormField
+                control={form.control}
+                name="kodeGudang"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Store</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <FormControl>
+                        <SelectTrigger data-testid="select-store">
+                          <SelectValue placeholder="Select a store" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {storesLoading ? (
+                          <SelectItem value="" disabled>Loading stores...</SelectItem>
+                        ) : availableStores.length === 0 ? (
+                          <SelectItem value="" disabled>No stores available</SelectItem>
+                        ) : (
+                          availableStores.map((store) => (
+                            <SelectItem key={store.kodeGudang} value={store.kodeGudang}>
+                              {store.namaGudang} ({store.kodeGudang})
+                            </SelectItem>
+                          ))
+                        )}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
+
+            {settlementType === "bazar" && (
               <FormField
                 control={form.control}
                 name="bazarId"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="flex items-center gap-2">
-                      Bazar Event 
-                      <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200 text-xs">
-                        Optional
-                      </Badge>
-                    </FormLabel>
+                    <FormLabel>Active Bazar</FormLabel>
                     <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
                         <SelectTrigger data-testid="select-bazar">
-                          <SelectValue placeholder="Not a bazar settlement" />
+                          <SelectValue placeholder="Select a bazar" />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="">Not a bazar settlement</SelectItem>
-                        {activeBazars.map((bazar) => (
-                          <SelectItem key={bazar.bazarId} value={bazar.bazarId.toString()}>
-                            <span className="flex items-center gap-2">
-                              <span className="w-2 h-2 rounded-full bg-green-500" />
-                              {bazar.bazarName} - {bazar.location}
-                            </span>
-                          </SelectItem>
-                        ))}
+                        {activeBazars.length === 0 ? (
+                          <SelectItem value="" disabled>No active bazars available</SelectItem>
+                        ) : (
+                          activeBazars.map((bazar) => (
+                            <SelectItem key={bazar.bazarId} value={bazar.bazarId.toString()}>
+                              <span className="flex items-center gap-2">
+                                <span className="w-2 h-2 rounded-full bg-green-500" />
+                                {bazar.bazarName} - {bazar.location}
+                              </span>
+                            </SelectItem>
+                          ))
+                        )}
                       </SelectContent>
                     </Select>
-                    <p className="text-xs text-muted-foreground">
-                      Link this settlement to an active bazar event for tracking
-                    </p>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -236,52 +342,137 @@ export function SettlementModal({ isOpen, onClose }: SettlementModalProps) {
               )}
             />
 
-            <FormField
-              control={form.control}
-              name="cashAwal"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Starting Cash Amount</FormLabel>
-                  <FormControl>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      placeholder="0.00"
-                      {...field}
-                      data-testid="input-cash-start"
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            <div className="grid grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="cashAwal"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Starting Cash</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        placeholder="0.00"
+                        {...field}
+                        data-testid="input-cash-start"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-            <FormField
-              control={form.control}
-              name="cashAkhir"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Ending Cash Amount</FormLabel>
-                  <FormControl>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      placeholder="0.00"
-                      {...field}
-                      data-testid="input-cash-end"
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+              <FormField
+                control={form.control}
+                name="cashAkhir"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Ending Cash</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        placeholder="0.00"
+                        {...field}
+                        data-testid="input-cash-end"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <Card className="border-dashed">
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <CreditCard className="h-4 w-4 text-blue-600" />
+                    <span className="font-medium text-sm">EDC Payments</span>
+                    {edcEntries.length > 0 && (
+                      <Badge variant="outline" className="bg-blue-50 text-blue-700">
+                        {edcEntries.length} entry
+                      </Badge>
+                    )}
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={addEdcEntry}
+                    disabled={edcOptions.length === 0}
+                  >
+                    <Plus className="h-3 w-3 mr-1" />
+                    Add EDC
+                  </Button>
+                </div>
+
+                {edcOptions.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-2">
+                    No payment methods configured. Add EDC options in Admin Settings.
+                  </p>
+                ) : edcEntries.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-2">
+                    No EDC payments added. Click "Add EDC" to include card payments.
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {edcEntries.map((entry, index) => (
+                      <div key={index} className="flex items-center gap-2">
+                        <Select
+                          value={entry.edcId}
+                          onValueChange={(val) => updateEdcEntry(index, "edcId", val)}
+                        >
+                          <SelectTrigger className="flex-1">
+                            <SelectValue placeholder="Select bank/EDC" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {edcOptions.map((edc) => (
+                              <SelectItem key={edc.edcId} value={edc.edcId.toString()}>
+                                {edc.namaEdc} ({edc.edcType})
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          placeholder="Amount"
+                          className="w-32"
+                          value={entry.amount}
+                          onChange={(e) => updateEdcEntry(index, "amount", e.target.value)}
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => removeEdcEntry(index)}
+                          className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+                    {edcEntries.length > 0 && (
+                      <div className="flex justify-between items-center pt-2 border-t mt-2">
+                        <span className="text-sm font-medium text-gray-600">Total EDC:</span>
+                        <span className="font-semibold text-blue-600">
+                          {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(getTotalEdc())}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
 
             <FormField
               control={form.control}
               name="variance"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Variance (Auto-calculated)</FormLabel>
+                  <FormLabel>Cash Variance (Auto-calculated)</FormLabel>
                   <FormControl>
                     <Input
                       type="number"

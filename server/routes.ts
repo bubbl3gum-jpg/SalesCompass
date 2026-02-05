@@ -1362,7 +1362,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Settlement creation - Supervisors and above
   app.post('/api/settlements', authenticate, checkRole(['Supervisor', 'Sales Administrator', 'Finance', 'System Administrator']), async (req, res) => {
     try {
-      const validatedData = insertSettlementSchema.parse(req.body);
+      const { edcEntries, ...settlementData } = req.body;
+      const validatedData = insertSettlementSchema.parse(settlementData);
 
       // Check if settlement already exists for this store/date
       const existing = await storage.getSettlementByStoreAndDate(
@@ -1375,6 +1376,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const settlement = await storage.createSettlement(validatedData);
+
+      // Create EDC settlement entries if provided
+      if (edcEntries && Array.isArray(edcEntries) && edcEntries.length > 0) {
+        for (const entry of edcEntries) {
+          await storage.createEdcSettlement({
+            settlementId: settlement.settlementId,
+            tanggal: validatedData.tanggal!,
+            settlementValue: entry.amount,
+            storeEdcId: entry.edcId,
+          });
+        }
+      }
+
       res.json(settlement);
     } catch (error) {
       console.error('Settlement creation error:', error);
