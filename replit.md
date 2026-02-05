@@ -19,6 +19,9 @@ The system supports 6 different user roles (SPG, Supervisor, Stockist, Sales Adm
 - **Frontend**: New Bazars management page at `/bazars` under Administration section in sidebar
 - **Status Control**: Admin-controlled status (upcoming, active, ended)
 - **Settlement Integration**: Settlements can now optionally be linked to active bazars via bazarId field. Settlement modal shows bazar selection when active bazars exist. Settlements list shows bazar indicator badges and supports filtering by bazar type (all/regular/bazar/specific bazar)
+- **Recurring Bazars**: Bazars can occur multiple times at the same location with different date ranges. Each occurrence is a separate record with its own revenue tracking. Timestamps (startDate/endDate) differentiate instances, not location.
+- **Bazar History View**: Toggle between Grid and History views. History view groups bazars by location, showing all occurrences with individual and total revenue per location.
+- **Repeat Bazar**: Ended bazars have a "Repeat" button that pre-fills a new bazar form with the same name and location but new dates, making it easy to create recurring events.
 
 ## User Preferences
 
