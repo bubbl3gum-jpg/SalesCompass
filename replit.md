@@ -18,7 +18,8 @@ The system supports 6 different user roles (SPG, Supervisor, Stockist, Sales Adm
 - **API Routes**: Full CRUD endpoints at `/api/bazars` with admin-only access for mutations
 - **Frontend**: New Bazars management page at `/bazars` under Administration section in sidebar
 - **Status Control**: Admin-controlled status (upcoming, active, ended)
-- **Settlement Integration**: Settlements can now optionally be linked to active bazars via bazarId field. Settlement modal shows bazar selection when active bazars exist. Settlements list shows bazar indicator badges and supports filtering by bazar type (all/regular/bazar/specific bazar)
+- **Settlement Integration**: Settlements can now optionally be linked to active bazars via bazarId field. Settlement modal allows choosing between "Store Settlement" or "Bazar Settlement" - selecting bazar hides the store dropdown. Settlements list shows bazar indicator badges and supports filtering by bazar type (all/regular/bazar/specific bazar)
+- **EDC Payments**: Settlement modal now includes EDC payment section where users can add multiple card/bank payments. EDC options come from the payment methods configured in Admin Settings. EDC totals are displayed in the settlements list table alongside cash amounts
 - **Recurring Bazars**: Bazars can occur multiple times at the same location with different date ranges. Each occurrence is a separate record with its own revenue tracking. Timestamps (startDate/endDate) differentiate instances, not location.
 - **Bazar History View**: Toggle between Grid and History views. History view groups bazars by location, showing all occurrences with individual and total revenue per location.
 - **Repeat Bazar**: Ended bazars have a "Repeat" button that pre-fills a new bazar form with the same name and location but new dates, making it easy to create recurring events.
