@@ -13,6 +13,7 @@ import {
   edc,
   storeEdc,
   edcSettlement,
+  storeDiscounts,
   staff,
   positions,
   stock,
@@ -56,6 +57,7 @@ import {
   type InsertVirtualStoreInventory,
   type Bazar,
   type InsertBazar,
+  type StoreDiscount,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, sql, desc, sum, or, ilike, inArray, gt } from "drizzle-orm";
@@ -97,6 +99,12 @@ export interface IStorage {
   createDiscountType(data: InsertDiscountType): Promise<DiscountType>;
   updateDiscountType(discountId: number, data: Partial<InsertDiscountType>): Promise<DiscountType>;
   deleteDiscountType(discountId: number): Promise<void>;
+
+  // Store Discount operations
+  getStoreDiscounts(): Promise<any[]>;
+  getDiscountsByStore(kodeGudang: string): Promise<DiscountType[]>;
+  assignDiscountToStore(kodeGudang: string, discountId: number): Promise<StoreDiscount>;
+  removeDiscountFromStore(storeDiscountsId: number): Promise<void>;
 
   // Pricelist operations
   getPricelist(): Promise<Pricelist[]>;
@@ -537,6 +545,53 @@ export class DatabaseStorage implements IStorage {
 
   async deleteDiscountType(discountId: number): Promise<void> {
     await db.delete(discountTypes).where(eq(discountTypes.discountId, discountId));
+  }
+
+  // Store Discount operations
+  async getStoreDiscounts(): Promise<any[]> {
+    const results = await db
+      .select({
+        storeDiscountsId: storeDiscounts.storeDiscountsId,
+        kodeGudang: storeDiscounts.kodeGudang,
+        discountId: storeDiscounts.discountId,
+        namaGudang: stores.namaGudang,
+        discountName: discountTypes.discountName,
+        discountType: discountTypes.discountType,
+        discountAmount: discountTypes.discountAmount,
+        startFrom: discountTypes.startFrom,
+        endAt: discountTypes.endAt,
+      })
+      .from(storeDiscounts)
+      .leftJoin(stores, eq(storeDiscounts.kodeGudang, stores.kodeGudang))
+      .leftJoin(discountTypes, eq(storeDiscounts.discountId, discountTypes.discountId));
+    return results;
+  }
+
+  async getDiscountsByStore(kodeGudang: string): Promise<DiscountType[]> {
+    const results = await db
+      .select({
+        discountId: discountTypes.discountId,
+        discountName: discountTypes.discountName,
+        discountType: discountTypes.discountType,
+        discountAmount: discountTypes.discountAmount,
+        startFrom: discountTypes.startFrom,
+        endAt: discountTypes.endAt,
+      })
+      .from(storeDiscounts)
+      .innerJoin(discountTypes, eq(storeDiscounts.discountId, discountTypes.discountId))
+      .where(eq(storeDiscounts.kodeGudang, kodeGudang));
+    return results;
+  }
+
+  async assignDiscountToStore(kodeGudang: string, discountId: number): Promise<StoreDiscount> {
+    const [result] = await db.insert(storeDiscounts)
+      .values({ kodeGudang, discountId })
+      .returning();
+    return result;
+  }
+
+  async removeDiscountFromStore(storeDiscountsId: number): Promise<void> {
+    await db.delete(storeDiscounts).where(eq(storeDiscounts.storeDiscountsId, storeDiscountsId));
   }
 
   // Pricelist operations

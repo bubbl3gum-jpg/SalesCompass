@@ -195,10 +195,11 @@ export function SalesEntryModal({ isOpen, onClose, selectedStore, editingSale }:
   // Ensure stores is an array
   const storesArray = Array.isArray(stores) ? stores : [];
 
-  // Get all discounts for filtering
-  const { data: allDiscounts } = useQuery({
-    queryKey: ["/api/discounts"],
-    enabled: hasPermission ? hasPermission("discount:read") : false,
+  const currentStore = form.watch('kodeGudang');
+  
+  const { data: storeDiscounts } = useQuery({
+    queryKey: ["/api/store-discounts", currentStore],
+    enabled: !!currentStore && isOpen,
     retry: false,
   });
 
@@ -260,12 +261,10 @@ export function SalesEntryModal({ isOpen, onClose, selectedStore, editingSale }:
     const maxQty = item.availableQuantity || 1;
     setAvailableQuantities(Array.from({ length: maxQty }, (_, i) => i + 1));
     
-    // Filter applicable discounts and add SP discount if available
     let discountOptions: DiscountOption[] = [];
     
-    if (allDiscounts && Array.isArray(allDiscounts)) {
-      const regularDiscounts = allDiscounts.filter((discount: any) => {
-        // Check if discount is active
+    if (storeDiscounts && Array.isArray(storeDiscounts)) {
+      const activeDiscounts = storeDiscounts.filter((discount: any) => {
         const now = new Date();
         const startDate = discount.startFrom ? new Date(discount.startFrom) : null;
         const endDate = discount.endAt ? new Date(discount.endAt) : null;
@@ -276,7 +275,7 @@ export function SalesEntryModal({ isOpen, onClose, selectedStore, editingSale }:
         return true;
       });
       
-      discountOptions = regularDiscounts || [];
+      discountOptions = activeDiscounts || [];
     }
 
     // Add SP as a discount option if it exists and is lower than normal price

@@ -2265,6 +2265,56 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Store Discount assignment endpoints
+  app.get('/api/store-discounts', authenticate, async (req, res) => {
+    try {
+      const storeDiscountsList = await storage.getStoreDiscounts();
+      res.json(storeDiscountsList);
+    } catch (error) {
+      console.error('Get store discounts error:', error);
+      res.status(500).json({ message: 'Failed to get store discounts' });
+    }
+  });
+
+  app.get('/api/store-discounts/:kodeGudang', authenticate, async (req, res) => {
+    try {
+      const { kodeGudang } = req.params;
+      const discounts = await storage.getDiscountsByStore(kodeGudang);
+      res.json(discounts);
+    } catch (error) {
+      console.error('Get discounts by store error:', error);
+      res.status(500).json({ message: 'Failed to get store discounts' });
+    }
+  });
+
+  app.post('/api/store-discounts', authenticate, checkRole(['System Administrator']), async (req, res) => {
+    try {
+      const { kodeGudang, discountId } = req.body;
+      if (!kodeGudang || !discountId) {
+        return res.status(400).json({ message: 'Store code and discount ID are required' });
+      }
+      const result = await storage.assignDiscountToStore(kodeGudang, parseInt(discountId));
+      res.json(result);
+    } catch (error: any) {
+      console.error('Assign discount to store error:', error);
+      if (error.code === '23505') {
+        return res.status(409).json({ message: 'This discount is already assigned to this store' });
+      }
+      res.status(500).json({ message: 'Failed to assign discount to store' });
+    }
+  });
+
+  app.delete('/api/store-discounts/:id', authenticate, checkRole(['System Administrator']), async (req, res) => {
+    try {
+      const { id } = req.params;
+      await storage.removeDiscountFromStore(parseInt(id));
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Remove store discount error:', error);
+      res.status(500).json({ message: 'Failed to remove discount from store' });
+    }
+  });
+
   // Pricelist endpoints
   app.get('/api/pricelist', authenticate, async (req, res) => {
     try {

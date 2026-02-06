@@ -293,6 +293,9 @@ export type StockOpname = typeof stockOpname.$inferSelect;
 export type InsertSoItemList = typeof soItemList.$inferInsert;
 export type SoItemList = typeof soItemList.$inferSelect;
 
+export type InsertStoreDiscount = typeof storeDiscounts.$inferInsert;
+export type StoreDiscount = typeof storeDiscounts.$inferSelect;
+
 export type InsertEdc = typeof edc.$inferInsert;
 export type Edc = typeof edc.$inferSelect;
 

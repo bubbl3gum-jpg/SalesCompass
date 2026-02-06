@@ -24,6 +24,14 @@ The system supports 6 different user roles (SPG, Supervisor, Stockist, Sales Adm
 - **Bazar History View**: Toggle between Grid and History views. History view groups bazars by location, showing all occurrences with individual and total revenue per location.
 - **Repeat Bazar**: Ended bazars have a "Repeat" button that pre-fills a new bazar form with the same name and location but new dates, making it easy to create recurring events.
 
+**Store-Specific Discounts (February 2026)**:
+- **Store Discount Assignments**: Each store can have specific discounts assigned to it via `store_discounts` table
+- **Admin View**: Discount Management page has two tabs - "Store Discounts" (shows all stores with assigned discounts, can assign/remove) and "Discount Types" (existing discount CRUD)
+- **Supervisor View**: Can see their store's assigned discounts (read-only)
+- **SPG View**: Cannot access discounts page, but in sales entry modal, discount dropdown only shows discounts assigned to the selected store
+- **API Routes**: GET/POST/DELETE /api/store-discounts, GET /api/store-discounts/:kodeGudang
+- **Storage Methods**: getStoreDiscounts (with joins), getDiscountsByStore, assignDiscountToStore, removeDiscountFromStore
+
 ## User Preferences
 
 Preferred communication style: Simple, everyday language.
