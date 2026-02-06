@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useStoreAuth } from "@/hooks/useStoreAuth";
 import { useSidebar } from "@/hooks/useSidebar";
@@ -46,8 +46,15 @@ interface Bazar {
 interface Settlement {
   settlementId: number;
   bazarId: number | null;
-  setorTunai: string;
-  setorNonTunai: string;
+  cashAwal: string;
+  cashAkhir: string;
+  variance: string;
+}
+
+interface EdcSettlement {
+  edcSettlementId: number;
+  settlementId: number;
+  settlementValue: string;
 }
 
 interface LocationGroup {
@@ -88,6 +95,32 @@ export default function Bazars() {
     retry: false,
   });
 
+  const bazarSettlementIds = useMemo(() => {
+    if (!settlements) return '';
+    return settlements.filter(s => s.bazarId).map(s => s.settlementId).join(',');
+  }, [settlements]);
+
+  const { data: edcSettlements = [] } = useQuery<EdcSettlement[]>({
+    queryKey: ['/api/edc-settlements', { settlement_ids: bazarSettlementIds }],
+    queryFn: async () => {
+      if (!bazarSettlementIds) return [];
+      const response = await fetch(`/api/edc-settlements?settlement_ids=${bazarSettlementIds}`);
+      if (!response.ok) return [];
+      return response.json();
+    },
+    enabled: !!bazarSettlementIds,
+    retry: false,
+  });
+
+  const edcTotalsBySettlement = useMemo(() => {
+    const map = new Map<number, number>();
+    edcSettlements.forEach(edc => {
+      const current = map.get(edc.settlementId) || 0;
+      map.set(edc.settlementId, current + parseFloat(edc.settlementValue || '0'));
+    });
+    return map;
+  }, [edcSettlements]);
+
   const filteredBazars = Array.isArray(bazars) ? bazars.filter((bazar: Bazar) =>
     bazar.bazarName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
     bazar.location?.toLowerCase().includes(searchQuery.toLowerCase())
@@ -97,7 +130,11 @@ export default function Bazars() {
     if (!settlements) return 0;
     return settlements
       .filter(s => s.bazarId === bazarId)
-      .reduce((total, s) => total + parseFloat(s.setorTunai || '0') + parseFloat(s.setorNonTunai || '0'), 0);
+      .reduce((total, s) => {
+        const cashRevenue = parseFloat(s.cashAkhir || '0') - parseFloat(s.cashAwal || '0');
+        const edcRevenue = edcTotalsBySettlement.get(s.settlementId) || 0;
+        return total + cashRevenue + edcRevenue;
+      }, 0);
   };
 
   const locationGroups: LocationGroup[] = (() => {
