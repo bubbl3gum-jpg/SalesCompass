@@ -1,11 +1,13 @@
 import { useState, useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Sidebar } from "@/components/sidebar";
 import { useSidebar } from "@/hooks/useSidebar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/queryClient";
 import {
   Select,
   SelectContent,
@@ -24,7 +26,7 @@ import {
 import { cn } from "@/lib/utils";
 import { SettlementModal } from "@/components/settlement-modal";
 import { format } from "date-fns";
-import { Search, Store, Calendar, DollarSign, CreditCard, Edit3 } from "lucide-react";
+import { Search, Store, Calendar, DollarSign, CreditCard, Edit3, Trash2 } from "lucide-react";
 
 interface Settlement {
   settlementId: number;
@@ -51,6 +53,8 @@ interface EdcSettlement {
 
 export default function Settlements() {
   const { isExpanded } = useSidebar();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [bazarFilter, setBazarFilter] = useState<string>("all");
@@ -111,6 +115,32 @@ export default function Settlements() {
   });
 
   const [selectedSettlement, setSelectedSettlement] = useState<Settlement | null>(null);
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: number) => {
+      await apiRequest('DELETE', `/api/settlements/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/settlements'] });
+      toast({
+        title: "Settlement Deleted",
+        description: "The settlement has been successfully removed.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Delete Failed",
+        description: error.message || "Failed to delete settlement",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleDeleteSettlement = (id: number) => {
+    if (confirm("Are you sure you want to delete this settlement? This action cannot be undone.")) {
+      deleteMutation.mutate(id);
+    }
+  };
 
   const handleOpenModal = (settlement: Settlement | null = null) => {
     setSelectedSettlement(settlement);
@@ -299,7 +329,7 @@ export default function Settlements() {
                             )}>
                               {variance > 0 ? "+" : ""}{formatCurrency(variance)}
                             </TableCell>
-                            <TableCell className="text-right">
+                            <TableCell className="text-right flex justify-end gap-2">
                               <Button
                                 variant="ghost"
                                 size="sm"
@@ -307,6 +337,14 @@ export default function Settlements() {
                                 className="h-8 w-8 p-0"
                               >
                                 <Edit3 className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleDeleteSettlement(settlement.settlementId)}
+                                className="h-8 w-8 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
+                              >
+                                <Trash2 className="h-4 w-4" />
                               </Button>
                             </TableCell>
                           </TableRow>

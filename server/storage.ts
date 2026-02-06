@@ -122,6 +122,7 @@ export interface IStorage {
   getSettlementByStoreAndDate(kodeGudang: string, tanggal: string): Promise<Settlement | undefined>;
   getSettlementByBazarAndDate(bazarId: number, tanggal: string): Promise<Settlement | undefined>;
   updateSettlement(id: number, data: Partial<InsertSettlement>): Promise<Settlement>;
+  deleteSettlement(id: number): Promise<void>;
   deleteEdcSettlementsBySettlementId(settlementId: number): Promise<void>;
 
   
@@ -766,6 +767,10 @@ export class DatabaseStorage implements IStorage {
       .where(eq(settlements.settlementId, id))
       .returning();
     return result;
+  }
+
+  async deleteSettlement(id: number): Promise<void> {
+    await db.delete(settlements).where(eq(settlements.settlementId, id));
   }
 
   async deleteEdcSettlementsBySettlementId(settlementId: number): Promise<void> {

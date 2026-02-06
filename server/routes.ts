@@ -1437,6 +1437,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Settlement deletion - Supervisors and above
+  app.delete('/api/settlements/:id', authenticate, checkRole(['Supervisor', 'Sales Administrator', 'Finance', 'System Administrator']), async (req, res) => {
+    try {
+      const { id } = req.params;
+      const settlementId = parseInt(id);
+      
+      // Delete EDC settlement entries first (foreign key)
+      await storage.deleteEdcSettlementsBySettlementId(settlementId);
+      
+      // Delete the settlement
+      await storage.deleteSettlement(settlementId);
+      
+      res.json({ message: 'Settlement deleted successfully' });
+    } catch (error) {
+      console.error('Settlement deletion error:', error);
+      res.status(400).json({ message: 'Failed to delete settlement' });
+    }
+  });
+
   // Get settlements
   app.get('/api/settlements', authenticate, async (req, res) => {
     try {
