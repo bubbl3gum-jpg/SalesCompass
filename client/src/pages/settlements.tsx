@@ -24,7 +24,7 @@ import {
 import { cn } from "@/lib/utils";
 import { SettlementModal } from "@/components/settlement-modal";
 import { format } from "date-fns";
-import { Search, Store, Calendar, DollarSign, CreditCard } from "lucide-react";
+import { Search, Store, Calendar, DollarSign, CreditCard, Edit3 } from "lucide-react";
 
 interface Settlement {
   settlementId: number;
@@ -110,11 +110,19 @@ export default function Settlements() {
     return matchesSearch && matchesBazar;
   });
 
-  const handleOpenModal = () => {
+  const [selectedSettlement, setSelectedSettlement] = useState<Settlement | null>(null);
+
+  const handleOpenModal = (settlement: Settlement | null = null) => {
+    setSelectedSettlement(settlement);
     setIsModalOpen(true);
   };
 
+  const handleCreateNew = () => {
+    handleOpenModal(null);
+  };
+
   const handleCloseModal = () => {
+    setSelectedSettlement(null);
     setIsModalOpen(false);
   };
 
@@ -148,7 +156,7 @@ export default function Settlements() {
             </div>
             <Button 
               className="bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700"
-              onClick={handleOpenModal}
+              onClick={handleCreateNew}
               data-testid="button-new-settlement"
             >
               <i className="fas fa-plus mr-2"></i>
@@ -216,7 +224,7 @@ export default function Settlements() {
                   {!searchQuery && bazarFilter === "all" && (
                     <Button 
                       className="bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700"
-                      onClick={handleOpenModal}
+                      onClick={handleCreateNew}
                       data-testid="button-create-first-settlement"
                     >
                       Create First Settlement
@@ -235,6 +243,7 @@ export default function Settlements() {
                         <TableHead className="text-right">Ending Cash</TableHead>
                         <TableHead className="text-right">EDC Total</TableHead>
                         <TableHead className="text-right">Variance</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -290,6 +299,16 @@ export default function Settlements() {
                             )}>
                               {variance > 0 ? "+" : ""}{formatCurrency(variance)}
                             </TableCell>
+                            <TableCell className="text-right">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleOpenModal(settlement)}
+                                className="h-8 w-8 p-0"
+                              >
+                                <Edit3 className="h-4 w-4" />
+                              </Button>
+                            </TableCell>
                           </TableRow>
                         );
                       })}
@@ -305,6 +324,7 @@ export default function Settlements() {
       <SettlementModal 
         isOpen={isModalOpen} 
         onClose={handleCloseModal} 
+        settlement={selectedSettlement}
       />
     </div>
   );

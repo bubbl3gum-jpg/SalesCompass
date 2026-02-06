@@ -121,6 +121,8 @@ export interface IStorage {
   getSettlements(kodeGudang?: string, tanggal?: string): Promise<Settlement[]>;
   getSettlementByStoreAndDate(kodeGudang: string, tanggal: string): Promise<Settlement | undefined>;
   getSettlementByBazarAndDate(bazarId: number, tanggal: string): Promise<Settlement | undefined>;
+  updateSettlement(id: number, data: Partial<InsertSettlement>): Promise<Settlement>;
+  deleteEdcSettlementsBySettlementId(settlementId: number): Promise<void>;
 
   
   // Stock Opname operations
@@ -756,6 +758,18 @@ export class DatabaseStorage implements IStorage {
       )
     );
     return result;
+  }
+
+  async updateSettlement(id: number, data: Partial<InsertSettlement>): Promise<Settlement> {
+    const [result] = await db.update(settlements)
+      .set(data)
+      .where(eq(settlements.settlementId, id))
+      .returning();
+    return result;
+  }
+
+  async deleteEdcSettlementsBySettlementId(settlementId: number): Promise<void> {
+    await db.delete(edcSettlement).where(eq(edcSettlement.settlementId, settlementId));
   }
 
   

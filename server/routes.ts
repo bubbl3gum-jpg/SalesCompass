@@ -1405,6 +1405,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Settlement update - Supervisors and above
+  app.patch('/api/settlements/:id', authenticate, checkRole(['Supervisor', 'Sales Administrator', 'Finance', 'System Administrator']), async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { edcEntries, ...settlementData } = req.body;
+      const validatedData = insertSettlementSchema.partial().parse(settlementData);
+
+      const settlement = await storage.updateSettlement(parseInt(id), validatedData);
+
+      // Update EDC settlement entries if provided
+      if (edcEntries && Array.isArray(edcEntries)) {
+        // Delete existing EDC entries for this settlement
+        await storage.deleteEdcSettlementsBySettlementId(parseInt(id));
+        
+        // Create new ones
+        for (const entry of edcEntries) {
+          await storage.createEdcSettlement({
+            settlementId: settlement.settlementId,
+            tanggal: settlement.tanggal!,
+            settlementValue: entry.amount,
+            storeEdcId: entry.edcId,
+          });
+        }
+      }
+
+      res.json(settlement);
+    } catch (error) {
+      console.error('Settlement update error:', error);
+      res.status(400).json({ message: 'Failed to update settlement' });
+    }
+  });
+
   // Get settlements
   app.get('/api/settlements', authenticate, async (req, res) => {
     try {

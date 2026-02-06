@@ -76,12 +76,30 @@ interface EdcEntry {
   amount: string;
 }
 
+interface Settlement {
+  settlementId: number;
+  kodeGudang: string;
+  tanggal: string;
+  cashAwal: string;
+  cashAkhir: string;
+  variance: string;
+  bazarId: number | null;
+}
+
 interface SettlementModalProps {
   isOpen: boolean;
   onClose: () => void;
+  settlement?: Settlement | null;
 }
 
-export function SettlementModal({ isOpen, onClose }: SettlementModalProps) {
+interface EdcSettlement {
+  edcSettlementId: number;
+  settlementId: number;
+  storeEdcId: number;
+  settlementValue: string;
+}
+
+export function SettlementModal({ isOpen, onClose, settlement }: SettlementModalProps) {
   const { toast } = useToast();
   const { user } = useStoreAuth();
   const queryClient = useQueryClient();
@@ -97,15 +115,15 @@ export function SettlementModal({ isOpen, onClose }: SettlementModalProps) {
     retry: false,
   });
 
-  const { data: edcOptions = [] } = useQuery<Edc[]>({
+  const edcOptions = useQuery<Edc[]>({
     queryKey: ["/api/edc"],
     retry: false,
-  });
+  }).data || [];
 
   const form = useForm<SettlementFormData>({
     resolver: zodResolver(settlementFormSchema),
     defaultValues: {
-      settlementType: activeBazars.length > 0 ? "bazar" : "store",
+      settlementType: "store",
       kodeGudang: user?.store_id || "",
       bazarId: "",
       tanggal: new Date().toISOString().split('T')[0],
@@ -119,11 +137,50 @@ export function SettlementModal({ isOpen, onClose }: SettlementModalProps) {
   const watchCashAwal = form.watch("cashAwal");
   const watchCashAkhir = form.watch("cashAkhir");
 
+  const { data: existingEdcSettlements } = useQuery<EdcSettlement[]>({
+    queryKey: ['/api/edc-settlements', { settlement_id: settlement?.settlementId }],
+    queryFn: async () => {
+      if (!settlement?.settlementId) return [];
+      const response = await fetch(`/api/edc-settlements?settlement_ids=${settlement.settlementId}`);
+      if (!response.ok) return [];
+      return response.json();
+    },
+    enabled: !!settlement,
+  });
+
   useEffect(() => {
-    if (isOpen && activeBazars.length > 0) {
-      form.setValue("settlementType", "bazar");
+    if (isOpen) {
+      if (settlement) {
+        form.reset({
+          settlementType: settlement.bazarId ? "bazar" : "store",
+          kodeGudang: settlement.kodeGudang || "",
+          bazarId: settlement.bazarId?.toString() || "",
+          tanggal: settlement.tanggal,
+          cashAwal: settlement.cashAwal.toString(),
+          cashAkhir: settlement.cashAkhir.toString(),
+          variance: settlement.variance.toString(),
+        });
+        
+        if (existingEdcSettlements) {
+          setEdcEntries(existingEdcSettlements.map(edc => ({
+            edcId: edc.storeEdcId.toString(),
+            amount: edc.settlementValue.toString()
+          })));
+        }
+      } else {
+        form.reset({
+          settlementType: activeBazars.length > 0 ? "bazar" : "store",
+          kodeGudang: user?.store_id || "",
+          bazarId: "",
+          tanggal: new Date().toISOString().split('T')[0],
+          cashAwal: "",
+          cashAkhir: "",
+          variance: "0",
+        });
+        setEdcEntries([]);
+      }
     }
-  }, [isOpen, activeBazars.length, form]);
+  }, [isOpen, settlement, existingEdcSettlements, form, activeBazars, user]);
 
   useEffect(() => {
     if (watchCashAwal && watchCashAkhir) {
@@ -152,7 +209,7 @@ export function SettlementModal({ isOpen, onClose }: SettlementModalProps) {
     return edcEntries.reduce((sum, entry) => sum + (parseFloat(entry.amount) || 0), 0);
   };
 
-  const createSettlementMutation = useMutation({
+  const saveSettlementMutation = useMutation({
     mutationFn: async (data: SettlementFormData) => {
       const payload: any = {
         tanggal: data.tanggal,
@@ -171,13 +228,15 @@ export function SettlementModal({ isOpen, onClose }: SettlementModalProps) {
         payload.kodeGudang = data.kodeGudang;
       }
 
-      const response = await apiRequest('POST', '/api/settlements', payload);
+      const method = settlement ? 'PATCH' : 'POST';
+      const url = settlement ? `/api/settlements/${settlement.settlementId}` : '/api/settlements';
+      const response = await apiRequest(method, url, payload);
       return response.json();
     },
     onSuccess: () => {
       toast({
-        title: "Settlement Created",
-        description: "Settlement has been created successfully",
+        title: settlement ? "Settlement Updated" : "Settlement Created",
+        description: `Settlement has been ${settlement ? 'updated' : 'created'} successfully`,
       });
       
       form.reset();
@@ -187,15 +246,15 @@ export function SettlementModal({ isOpen, onClose }: SettlementModalProps) {
     },
     onError: (error: any) => {
       toast({
-        title: "Settlement Creation Failed",
-        description: error.message || "Failed to create settlement",
+        title: settlement ? "Settlement Update Failed" : "Settlement Creation Failed",
+        description: error.message || `Failed to ${settlement ? 'update' : 'create'} settlement`,
         variant: "destructive",
       });
     },
   });
 
   const onSubmit = (data: SettlementFormData) => {
-    createSettlementMutation.mutate(data);
+    saveSettlementMutation.mutate(data);
   };
 
   const handleClose = () => {
@@ -217,7 +276,7 @@ export function SettlementModal({ isOpen, onClose }: SettlementModalProps) {
     <Dialog open={isOpen} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Create New Settlement</DialogTitle>
+          <DialogTitle>{settlement ? "Edit Settlement" : "Create New Settlement"}</DialogTitle>
         </DialogHeader>
         
         <Form {...form}>
@@ -492,18 +551,18 @@ export function SettlementModal({ isOpen, onClose }: SettlementModalProps) {
                 type="button"
                 variant="outline"
                 onClick={handleClose}
-                disabled={createSettlementMutation.isPending}
+                disabled={saveSettlementMutation.isPending}
                 data-testid="button-cancel"
               >
                 Cancel
               </Button>
               <Button
                 type="submit"
-                disabled={createSettlementMutation.isPending}
+                disabled={saveSettlementMutation.isPending}
                 className="bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700"
                 data-testid="button-create-settlement"
               >
-                {createSettlementMutation.isPending ? 'Creating...' : 'Create Settlement'}
+                {saveSettlementMutation.isPending ? (settlement ? 'Updating...' : 'Creating...') : (settlement ? 'Update Settlement' : 'Create Settlement')}
               </Button>
             </div>
           </form>
