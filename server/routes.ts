@@ -1365,14 +1365,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { edcEntries, ...settlementData } = req.body;
       const validatedData = insertSettlementSchema.parse(settlementData);
 
-      // Check if settlement already exists for this store/date
-      const existing = await storage.getSettlementByStoreAndDate(
-        validatedData.kodeGudang!,
-        validatedData.tanggal!
-      );
-
-      if (existing) {
-        return res.status(400).json({ message: 'Settlement already exists for this store and date' });
+      // Check if settlement already exists for this store/bazar + date
+      if (validatedData.bazarId && !validatedData.kodeGudang) {
+        const existing = await storage.getSettlementByBazarAndDate(
+          validatedData.bazarId,
+          validatedData.tanggal!
+        );
+        if (existing) {
+          return res.status(400).json({ message: 'Settlement already exists for this bazar and date' });
+        }
+      } else if (validatedData.kodeGudang) {
+        const existing = await storage.getSettlementByStoreAndDate(
+          validatedData.kodeGudang,
+          validatedData.tanggal!
+        );
+        if (existing) {
+          return res.status(400).json({ message: 'Settlement already exists for this store and date' });
+        }
       }
 
       const settlement = await storage.createSettlement(validatedData);
@@ -2555,15 +2564,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put('/api/edc/:edcId', authenticate, checkRole(['System Administrator']), async (req, res) => {
+  app.patch('/api/edc/:edcId', authenticate, checkRole(['System Administrator']), async (req, res) => {
     try {
       const { edcId } = req.params;
       const validatedData = z.object({
+        namaEdc: z.string().optional(),
+        jenisEdc: z.string().optional(),
         merchantName: z.string().optional(),
-        edcType: z.string().optional()
+        edcType: z.string().optional(),
+        biayaAdmin: z.any().optional(),
       }).parse(req.body);
-      const edc = await storage.updateEdc(parseInt(edcId), validatedData);
-      res.json(edc);
+      
+      const edcData: any = {};
+      if (validatedData.namaEdc || validatedData.merchantName) {
+        edcData.merchantName = validatedData.namaEdc || validatedData.merchantName;
+      }
+      if (validatedData.jenisEdc || validatedData.edcType) {
+        edcData.edcType = validatedData.jenisEdc || validatedData.edcType;
+      }
+      
+      const edc = await storage.updateEdc(parseInt(edcId), edcData);
+      res.json({
+        edcId: edc.edcId,
+        namaEdc: edc.merchantName,
+        jenisEdc: edc.edcType,
+        biayaAdmin: 0
+      });
     } catch (error) {
       console.error('EDC update error:', error);
       if (error instanceof z.ZodError) {

@@ -94,9 +94,11 @@ export default function Settlements() {
   const bazarMap = new Map(bazars.map(b => [b.bazarId, b]));
 
   const filteredSettlements = settlements.filter((settlement) => {
+    const bazar = bazars.find(b => b.bazarId === settlement.bazarId);
     const matchesSearch = 
       settlement.kodeGudang?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      settlement.tanggal?.includes(searchQuery);
+      settlement.tanggal?.includes(searchQuery) ||
+      (bazar && bazar.bazarName.toLowerCase().includes(searchQuery.toLowerCase()));
     
     const matchesBazar = 
       bazarFilter === "all" ||

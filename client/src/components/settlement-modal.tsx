@@ -68,7 +68,7 @@ interface Bazar {
 interface Edc {
   edcId: number;
   namaEdc: string;
-  edcType: string;
+  jenisEdc: string;
 }
 
 interface EdcEntry {
@@ -167,7 +167,6 @@ export function SettlementModal({ isOpen, onClose }: SettlementModalProps) {
 
       if (data.settlementType === "bazar" && data.bazarId) {
         payload.bazarId = parseInt(data.bazarId);
-        payload.kodeGudang = `BAZAR-${data.bazarId}`;
       } else {
         payload.kodeGudang = data.kodeGudang;
       }
@@ -211,7 +210,7 @@ export function SettlementModal({ isOpen, onClose }: SettlementModalProps) {
 
   const getEdcName = (edcId: string) => {
     const edc = edcOptions.find(e => e.edcId.toString() === edcId);
-    return edc ? `${edc.namaEdc} (${edc.edcType})` : "";
+    return edc ? `${edc.namaEdc} (${edc.jenisEdc})` : "";
   };
 
   return (
@@ -430,7 +429,7 @@ export function SettlementModal({ isOpen, onClose }: SettlementModalProps) {
                           <SelectContent>
                             {edcOptions.map((edc) => (
                               <SelectItem key={edc.edcId} value={edc.edcId.toString()}>
-                                {edc.namaEdc} ({edc.edcType})
+                                {edc.namaEdc} ({edc.jenisEdc})
                               </SelectItem>
                             ))}
                           </SelectContent>

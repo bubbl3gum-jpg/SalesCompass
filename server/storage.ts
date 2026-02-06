@@ -120,6 +120,7 @@ export interface IStorage {
   createSettlement(data: InsertSettlement): Promise<Settlement>;
   getSettlements(kodeGudang?: string, tanggal?: string): Promise<Settlement[]>;
   getSettlementByStoreAndDate(kodeGudang: string, tanggal: string): Promise<Settlement | undefined>;
+  getSettlementByBazarAndDate(bazarId: number, tanggal: string): Promise<Settlement | undefined>;
 
   
   // Stock Opname operations
@@ -741,6 +742,16 @@ export class DatabaseStorage implements IStorage {
     const [result] = await db.select().from(settlements).where(
       and(
         eq(settlements.kodeGudang, kodeGudang),
+        eq(settlements.tanggal, tanggal)
+      )
+    );
+    return result;
+  }
+
+  async getSettlementByBazarAndDate(bazarId: number, tanggal: string): Promise<Settlement | undefined> {
+    const [result] = await db.select().from(settlements).where(
+      and(
+        eq(settlements.bazarId, bazarId),
         eq(settlements.tanggal, tanggal)
       )
     );
