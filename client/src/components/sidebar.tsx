@@ -104,6 +104,12 @@ const navigationItems = [
         icon: "fas fa-store",
         permission: "admin:settings"
       },
+      {
+        name: "Store Configuration",
+        href: "/store-configuration",
+        icon: "fas fa-sliders-h",
+        permission: "store:config"
+      },
     ]
   }
 ];

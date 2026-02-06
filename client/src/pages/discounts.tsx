@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -59,16 +59,11 @@ export default function Discounts() {
   const { hasPermission, user } = useStoreAuth();
   
   const canUpdateDiscounts = hasPermission("discount:update");
-  const [activeTab, setActiveTab] = useState<"types" | "stores">("stores");
   const [showDiscountModal, setShowDiscountModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [editingDiscount, setEditingDiscount] = useState<any>(null);
   const [deletingDiscount, setDeletingDiscount] = useState<any>(null);
-  const [showAssignModal, setShowAssignModal] = useState(false);
-  const [assigningStore, setAssigningStore] = useState<string>('');
-  const [assigningDiscount, setAssigningDiscount] = useState<string>('');
-  const [removingAssignment, setRemovingAssignment] = useState<any>(null);
 
   const form = useForm<DiscountFormData>({
     resolver: zodResolver(discountFormSchema),
@@ -86,50 +81,11 @@ export default function Discounts() {
     retry: false,
   });
 
-  const { data: storesData } = useQuery({
-    queryKey: ["/api/stores"],
-  });
-
-  const { data: storeDiscountsData, isLoading: storeDiscountsLoading } = useQuery({
-    queryKey: ["/api/store-discounts"],
-  });
-
   const filteredDiscounts = Array.isArray(discounts) ? discounts.filter((discount: any) => {
     if (!discount.discountName) return false;
     if (!searchTerm) return true;
     return discount.discountName.toLowerCase().includes(searchTerm.toLowerCase());
   }) : [];
-
-  const storesArray = Array.isArray(storesData) ? storesData : [];
-  const storeDiscountsArray = Array.isArray(storeDiscountsData) ? storeDiscountsData : [];
-
-  const storeDiscountMap = useMemo(() => {
-    const map: Record<string, any[]> = {};
-    storeDiscountsArray.forEach((sd: any) => {
-      if (!map[sd.kodeGudang]) {
-        map[sd.kodeGudang] = [];
-      }
-      map[sd.kodeGudang].push(sd);
-    });
-    return map;
-  }, [storeDiscountsArray]);
-
-  const isSupervisor = user?.role === 'Supervisor';
-  const userStore = user?.store_id;
-
-  const filteredStores = useMemo(() => {
-    let stores = storesArray;
-    if (isSupervisor && userStore) {
-      stores = stores.filter((s: any) => s.kodeGudang === userStore);
-    }
-    if (searchTerm && activeTab === 'stores') {
-      stores = stores.filter((s: any) =>
-        s.namaGudang?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        s.kodeGudang?.toLowerCase().includes(searchTerm.toLowerCase())
-      );
-    }
-    return stores;
-  }, [storesArray, isSupervisor, userStore, searchTerm, activeTab]);
 
   const createDiscountMutation = useMutation({
     mutationFn: async (data: any) => {
@@ -194,41 +150,6 @@ export default function Discounts() {
     },
   });
 
-  const assignDiscountMutation = useMutation({
-    mutationFn: async (data: { kodeGudang: string; discountId: string }) => {
-      const response = await apiRequest('POST', '/api/store-discounts', data);
-      return response.json();
-    },
-    onSuccess: () => {
-      toast({ title: "Success", description: "Discount assigned to store" });
-      queryClient.invalidateQueries({ queryKey: ["/api/store-discounts"] });
-      setShowAssignModal(false);
-      setAssigningStore('');
-      setAssigningDiscount('');
-    },
-    onError: (error: any) => {
-      const message = error?.message?.includes('409') || error?.message?.includes('already')
-        ? "This discount is already assigned to this store"
-        : "Failed to assign discount";
-      toast({ title: "Error", description: message, variant: "destructive" });
-    },
-  });
-
-  const removeAssignmentMutation = useMutation({
-    mutationFn: async (id: number) => {
-      const response = await apiRequest('DELETE', `/api/store-discounts/${id}`);
-      return response.json();
-    },
-    onSuccess: () => {
-      toast({ title: "Success", description: "Discount removed from store" });
-      queryClient.invalidateQueries({ queryKey: ["/api/store-discounts"] });
-      setRemovingAssignment(null);
-    },
-    onError: () => {
-      toast({ title: "Error", description: "Failed to remove discount", variant: "destructive" });
-    },
-  });
-
   const onSubmit = (data: DiscountFormData) => {
     if (editingDiscount) {
       updateDiscountMutation.mutate({ discountId: editingDiscount.discountId, data });
@@ -262,17 +183,6 @@ export default function Discounts() {
     }
   };
 
-  const formatDiscountLabel = (d: any) => {
-    if (!d) return '';
-    const amount = parseFloat(d.discountAmount || '0');
-    return d.discountType === 'percentage' ? `${amount}%` : `Rp${amount.toLocaleString('id-ID')}`;
-  };
-
-  const getAvailableDiscountsForStore = (kodeGudang: string) => {
-    const assignedIds = (storeDiscountMap[kodeGudang] || []).map((sd: any) => sd.discountId);
-    return Array.isArray(discounts) ? discounts.filter((d: any) => d.discountName && !assignedIds.includes(d.discountId)) : [];
-  };
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 dark:from-slate-900 dark:via-slate-800 dark:to-indigo-900">
       <Sidebar />
@@ -283,11 +193,11 @@ export default function Discounts() {
             <div>
               <h2 className="text-3xl font-bold text-gray-900 dark:text-white">Discount Management</h2>
               <p className="text-gray-600 dark:text-gray-400 mt-1">
-                {activeTab === 'types' ? 'Create and manage discount types' : 'Assign discounts to stores'}
+                Create and manage discount types
               </p>
             </div>
             <div className="flex space-x-3">
-              {canUpdateDiscounts && activeTab === 'types' && (
+              {canUpdateDiscounts && (
                 <>
                   <Button
                     variant="outline"
@@ -308,16 +218,6 @@ export default function Discounts() {
                   </Button>
                 </>
               )}
-              {canUpdateDiscounts && activeTab === 'stores' && (
-                <Button
-                  onClick={() => setShowAssignModal(true)}
-                  className="bg-gradient-to-r from-indigo-500 to-indigo-600 hover:from-indigo-600 hover:to-indigo-700"
-                  data-testid="button-assign-discount"
-                >
-                  <i className="fas fa-plus mr-2"></i>
-                  Assign Discount to Store
-                </Button>
-              )}
               {!canUpdateDiscounts && (
                 <Badge variant="secondary" className="px-3 py-1">
                   Read Only Access
@@ -328,41 +228,13 @@ export default function Discounts() {
         </header>
 
         <main className="p-6">
-          {/* Tabs */}
-          <div className="flex space-x-1 mb-6 bg-white/20 dark:bg-black/20 backdrop-blur-xl rounded-lg p-1 w-fit border border-white/20 dark:border-gray-800/50">
-            <button
-              onClick={() => { setActiveTab('stores'); setSearchTerm(''); }}
-              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                activeTab === 'stores'
-                  ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white shadow-sm'
-                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
-              }`}
-              data-testid="tab-store-discounts"
-            >
-              <i className="fas fa-store mr-2"></i>
-              Store Discounts
-            </button>
-            <button
-              onClick={() => { setActiveTab('types'); setSearchTerm(''); }}
-              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                activeTab === 'types'
-                  ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white shadow-sm'
-                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
-              }`}
-              data-testid="tab-discount-types"
-            >
-              <i className="fas fa-percentage mr-2"></i>
-              Discount Types
-            </button>
-          </div>
-
           {/* Search */}
           <Card className="bg-white/20 dark:bg-black/20 backdrop-blur-xl border border-white/20 dark:border-gray-800/50 mb-6">
             <CardContent className="p-6">
               <div className="flex items-center space-x-4">
                 <div className="flex-1">
                   <Input
-                    placeholder={activeTab === 'types' ? "Search discount by name..." : "Search store by name or code..."}
+                    placeholder="Search discount by name..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     className="bg-white/50 dark:bg-gray-800/50"
@@ -373,125 +245,17 @@ export default function Discounts() {
                   Clear
                 </Button>
               </div>
+              {hasPermission("store:config") && (
+                <p className="text-xs text-gray-500 mt-3">
+                  <i className="fas fa-info-circle mr-1" />
+                  To assign discounts to specific stores, go to <a href="/store-configuration" className="text-blue-500 hover:text-blue-600 underline">Store Configuration</a>
+                </p>
+              )}
             </CardContent>
           </Card>
 
-          {/* Store Discounts Tab */}
-          {activeTab === 'stores' && (
-            <Card className="bg-white/20 dark:bg-black/20 backdrop-blur-xl border border-white/20 dark:border-gray-800/50">
-              <CardHeader>
-                <CardTitle className="text-gray-900 dark:text-white">
-                  Store Discount Assignments
-                  <span className="ml-2 text-sm text-gray-500 font-normal">({filteredStores.length} stores)</span>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {storeDiscountsLoading ? (
-                  <div className="space-y-4">
-                    {Array.from({ length: 3 }).map((_, i) => (
-                      <div key={i} className="animate-pulse p-4 bg-white/10 dark:bg-black/10 rounded-xl">
-                        <Skeleton className="w-40 h-5 mb-3" />
-                        <div className="flex gap-2">
-                          <Skeleton className="w-24 h-6 rounded-full" />
-                          <Skeleton className="w-24 h-6 rounded-full" />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : filteredStores.length > 0 ? (
-                  <div className="space-y-4">
-                    {filteredStores.map((store: any) => {
-                      const storeAssignments = storeDiscountMap[store.kodeGudang] || [];
-                      return (
-                        <div
-                          key={store.kodeGudang}
-                          className="p-4 bg-white/10 dark:bg-black/10 rounded-xl hover:bg-white/20 dark:hover:bg-black/20 transition-colors"
-                          data-testid={`store-discount-row-${store.kodeGudang}`}
-                        >
-                          <div className="flex items-start justify-between">
-                            <div className="flex items-center space-x-3 mb-3">
-                              <div className="w-10 h-10 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center">
-                                <i className="fas fa-store text-white text-sm"></i>
-                              </div>
-                              <div>
-                                <p className="font-medium text-gray-900 dark:text-white">{store.namaGudang || store.kodeGudang}</p>
-                                <p className="text-xs text-gray-500 dark:text-gray-400">{store.kodeGudang}</p>
-                              </div>
-                            </div>
-                            {canUpdateDiscounts && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => {
-                                  setAssigningStore(store.kodeGudang);
-                                  setAssigningDiscount('');
-                                  setShowAssignModal(true);
-                                }}
-                                className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-700"
-                                data-testid={`button-add-discount-${store.kodeGudang}`}
-                              >
-                                <i className="fas fa-plus mr-1"></i> Add
-                              </Button>
-                            )}
-                          </div>
-                          
-                          {storeAssignments.length > 0 ? (
-                            <div className="flex flex-wrap gap-2 ml-13">
-                              {storeAssignments.map((sd: any) => {
-                                const statusInfo = sd.startFrom && sd.endAt ? getDiscountStatus(sd) : null;
-                                return (
-                                  <div
-                                    key={sd.storeDiscountsId}
-                                    className="inline-flex items-center gap-1.5 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-full px-3 py-1"
-                                  >
-                                    <span className="text-sm font-medium text-orange-700 dark:text-orange-300">
-                                      {sd.discountName || 'Discount'} ({formatDiscountLabel(sd)})
-                                    </span>
-                                    {statusInfo && (
-                                      <Badge className={`${statusInfo.color} border-0 text-xs px-1.5 py-0`}>
-                                        {statusInfo.status}
-                                      </Badge>
-                                    )}
-                                    {canUpdateDiscounts && (
-                                      <button
-                                        onClick={() => setRemovingAssignment(sd)}
-                                        className="text-red-400 hover:text-red-600 dark:hover:text-red-300 ml-1"
-                                        data-testid={`button-remove-assignment-${sd.storeDiscountsId}`}
-                                      >
-                                        <i className="fas fa-times text-xs"></i>
-                                      </button>
-                                    )}
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          ) : (
-                            <p className="text-sm text-gray-400 dark:text-gray-500 ml-13 italic">No discounts assigned</p>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <div className="text-center py-12">
-                    <div className="w-16 h-16 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-4">
-                      <i className="fas fa-store text-white text-2xl"></i>
-                    </div>
-                    <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
-                      {searchTerm ? 'No matching stores' : 'No stores found'}
-                    </h3>
-                    <p className="text-gray-500 dark:text-gray-400">
-                      {searchTerm ? 'Try a different search term.' : 'Add stores first to assign discounts.'}
-                    </p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Discount Types Tab */}
-          {activeTab === 'types' && (
-            <Card className="bg-white/20 dark:bg-black/20 backdrop-blur-xl border border-white/20 dark:border-gray-800/50">
+          {/* Discount Types */}
+          <Card className="bg-white/20 dark:bg-black/20 backdrop-blur-xl border border-white/20 dark:border-gray-800/50">
               <CardHeader>
                 <CardTitle className="text-gray-900 dark:text-white">
                   Discount Types
@@ -524,7 +288,6 @@ export default function Discounts() {
                   <div className="space-y-4">
                     {filteredDiscounts.map((discount: any) => {
                       const status = getDiscountStatus(discount);
-                      const assignedStores = storeDiscountsArray.filter((sd: any) => sd.discountId === discount.discountId);
                       return (
                         <div
                           key={discount.discountId}
@@ -545,12 +308,6 @@ export default function Discounts() {
                               <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                                 {discount.startFrom} to {discount.endAt}
                               </p>
-                              {assignedStores.length > 0 && (
-                                <p className="text-xs text-indigo-500 dark:text-indigo-400 mt-1">
-                                  <i className="fas fa-store mr-1"></i>
-                                  Assigned to {assignedStores.length} store{assignedStores.length > 1 ? 's' : ''}: {assignedStores.map((s: any) => s.namaGudang || s.kodeGudang).join(', ')}
-                                </p>
-                              )}
                             </div>
                           </div>
 
@@ -611,7 +368,6 @@ export default function Discounts() {
                 )}
               </CardContent>
             </Card>
-          )}
         </main>
       </div>
 
@@ -744,85 +500,6 @@ export default function Discounts() {
         </DialogContent>
       </Dialog>
 
-      {/* Assign Discount to Store Modal */}
-      <Dialog open={showAssignModal} onOpenChange={setShowAssignModal}>
-        <DialogContent className="max-w-md bg-white/90 dark:bg-gray-900/90 backdrop-blur-xl border border-white/20 dark:border-gray-800/50">
-          <DialogHeader>
-            <DialogTitle className="text-2xl font-bold text-gray-900 dark:text-white">
-              Assign Discount to Store
-            </DialogTitle>
-          </DialogHeader>
-
-          <div className="space-y-6">
-            <div>
-              <label className="text-sm font-medium text-gray-700 dark:text-gray-300 block mb-2">Select Store</label>
-              <Select value={assigningStore} onValueChange={setAssigningStore}>
-                <SelectTrigger data-testid="select-assign-store">
-                  <SelectValue placeholder="Choose a store" />
-                </SelectTrigger>
-                <SelectContent>
-                  {storesArray.map((store: any) => (
-                    <SelectItem key={store.kodeGudang} value={store.kodeGudang}>
-                      {store.namaGudang || store.kodeGudang}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div>
-              <label className="text-sm font-medium text-gray-700 dark:text-gray-300 block mb-2">Select Discount</label>
-              <Select value={assigningDiscount} onValueChange={setAssigningDiscount}>
-                <SelectTrigger data-testid="select-assign-discount">
-                  <SelectValue placeholder="Choose a discount" />
-                </SelectTrigger>
-                <SelectContent>
-                  {assigningStore ? (
-                    getAvailableDiscountsForStore(assigningStore).length > 0 ? (
-                      getAvailableDiscountsForStore(assigningStore).map((d: any) => (
-                        <SelectItem key={d.discountId} value={d.discountId.toString()}>
-                          {d.discountName} ({formatDiscountLabel(d)})
-                        </SelectItem>
-                      ))
-                    ) : (
-                      <SelectItem value="__none" disabled>All discounts already assigned</SelectItem>
-                    )
-                  ) : (
-                    <SelectItem value="__none" disabled>Select a store first</SelectItem>
-                  )}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="flex justify-end space-x-4 pt-4">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  setShowAssignModal(false);
-                  setAssigningStore('');
-                  setAssigningDiscount('');
-                }}
-              >
-                Cancel
-              </Button>
-              <Button
-                onClick={() => {
-                  if (assigningStore && assigningDiscount) {
-                    assignDiscountMutation.mutate({ kodeGudang: assigningStore, discountId: assigningDiscount });
-                  }
-                }}
-                className="bg-gradient-to-r from-indigo-500 to-indigo-600 hover:from-indigo-600 hover:to-indigo-700"
-                disabled={!assigningStore || !assigningDiscount || assignDiscountMutation.isPending}
-                data-testid="button-confirm-assign"
-              >
-                {assignDiscountMutation.isPending ? "Assigning..." : "Assign Discount"}
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-
       {/* Import Modal */}
       <ImportModal
         isOpen={showImportModal}
@@ -868,30 +545,6 @@ export default function Discounts() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Remove Assignment Confirmation */}
-      <AlertDialog open={!!removingAssignment} onOpenChange={(open) => !open && setRemovingAssignment(null)}>
-        <AlertDialogContent className="bg-white/90 dark:bg-gray-900/90 backdrop-blur-xl border border-white/20 dark:border-gray-800/50">
-          <AlertDialogHeader>
-            <AlertDialogTitle className="text-gray-900 dark:text-white">Remove Discount from Store</AlertDialogTitle>
-            <AlertDialogDescription className="text-gray-600 dark:text-gray-300">
-              Are you sure you want to remove "{removingAssignment?.discountName}" from this store? Staff at this store will no longer be able to apply this discount.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel className="border-gray-300 dark:border-gray-600">
-              Cancel
-            </AlertDialogCancel>
-            <AlertDialogAction 
-              onClick={() => removingAssignment && removeAssignmentMutation.mutate(removingAssignment.storeDiscountsId)}
-              disabled={removeAssignmentMutation.isPending}
-              className="bg-red-600 hover:bg-red-700 text-white"
-              data-testid="button-confirm-remove"
-            >
-              {removeAssignmentMutation.isPending ? "Removing..." : "Remove"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   );
 }

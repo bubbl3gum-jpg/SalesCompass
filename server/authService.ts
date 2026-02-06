@@ -39,7 +39,7 @@ const ROLE_PERMISSIONS = {
       "transfer:create", "transfer:read", "transfer:update", "transfer:delete",
       "pricelist:read", "pricelist:update",
       "discount:read", "discount:update",
-      "store:overview", "store:switch",
+      "store:overview", "store:switch", "store:config",
       "admin:settings", "admin:all"
     ],
     canAccessAllStores: true
@@ -65,7 +65,7 @@ const ROLE_PERMISSIONS = {
       "pricelist:read",
       "stock:opname",
       "discount:read",
-      "store:overview",
+      "store:overview", "store:config",
     ],
     canAccessAllStores: false
   },

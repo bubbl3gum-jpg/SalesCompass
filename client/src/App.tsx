@@ -25,6 +25,7 @@ const ReferenceSheet = lazy(() => import("@/pages/reference-sheet"));
 const Discounts = lazy(() => import("@/pages/discounts"));
 const AdminSettings = lazy(() => import("@/pages/admin-settings"));
 const Bazars = lazy(() => import("@/pages/bazars"));
+const StoreConfiguration = lazy(() => import("@/pages/store-configuration"));
 const NotFound = lazy(() => import("@/pages/not-found"));
 const AccessDenied = lazy(() => import("@/pages/access-denied"));
 
@@ -126,6 +127,9 @@ function Router() {
             </Route>
             <Route path="/bazars">
               {(params) => <ProtectedRoute component={Bazars} permission="admin:settings" {...params} />}
+            </Route>
+            <Route path="/store-configuration">
+              {(params) => <ProtectedRoute component={StoreConfiguration} permission="store:config" {...params} />}
             </Route>
             <Route component={NotFound} />
           </>

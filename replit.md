@@ -24,13 +24,17 @@ The system supports 6 different user roles (SPG, Supervisor, Stockist, Sales Adm
 - **Bazar History View**: Toggle between Grid and History views. History view groups bazars by location, showing all occurrences with individual and total revenue per location.
 - **Repeat Bazar**: Ended bazars have a "Repeat" button that pre-fills a new bazar form with the same name and location but new dates, making it easy to create recurring events.
 
-**Store-Specific Discounts (February 2026)**:
-- **Store Discount Assignments**: Each store can have specific discounts assigned to it via `store_discounts` table
-- **Admin View**: Discount Management page has two tabs - "Store Discounts" (shows all stores with assigned discounts, can assign/remove) and "Discount Types" (existing discount CRUD)
-- **Supervisor View**: Can see their store's assigned discounts (read-only)
-- **SPG View**: Cannot access discounts page, but in sales entry modal, discount dropdown only shows discounts assigned to the selected store
-- **API Routes**: GET/POST/DELETE /api/store-discounts, GET /api/store-discounts/:kodeGudang
-- **Storage Methods**: getStoreDiscounts (with joins), getDiscountsByStore, assignDiscountToStore, removeDiscountFromStore
+**Store Configuration (February 2026)**:
+- **Centralized Store Config**: New "Store Configuration" page under Administration centralizes all per-store settings
+- **Schema Update**: Added `storeType` (independent/dependent) and `storeCategory` (normal/bazar) fields to stores table
+- **Store Type**: Independent = owns its own EDC; Dependent = borrows EDC from another company
+- **Store Category**: Normal = regular retail store; Bazar = event-based store with daily settlement tracking
+- **Discount Assignments**: Admin can assign/remove specific discounts per store from the config page
+- **EDC Machine Assignments**: Admin can assign/remove EDC machines per store from the config page
+- **API Routes**: GET/PATCH /api/store-config, GET /api/store-config/:kodeGudang, POST/DELETE /api/store-edc, plus existing store-discounts endpoints
+- **Permissions**: `store:config` permission for System Administrator (full control) and Supervisor (read-only, scoped to their store)
+- **Discounts Page**: Simplified to only show discount types CRUD; store assignments moved to Store Configuration page
+- **SPG View**: Still sees store-specific discounts in sales entry modal via /api/store-discounts/:kodeGudang
 
 ## User Preferences
 

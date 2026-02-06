@@ -2266,6 +2266,101 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Store Discount assignment endpoints
+  // Store Configuration endpoints
+  app.get('/api/store-config', authenticate, async (req, res) => {
+    try {
+      const allStores = await storage.getStores();
+      const allStoreDiscounts = await storage.getStoreDiscounts();
+      const allStoreEdcs = await storage.getStoreEdc();
+
+      const storeConfigs = allStores.map(store => {
+        const discounts = allStoreDiscounts.filter(sd => sd.kodeGudang === store.kodeGudang);
+        const edcs = allStoreEdcs.filter(se => se.kodeGudang === store.kodeGudang);
+        return {
+          ...store,
+          discounts,
+          edcs,
+        };
+      });
+
+      res.json(storeConfigs);
+    } catch (error) {
+      console.error('Get store config error:', error);
+      res.status(500).json({ message: 'Failed to get store configuration' });
+    }
+  });
+
+  app.get('/api/store-config/:kodeGudang', authenticate, async (req, res) => {
+    try {
+      const { kodeGudang } = req.params;
+      const store = await storage.getStoreByKode(kodeGudang);
+      if (!store) {
+        return res.status(404).json({ message: 'Store not found' });
+      }
+      const discounts = await storage.getDiscountsByStore(kodeGudang);
+      const edcs = await storage.getStoreEdcByStore(kodeGudang);
+      res.json({ ...store, discounts, edcs });
+    } catch (error) {
+      console.error('Get store config detail error:', error);
+      res.status(500).json({ message: 'Failed to get store configuration' });
+    }
+  });
+
+  app.patch('/api/store-config/:kodeGudang', authenticate, checkRole(['System Administrator']), async (req, res) => {
+    try {
+      const { kodeGudang } = req.params;
+      const { storeType, storeCategory } = req.body;
+      const updateData: any = {};
+      if (storeType !== undefined) updateData.storeType = storeType;
+      if (storeCategory !== undefined) updateData.storeCategory = storeCategory;
+      const updated = await storage.updateStore(kodeGudang, updateData);
+      res.json(updated);
+    } catch (error) {
+      console.error('Update store config error:', error);
+      res.status(500).json({ message: 'Failed to update store configuration' });
+    }
+  });
+
+  // Store EDC assignment endpoints
+  app.get('/api/store-edc/:kodeGudang', authenticate, async (req, res) => {
+    try {
+      const { kodeGudang } = req.params;
+      const edcs = await storage.getStoreEdcByStore(kodeGudang);
+      res.json(edcs);
+    } catch (error) {
+      console.error('Get store EDC error:', error);
+      res.status(500).json({ message: 'Failed to get store EDC' });
+    }
+  });
+
+  app.post('/api/store-edc', authenticate, checkRole(['System Administrator']), async (req, res) => {
+    try {
+      const { kodeGudang, edcId, namaGudang, merchantName, edcType } = req.body;
+      if (!kodeGudang || !edcId) {
+        return res.status(400).json({ message: 'Store code and EDC ID are required' });
+      }
+      const result = await storage.createStoreEdc({ kodeGudang, edcId, namaGudang, merchantName, edcType });
+      res.json(result);
+    } catch (error: any) {
+      console.error('Assign EDC to store error:', error);
+      if (error.code === '23505') {
+        return res.status(409).json({ message: 'This EDC is already assigned to this store' });
+      }
+      res.status(500).json({ message: 'Failed to assign EDC to store' });
+    }
+  });
+
+  app.delete('/api/store-edc/:id', authenticate, checkRole(['System Administrator']), async (req, res) => {
+    try {
+      const { id } = req.params;
+      await storage.deleteStoreEdc(parseInt(id));
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Delete store EDC error:', error);
+      res.status(500).json({ message: 'Failed to remove EDC from store' });
+    }
+  });
+
   app.get('/api/store-discounts', authenticate, async (req, res) => {
     try {
       const storeDiscountsList = await storage.getStoreDiscounts();
