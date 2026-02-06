@@ -80,11 +80,48 @@ export default function Transfers() {
       formData.append('tanggal', data.tanggal);
       formData.append('file', data.file);
       
-      const response = await fetch('/api/transfers/create-with-import', {
+      const token = localStorage.getItem('accessToken');
+      const headers: HeadersInit = {};
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+      
+      let response = await fetch('/api/transfers/create-with-import', {
         method: 'POST',
         body: formData,
         credentials: 'include',
+        headers,
       });
+      
+      if (response.status === 401) {
+        const refreshToken = localStorage.getItem('refreshToken');
+        if (refreshToken) {
+          const refreshRes = await fetch('/api/auth/refresh', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ refresh_token: refreshToken }),
+            credentials: 'include',
+          });
+          if (refreshRes.ok) {
+            const refreshData = await refreshRes.json();
+            if (refreshData.access_token) {
+              localStorage.setItem('accessToken', refreshData.access_token);
+              headers['Authorization'] = `Bearer ${refreshData.access_token}`;
+              const retryFormData = new FormData();
+              retryFormData.append('dariGudang', data.dariGudang);
+              retryFormData.append('keGudang', data.keGudang);
+              retryFormData.append('tanggal', data.tanggal);
+              retryFormData.append('file', data.file);
+              response = await fetch('/api/transfers/create-with-import', {
+                method: 'POST',
+                body: retryFormData,
+                credentials: 'include',
+                headers,
+              });
+            }
+          }
+        }
+      }
       
       if (!response.ok) {
         const error = await response.text();
@@ -117,7 +154,7 @@ export default function Transfers() {
       }
       toast({
         title: "Error",
-        description: "Failed to create transfer order",
+        description: error instanceof Error ? error.message : "Failed to create transfer order",
         variant: "destructive",
       });
     },
