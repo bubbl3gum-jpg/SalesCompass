@@ -64,6 +64,8 @@ export default function VirtualInventory() {
   
   const { data: inventory, isLoading: inventoryLoading } = useQuery<VirtualStoreInventory[]>({
     queryKey: [inventoryUrl],
+    retry: 2,
+    retryDelay: 1000,
   });
 
   const invalidateInventory = () => {

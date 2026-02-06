@@ -570,6 +570,23 @@ export class DatabaseStorage implements IStorage {
     );
   }
 
+  private familyCodesCache: string[] | null = null;
+  private familyCodesCacheTime: number = 0;
+  private readonly FAMILY_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+  private async getCachedFamilyCodes(): Promise<string[]> {
+    const now = Date.now();
+    if (this.familyCodesCache && (now - this.familyCodesCacheTime) < this.FAMILY_CACHE_TTL) {
+      return this.familyCodesCache;
+    }
+    const results = await db.selectDistinct({ family: pricelist.family })
+      .from(pricelist)
+      .where(sql`${pricelist.family} IS NOT NULL AND ${pricelist.family} != ''`);
+    this.familyCodesCache = results.map(f => f.family!).filter(Boolean);
+    this.familyCodesCacheTime = now;
+    return this.familyCodesCache;
+  }
+
   // Enhanced price resolution that uses reference_sheet for hierarchical lookup
   async getEnhancedPriceForItem(kodeItem: string, serialNumber?: string): Promise<Pricelist | undefined> {
     // Strategy 1: Try exact serial number match if provided
@@ -631,19 +648,23 @@ export class DatabaseStorage implements IStorage {
       }
     }
 
-    // Strategy 7: Extract family code from kode_item pattern (e.g., A3FM8525213 -> A3)
-    // Pattern: Item codes typically start with family code like A1, A2, A3, A4, etc.
-    const familyMatch = kodeItem.match(/^(A\d+)/i);
-    if (familyMatch) {
-      const extractedFamily = familyMatch[1].toUpperCase();
+    // Strategy 7: Match kode_item prefix against known family codes (cached)
+    const families = await this.getCachedFamilyCodes();
+    const upperKode = kodeItem.toUpperCase();
+    
+    const matchedFamilies = families
+      .filter(f => upperKode.startsWith(f.toUpperCase()))
+      .sort((a, b) => b.length - a.length); // longest match first
+    
+    if (matchedFamilies.length > 0) {
       const [familyPrice] = await db.select().from(pricelist).where(
         and(
-          eq(pricelist.family, extractedFamily),
+          sql`${pricelist.family} IN (${sql.join(matchedFamilies.map(f => sql`${f}`), sql`, `)})`,
           sql`${pricelist.normalPrice} IS NOT NULL`
         )
-      );
+      ).orderBy(sql`LENGTH(${pricelist.family}) DESC`).limit(1);
+      
       if (familyPrice) {
-        console.log(`Price found via extracted family ${extractedFamily} for item ${kodeItem}`);
         return familyPrice;
       }
     }
