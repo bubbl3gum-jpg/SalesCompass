@@ -44,16 +44,9 @@ app.use((req, res, next) => {
   next();
 });
 
-// Body parsing with error handling
+// Body parsing
 app.use(express.json({ 
   limit: '10mb',
-  verify: (req, res, buf) => {
-    try {
-      JSON.parse(buf.toString());
-    } catch (e) {
-      throw new Error('Invalid JSON');
-    }
-  }
 }));
 app.use(express.urlencoded({ 
   extended: false, 
