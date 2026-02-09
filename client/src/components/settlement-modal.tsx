@@ -157,7 +157,7 @@ export function SettlementModal({ isOpen, onClose, settlement }: SettlementModal
         }
       } else {
         form.reset({
-          settlementType: bazarStores.length > 0 ? "bazar" : "store",
+          settlementType: "bazar",
           kodeGudang: user?.store_id || "",
           bazarId: "",
           tanggal: new Date().toISOString().split('T')[0],
@@ -265,40 +265,28 @@ export function SettlementModal({ isOpen, onClose, settlement }: SettlementModal
         
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            {/* Combined Store Selection */}
+            {/* Bazar Store Selection */}
             <FormField
               control={form.control}
               name="kodeGudang"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Select Store / Bazar</FormLabel>
-                  <Select onValueChange={(value) => {
-                    field.onChange(value);
-                    const store = stores.find(s => s.kodeGudang === value);
-                    form.setValue("settlementType", store?.storeCategory === 'bazar' ? "bazar" : "store");
-                  }} value={field.value}>
+                  <FormLabel>Select Bazar</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
                     <FormControl>
                       <SelectTrigger data-testid="select-store">
-                        <SelectValue placeholder="Select a store or bazar" />
+                        <SelectValue placeholder="Select a bazar" />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      {storesLoading ? (
-                        <SelectItem value="" disabled>Loading stores...</SelectItem>
-                      ) : stores.length === 0 ? (
-                        <SelectItem value="" disabled>No stores available</SelectItem>
+                      {bazarStores.length === 0 ? (
+                        <SelectItem value="" disabled>No bazar stores available</SelectItem>
                       ) : (
-                        stores.map((store) => (
+                        bazarStores.map((store) => (
                           <SelectItem key={store.kodeGudang} value={store.kodeGudang}>
                             <span className="flex items-center gap-2">
-                              <span className={cn(
-                                "w-2 h-2 rounded-full",
-                                store.storeCategory === 'bazar' ? "bg-purple-500" : "bg-blue-500"
-                              )} />
+                              <span className="w-2 h-2 rounded-full bg-purple-500" />
                               {store.namaGudang} ({store.kodeGudang})
-                              {store.storeCategory === 'bazar' && (
-                                <Badge variant="outline" className="text-[10px] ml-1 border-purple-200 text-purple-600 h-4 px-1">Bazar</Badge>
-                              )}
                             </span>
                           </SelectItem>
                         ))
