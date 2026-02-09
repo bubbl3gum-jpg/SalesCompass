@@ -37,10 +37,7 @@ const settlementFormSchema = z.object({
   cashAkhir: z.string().min(1, "Ending cash amount is required"),
   variance: z.string().optional().default("0"),
 }).refine((data) => {
-  if (data.settlementType === "store" && !data.kodeGudang) {
-    return false;
-  }
-  if (data.settlementType === "bazar" && !data.bazarId) {
+  if (!data.kodeGudang) {
     return false;
   }
   return true;
@@ -54,15 +51,7 @@ type SettlementFormData = z.infer<typeof settlementFormSchema>;
 interface Store {
   kodeGudang: string;
   namaGudang: string;
-}
-
-interface Bazar {
-  bazarId: number;
-  bazarName: string;
-  location: string;
-  startDate: string;
-  endDate: string;
-  status: 'upcoming' | 'active' | 'ended';
+  storeCategory?: string | null;
 }
 
 interface Edc {
@@ -110,10 +99,7 @@ export function SettlementModal({ isOpen, onClose, settlement }: SettlementModal
     retry: false,
   });
 
-  const { data: activeBazars = [] } = useQuery<Bazar[]>({
-    queryKey: ["/api/bazars/active"],
-    retry: false,
-  });
+  const bazarStores = stores.filter(s => s.storeCategory === 'bazar');
 
   const edcOptions = useQuery<Edc[]>({
     queryKey: ["/api/edc"],
@@ -151,8 +137,9 @@ export function SettlementModal({ isOpen, onClose, settlement }: SettlementModal
   useEffect(() => {
     if (isOpen) {
       if (settlement) {
+        const isBazarStore = stores.find(s => s.kodeGudang === settlement.kodeGudang)?.storeCategory === 'bazar';
         form.reset({
-          settlementType: settlement.bazarId ? "bazar" : "store",
+          settlementType: isBazarStore || settlement.bazarId ? "bazar" : "store",
           kodeGudang: settlement.kodeGudang || "",
           bazarId: settlement.bazarId?.toString() || "",
           tanggal: settlement.tanggal,
@@ -169,7 +156,7 @@ export function SettlementModal({ isOpen, onClose, settlement }: SettlementModal
         }
       } else {
         form.reset({
-          settlementType: activeBazars.length > 0 ? "bazar" : "store",
+          settlementType: bazarStores.length > 0 ? "bazar" : "store",
           kodeGudang: user?.store_id || "",
           bazarId: "",
           tanggal: new Date().toISOString().split('T')[0],
@@ -180,7 +167,7 @@ export function SettlementModal({ isOpen, onClose, settlement }: SettlementModal
         setEdcEntries([]);
       }
     }
-  }, [isOpen, settlement, existingEdcSettlements, form, activeBazars, user]);
+  }, [isOpen, settlement, existingEdcSettlements, form, bazarStores, user]);
 
   useEffect(() => {
     if (watchCashAwal && watchCashAkhir) {
@@ -222,11 +209,7 @@ export function SettlementModal({ isOpen, onClose, settlement }: SettlementModal
         })),
       };
 
-      if (data.settlementType === "bazar" && data.bazarId) {
-        payload.bazarId = parseInt(data.bazarId);
-      } else {
-        payload.kodeGudang = data.kodeGudang;
-      }
+      payload.kodeGudang = data.kodeGudang;
 
       const method = settlement ? 'PATCH' : 'POST';
       const url = settlement ? `/api/settlements/${settlement.settlementId}` : '/api/settlements';
@@ -281,7 +264,7 @@ export function SettlementModal({ isOpen, onClose, settlement }: SettlementModal
         
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            {activeBazars.length > 0 && (
+            {bazarStores.length > 0 && (
               <FormField
                 control={form.control}
                 name="settlementType"
@@ -351,25 +334,25 @@ export function SettlementModal({ isOpen, onClose, settlement }: SettlementModal
             {settlementType === "bazar" && (
               <FormField
                 control={form.control}
-                name="bazarId"
+                name="kodeGudang"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Active Bazar</FormLabel>
+                    <FormLabel>Select Bazar Store</FormLabel>
                     <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
                         <SelectTrigger data-testid="select-bazar">
-                          <SelectValue placeholder="Select a bazar" />
+                          <SelectValue placeholder="Select a bazar store" />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        {activeBazars.length === 0 ? (
-                          <SelectItem value="" disabled>No active bazars available</SelectItem>
+                        {bazarStores.length === 0 ? (
+                          <SelectItem value="" disabled>No bazar stores available</SelectItem>
                         ) : (
-                          activeBazars.map((bazar) => (
-                            <SelectItem key={bazar.bazarId} value={bazar.bazarId.toString()}>
+                          bazarStores.map((store) => (
+                            <SelectItem key={store.kodeGudang} value={store.kodeGudang}>
                               <span className="flex items-center gap-2">
-                                <span className="w-2 h-2 rounded-full bg-green-500" />
-                                {bazar.bazarName} - {bazar.location}
+                                <span className="w-2 h-2 rounded-full bg-purple-500" />
+                                {store.namaGudang} ({store.kodeGudang})
                               </span>
                             </SelectItem>
                           ))
