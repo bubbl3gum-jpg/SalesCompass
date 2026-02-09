@@ -108,17 +108,7 @@ const tableConfigs: TableConfig[] = [
     importTable: 'store_types',
     keyField: 'id',
     fields: [
-      { key: 'typeName', label: 'Type Name', type: 'text', required: true },
-      { 
-        key: 'category', 
-        label: 'Category', 
-        type: 'select', 
-        required: true,
-        options: [
-          { value: 'normal', label: 'Normal Store' },
-          { value: 'bazar', label: 'Bazar' }
-        ]
-      },
+      { key: 'typeName', label: 'Department Store Name', type: 'text', required: true },
     ]
   }
 ];

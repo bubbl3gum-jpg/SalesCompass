@@ -103,7 +103,7 @@ export default function StoreConfiguration() {
     queryKey: ['/api/edc'],
   });
 
-  const { data: storeTypes } = useQuery<Array<{ id: number; typeName: string; category: string }>>({
+  const { data: storeTypes } = useQuery<Array<{ id: number; typeName: string }>>({
     queryKey: ['/api/store-types'],
   });
 
@@ -509,7 +509,7 @@ export default function StoreConfiguration() {
                           </p>
                         </div>
 
-                        {/* Store Type */}
+                        {/* Store Type (Department Store) */}
                         <div>
                           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Store Type</label>
                           <Select
@@ -521,31 +521,18 @@ export default function StoreConfiguration() {
                             disabled={!isAdmin}
                           >
                             <SelectTrigger className="h-10">
-                              <SelectValue placeholder="Select type..." />
+                              <SelectValue placeholder="Select department store..." />
                             </SelectTrigger>
                             <SelectContent>
                               <SelectItem value="Independent">Independent</SelectItem>
-                              {storeTypes?.filter(t => t.category === (selectedStoreData.storeCategory || "normal")).map(type => (
+                              {storeTypes?.map(type => (
                                 <SelectItem key={type.id} value={type.typeName}>{type.typeName}</SelectItem>
                               ))}
-                              {(selectedStoreData.storeCategory || "normal") === 'bazar' && (
-                                <SelectItem value="Others">Others</SelectItem>
-                              )}
                             </SelectContent>
                           </Select>
-                          {selectedStoreData.storeCategory === 'bazar' && selectedStoreData.storeType === 'Others' && isAdmin && (
-                             <div className="mt-2">
-                               <Input 
-                                 placeholder="Enter custom type name..."
-                                 onBlur={(e) => {
-                                   if (e.target.value && e.target.value !== 'Others') {
-                                     updateStoreMutation.mutate({ kodeGudang: selectedStoreData.kodeGudang, data: { storeType: e.target.value } });
-                                   }
-                                 }}
-                                 className="h-8 text-xs"
-                               />
-                             </div>
-                          )}
+                          <p className="text-xs text-gray-400 mt-1">
+                            Department store where this store is located (for EDC machine tracking)
+                          </p>
                         </div>
                       </div>
                     </CardContent>

@@ -53,11 +53,10 @@ export const referenceSheet = pgTable("reference_sheet", {
   deskripsiMotif: varchar("deskripsi_motif", { length: 500 }),
 });
 
-// Store Category and Types
+// Store Types (department store names like Sogo, Matahari, Metro)
 export const storeTypes = pgTable("store_types", {
   id: serial("id").primaryKey(),
   typeName: varchar("type_name", { length: 255 }).notNull(),
-  category: varchar("category", { length: 50 }).notNull(), // 'normal' or 'bazar'
 });
 
 export type InsertStoreType = typeof storeTypes.$inferInsert;
