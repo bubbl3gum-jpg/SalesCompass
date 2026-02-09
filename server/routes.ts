@@ -3029,6 +3029,52 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Store Types endpoints
+  app.get('/api/store-types', authenticate, async (req, res) => {
+    try {
+      const types = await storage.getStoreTypes();
+      res.json(types);
+    } catch (error) {
+      console.error('Store types fetch error:', error);
+      res.status(500).json({ message: 'Failed to get store types' });
+    }
+  });
+
+  app.post('/api/store-types', authenticate, checkRole(['System Administrator']), async (req, res) => {
+    try {
+      const validatedData = insertStoreTypeSchema.parse(req.body);
+      const type = await storage.createStoreType(validatedData);
+      res.json(type);
+    } catch (error) {
+      console.error('Store type creation error:', error);
+      res.status(400).json({ message: 'Failed to create store type' });
+    }
+  });
+
+  app.patch('/api/store-types/:id', authenticate, checkRole(['System Administrator']), async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ message: 'Invalid ID' });
+      const type = await storage.updateStoreType(id, req.body);
+      res.json(type);
+    } catch (error) {
+      console.error('Store type update error:', error);
+      res.status(400).json({ message: 'Failed to update store type' });
+    }
+  });
+
+  app.delete('/api/store-types/:id', authenticate, checkRole(['System Administrator']), async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ message: 'Invalid ID' });
+      await storage.deleteStoreType(id);
+      res.json({ message: 'Store type deleted' });
+    } catch (error) {
+      console.error('Store type delete error:', error);
+      res.status(500).json({ message: 'Failed to delete store type' });
+    }
+  });
+
   app.post('/api/virtual-inventory', authenticate, checkRole(['Stockist', 'Supervisor', 'System Administrator']), async (req, res) => {
     try {
       const item = await storage.createVirtualStoreInventory(req.body);

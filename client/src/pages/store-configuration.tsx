@@ -476,32 +476,6 @@ export default function StoreConfiguration() {
                     </CardHeader>
                     <CardContent>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {/* Store Type */}
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Store Type</label>
-                          <Select
-                            value={selectedStoreData.storeType || "independent"}
-                            onValueChange={(value) => {
-                              if (!isAdmin) return;
-                              updateStoreMutation.mutate({ kodeGudang: selectedStoreData.kodeGudang, data: { storeType: value } });
-                            }}
-                            disabled={!isAdmin}
-                          >
-                            <SelectTrigger className="h-10">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="independent">Independent</SelectItem>
-                              <SelectItem value="dependent">Dependent</SelectItem>
-                            </SelectContent>
-                          </Select>
-                          <p className="text-xs text-gray-400 mt-1">
-                            {(selectedStoreData.storeType || "independent") === "dependent"
-                              ? "This store borrows EDC from another company"
-                              : "This store owns its own EDC machines"}
-                          </p>
-                        </div>
-
                         {/* Store Category */}
                         <div>
                           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Store Category</label>
@@ -509,7 +483,10 @@ export default function StoreConfiguration() {
                             value={selectedStoreData.storeCategory || "normal"}
                             onValueChange={(value) => {
                               if (!isAdmin) return;
-                              updateStoreMutation.mutate({ kodeGudang: selectedStoreData.kodeGudang, data: { storeCategory: value } });
+                              updateStoreMutation.mutate({ 
+                                kodeGudang: selectedStoreData.kodeGudang, 
+                                data: { storeCategory: value, storeType: "" } 
+                              });
                             }}
                             disabled={!isAdmin}
                           >
@@ -526,6 +503,44 @@ export default function StoreConfiguration() {
                               ? "Bazar stores have daily settlement tracking"
                               : "Regular retail store operation"}
                           </p>
+                        </div>
+
+                        {/* Store Type */}
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Store Type</label>
+                          <Select
+                            value={selectedStoreData.storeType || ""}
+                            onValueChange={(value) => {
+                              if (!isAdmin) return;
+                              updateStoreMutation.mutate({ kodeGudang: selectedStoreData.kodeGudang, data: { storeType: value } });
+                            }}
+                            disabled={!isAdmin}
+                          >
+                            <SelectTrigger className="h-10">
+                              <SelectValue placeholder="Select type..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {storeTypes?.filter(t => t.category === (selectedStoreData.storeCategory || "normal")).map(type => (
+                                <SelectItem key={type.id} value={type.typeName}>{type.typeName}</SelectItem>
+                              ))}
+                              {selectedStoreData.storeCategory === 'bazar' && (
+                                <SelectItem value="Others">Others</SelectItem>
+                              )}
+                            </SelectContent>
+                          </Select>
+                          {selectedStoreData.storeCategory === 'bazar' && selectedStoreData.storeType === 'Others' && isAdmin && (
+                             <div className="mt-2">
+                               <Input 
+                                 placeholder="Enter custom type name..."
+                                 onBlur={(e) => {
+                                   if (e.target.value && e.target.value !== 'Others') {
+                                     updateStoreMutation.mutate({ kodeGudang: selectedStoreData.kodeGudang, data: { storeType: e.target.value } });
+                                   }
+                                 }}
+                                 className="h-8 text-xs"
+                               />
+                             </div>
+                          )}
                         </div>
                       </div>
                     </CardContent>

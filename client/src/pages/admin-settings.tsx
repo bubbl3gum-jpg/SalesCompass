@@ -100,6 +100,26 @@ const tableConfigs: TableConfig[] = [
       { key: 'tanggalMasuk', label: 'Date Joined', type: 'date', required: true },
       { key: 'jabatan', label: 'Position', type: 'select', required: true, options: [] },
     ]
+  },
+  {
+    name: 'storeTypes',
+    displayName: 'Store Types',
+    endpoint: '/api/store-types',
+    importTable: 'store_types',
+    keyField: 'id',
+    fields: [
+      { key: 'typeName', label: 'Type Name', type: 'text', required: true },
+      { 
+        key: 'category', 
+        label: 'Category', 
+        type: 'select', 
+        required: true,
+        options: [
+          { value: 'normal', label: 'Normal Store' },
+          { value: 'bazar', label: 'Bazar' }
+        ]
+      },
+    ]
   }
 ];
 
@@ -173,6 +193,7 @@ export default function AdminSettings() {
   const storesQuery = useTableData('/api/stores', activeTab === 'stores', currentPage['stores'] || 1, itemsPerPage);
   const positionsQuery = useTableData('/api/positions', activeTab === 'positions' || activeTab === 'staff', currentPage['positions'] || 1, itemsPerPage);
   const staffQuery = useTableData('/api/staff', activeTab === 'staff', currentPage['staff'] || 1, itemsPerPage);
+  const storeTypesQuery = useTableData('/api/store-types', activeTab === 'storeTypes', currentPage['storeTypes'] || 1, itemsPerPage);
 
   // Get positions data for staff form
   const positions = positionsQuery.data || [];
@@ -592,6 +613,9 @@ export default function AdminSettings() {
         break;
       case 'staff':
         queryResult = staffQuery;
+        break;
+      case 'storeTypes':
+        queryResult = storeTypesQuery;
         break;
       default:
         queryResult = { data: null, isLoading: false, error: null };

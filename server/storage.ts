@@ -19,6 +19,7 @@ import {
   stock,
   virtualStoreInventory,
   bazars,
+  storeTypes,
   type User,
   type UpsertUser,
   type ReferenceSheet,
@@ -58,6 +59,8 @@ import {
   type Bazar,
   type InsertBazar,
   type StoreDiscount,
+  type StoreType,
+  type InsertStoreType,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, sql, desc, sum, or, ilike, inArray, gt } from "drizzle-orm";
@@ -96,6 +99,12 @@ export interface IStorage {
   searchStores(query: string): Promise<Store[]>;
   getStoreEdcByStore(kodeGudang: string): Promise<StoreEdc[]>;
   deleteStoreEdc(storeEdcId: number): Promise<void>;
+
+  // Store Type management operations
+  getStoreTypes(): Promise<StoreType[]>;
+  createStoreType(data: InsertStoreType): Promise<StoreType>;
+  updateStoreType(id: number, data: Partial<InsertStoreType>): Promise<StoreType>;
+  deleteStoreType(id: number): Promise<void>;
 
   // Discount operations
   getDiscountTypes(): Promise<DiscountType[]>;
@@ -2139,6 +2148,29 @@ export class DatabaseStorage implements IStorage {
 
   async deleteBazar(bazarId: number): Promise<void> {
     await db.delete(bazars).where(eq(bazars.bazarId, bazarId));
+  }
+
+  // Store Type operations implementation
+  async getStoreTypes(): Promise<StoreType[]> {
+    return await db.select().from(storeTypes).orderBy(desc(storeTypes.id));
+  }
+
+  async createStoreType(data: InsertStoreType): Promise<StoreType> {
+    const [result] = await db.insert(storeTypes).values(data).returning();
+    return result;
+  }
+
+  async updateStoreType(id: number, data: Partial<InsertStoreType>): Promise<StoreType> {
+    const [result] = await db
+      .update(storeTypes)
+      .set(data)
+      .where(eq(storeTypes.id, id))
+      .returning();
+    return result;
+  }
+
+  async deleteStoreType(id: number): Promise<void> {
+    await db.delete(storeTypes).where(eq(storeTypes.id, id));
   }
 }
 

@@ -53,6 +53,17 @@ export const referenceSheet = pgTable("reference_sheet", {
   deskripsiMotif: varchar("deskripsi_motif", { length: 500 }),
 });
 
+// Store Category and Types
+export const storeTypes = pgTable("store_types", {
+  id: serial("id").primaryKey(),
+  typeName: varchar("type_name", { length: 255 }).notNull(),
+  category: varchar("category", { length: 50 }).notNull(), // 'normal' or 'bazar'
+});
+
+export type InsertStoreType = typeof storeTypes.$inferInsert;
+export type StoreType = typeof storeTypes.$inferSelect;
+export const insertStoreTypeSchema = createInsertSchema(storeTypes).omit({ id: true });
+
 // Stores
 export const stores = pgTable("store", {
   kodeGudang: varchar("kode_gudang", { length: 50 }).primaryKey(),
@@ -60,7 +71,7 @@ export const stores = pgTable("store", {
   jenisGudang: varchar("jenis_gudang", { length: 50 }),
   storeUsername: varchar("store_username", { length: 100 }),
   storePassword: varchar("store_password", { length: 255 }),
-  storeType: varchar("store_type", { length: 20 }).default("independent"),
+  storeType: varchar("store_type", { length: 100 }).default("independent"),
   storeCategory: varchar("store_category", { length: 20 }).default("normal"),
 });
 
