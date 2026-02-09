@@ -28,6 +28,7 @@ import {
   insertPositionSchema,
   insertToItemListSchema,
   insertBazarSchema,
+  insertStoreTypeSchema,
   toItemList,
   type Pricelist 
 } from "@shared/schema";

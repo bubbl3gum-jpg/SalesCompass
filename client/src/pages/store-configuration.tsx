@@ -103,6 +103,10 @@ export default function StoreConfiguration() {
     queryKey: ['/api/edc'],
   });
 
+  const { data: storeTypes } = useQuery<Array<{ id: number; typeName: string; category: string }>>({
+    queryKey: ['/api/store-types'],
+  });
+
   const { data: storeInventory, isLoading: inventoryLoading } = useQuery<VirtualStoreInventory[]>({
     queryKey: ['/api/virtual-inventory', selectedStore],
     queryFn: async () => {
@@ -520,10 +524,11 @@ export default function StoreConfiguration() {
                               <SelectValue placeholder="Select type..." />
                             </SelectTrigger>
                             <SelectContent>
+                              <SelectItem value="Independent">Independent</SelectItem>
                               {storeTypes?.filter(t => t.category === (selectedStoreData.storeCategory || "normal")).map(type => (
                                 <SelectItem key={type.id} value={type.typeName}>{type.typeName}</SelectItem>
                               ))}
-                              {selectedStoreData.storeCategory === 'bazar' && (
+                              {(selectedStoreData.storeCategory || "normal") === 'bazar' && (
                                 <SelectItem value="Others">Others</SelectItem>
                               )}
                             </SelectContent>
