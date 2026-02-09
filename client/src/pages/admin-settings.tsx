@@ -874,10 +874,11 @@ export default function AdminSettings() {
             </div>
 
             <Tabs value={activeTab} onValueChange={handleTabChange}>
-              <TabsList className="grid w-full grid-cols-4 bg-white/10 dark:bg-black/10 backdrop-blur-xl border-white/20 dark:border-gray-800/50">
+              <TabsList className="grid w-full grid-cols-5 bg-white/10 dark:bg-black/10 backdrop-blur-xl border-white/20 dark:border-gray-800/50">
                 <TabsTrigger value="stores" data-testid="tab-stores">Stores</TabsTrigger>
                 <TabsTrigger value="positions" data-testid="tab-positions">Positions</TabsTrigger>
                 <TabsTrigger value="staff" data-testid="tab-staff">Staff</TabsTrigger>
+                <TabsTrigger value="storeTypes" data-testid="tab-store-types">Store Types</TabsTrigger>
                 <TabsTrigger value="bulk-upload" data-testid="tab-bulk-upload">Bulk Stock Upload</TabsTrigger>
               </TabsList>
 
