@@ -140,7 +140,7 @@ export interface IStorage {
   // Sales operations
   createSale(data: InsertLaporanPenjualan): Promise<LaporanPenjualan>;
   getSales(kodeGudang?: string, tanggal?: string): Promise<LaporanPenjualan[]>;
-  getSalesToday(kodeGudang: string): Promise<{ totalSales: string, count: number }>;
+  getSalesToday(kodeGudang?: string): Promise<{ totalSales: string, count: number }>;
   getSaleById(penjualanId: number): Promise<LaporanPenjualan | undefined>;
   updateSale(penjualanId: number, data: Partial<InsertLaporanPenjualan>): Promise<LaporanPenjualan>;
   deleteSale(penjualanId: number): Promise<void>;
@@ -777,20 +777,19 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(laporanPenjualan).orderBy(desc(laporanPenjualan.tanggal));
   }
 
-  async getSalesToday(kodeGudang: string): Promise<{ totalSales: string, count: number }> {
+  async getSalesToday(kodeGudang?: string): Promise<{ totalSales: string, count: number }> {
     const today = new Date().toISOString().split('T')[0];
+    const conditions = [eq(laporanPenjualan.tanggal, today)];
+    if (kodeGudang) {
+      conditions.push(eq(laporanPenjualan.kodeGudang, kodeGudang));
+    }
     const [result] = await db
       .select({
         totalSales: sql<string>`COALESCE(SUM(${laporanPenjualan.discByAmount}), 0)`,
         count: sql<number>`COUNT(*)`
       })
       .from(laporanPenjualan)
-      .where(
-        and(
-          eq(laporanPenjualan.kodeGudang, kodeGudang),
-          eq(laporanPenjualan.tanggal, today)
-        )
-      );
+      .where(and(...conditions));
     
     return result || { totalSales: '0', count: 0 };
   }

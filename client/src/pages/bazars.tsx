@@ -337,8 +337,8 @@ export default function Bazars() {
       )}>
         <div className="p-6">
           <div className="mb-6">
-            <h1 className="text-2xl font-bold text-gray-900">Bazar Management</h1>
-            <p className="text-gray-600">Manage bazar events, locations, and schedules</p>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Bazar Management</h1>
+            <p className="text-gray-600 dark:text-gray-300">Manage bazar events, locations, and schedules</p>
           </div>
 
           <Card>
@@ -404,12 +404,12 @@ export default function Bazars() {
                     <Card key={bazar.bazarId} className="relative hover:shadow-md transition-shadow">
                       <CardContent className="p-4">
                         <div className="flex justify-between items-start mb-3">
-                          <h3 className="font-semibold text-lg text-gray-900 line-clamp-1">
+                          <h3 className="font-semibold text-lg text-gray-900 dark:text-white line-clamp-1">
                             {bazar.bazarName}
                           </h3>
                           {getStatusBadge(bazar.status)}
                         </div>
-                        <div className="space-y-2 text-sm text-gray-600">
+                        <div className="space-y-2 text-sm text-gray-600 dark:text-gray-300">
                           <div className="flex items-center gap-2">
                             <MapPin className="h-4 w-4" />
                             <span className="line-clamp-1">{bazar.location}</span>
@@ -468,7 +468,7 @@ export default function Bazars() {
                           <div>
                             <div className="flex items-center gap-2 mb-1">
                               <MapPin className="h-5 w-5 text-blue-600" />
-                              <h3 className="font-semibold text-lg text-gray-900">{group.location}</h3>
+                              <h3 className="font-semibold text-lg text-gray-900 dark:text-white">{group.location}</h3>
                             </div>
                             <p className="text-sm text-gray-500">
                               {group.bazars.length} event{group.bazars.length !== 1 ? 's' : ''} at this location

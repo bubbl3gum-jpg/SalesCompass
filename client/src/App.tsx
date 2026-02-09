@@ -131,7 +131,9 @@ function Router() {
             <Route path="/store-configuration">
               {(params) => <ProtectedRoute component={StoreConfiguration} permission="store:config" {...params} />}
             </Route>
-            <Route component={NotFound} />
+            <Route path="/dashboard" component={Dashboard} />
+            <Route path="/login" component={Dashboard} />
+            <Route component={Dashboard} />
           </>
         )}
       </Switch>

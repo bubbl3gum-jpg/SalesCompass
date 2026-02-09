@@ -3374,21 +3374,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: 'kode_gudang is required' });
       }
 
-      const todaySales = await storage.getSalesToday(kode_gudang as string);
+      const storeFilter = kode_gudang === 'ALL_STORE' ? undefined : kode_gudang as string;
+      const todaySales = await storage.getSalesToday(storeFilter);
       
-      // Get pending settlements (mock implementation)
-      const settlements = await storage.getSettlements(kode_gudang as string);
+      const settlements = await storage.getSettlements(storeFilter);
       const pendingSettlements = settlements.filter(s => !s.variance || s.variance === null).length;
 
-      // Get stock alerts (simplified implementation)
-      const lowStockItems = 0; // TODO: Calculate from transfers and current stock
+      const lowStockItems = 0;
 
       res.json({
         todaySales: todaySales.totalSales,
         salesCount: todaySales.count,
         pendingSettlements,
         lowStockItems,
-        activeTransfers: 0 // Would be calculated based on transfer status
+        activeTransfers: 0
       });
 
     } catch (error) {

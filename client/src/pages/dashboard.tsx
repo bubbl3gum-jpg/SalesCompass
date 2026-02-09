@@ -40,10 +40,15 @@ interface Metrics {
 }
 
 interface SalesItem {
+  penjualanId?: number;
+  kodeGudang?: string;
   kodeItem: string;
-  tanggalJual: string;
-  totalHarga: number;
-  qty: number;
+  tanggal?: string;
+  serialNumber?: string;
+  finalPrice?: number;
+  discByAmount?: string;
+  notes?: string;
+  qty?: number;
 }
 
 interface ImportJob {
@@ -124,13 +129,35 @@ export default function Dashboard() {
   });
 
   const { data: metrics, isLoading: metricsLoading, error: metricsError } = useQuery<Metrics>({
-    queryKey: ["/api/dashboard/metrics", selectedStore],
+    queryKey: ["/api/dashboard/metrics", { store: selectedStore }],
+    queryFn: async () => {
+      const token = localStorage.getItem('accessToken');
+      const headers: HeadersInit = {};
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const params = new URLSearchParams();
+      params.append('kode_gudang', selectedStore);
+      const res = await fetch(`/api/dashboard/metrics?${params}`, { credentials: 'include', headers });
+      if (!res.ok) throw new Error(`${res.status}: ${res.statusText}`);
+      return res.json();
+    },
     enabled: !!selectedStore,
     retry: false,
   });
 
   const { data: recentSales = [], isLoading: salesLoading } = useQuery<SalesItem[]>({
-    queryKey: ["/api/sales", selectedStore],
+    queryKey: ["/api/sales", { store: selectedStore }],
+    queryFn: async () => {
+      const token = localStorage.getItem('accessToken');
+      const headers: HeadersInit = {};
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const params = new URLSearchParams();
+      if (selectedStore && selectedStore !== 'ALL_STORE') {
+        params.append('kode_gudang', selectedStore);
+      }
+      const res = await fetch(`/api/sales?${params}`, { credentials: 'include', headers });
+      if (!res.ok) throw new Error(`${res.status}: ${res.statusText}`);
+      return res.json();
+    },
     enabled: !!selectedStore,
     retry: false,
   });
@@ -488,12 +515,12 @@ export default function Dashboard() {
                             <div className="flex-1">
                               <p className="font-medium text-gray-900 dark:text-white">{sale.kodeItem}</p>
                               <p className="text-sm text-gray-700 dark:text-gray-300">
-                                {new Date(sale.tanggalJual).toLocaleString('id-ID')}
+                                {sale.tanggal ? new Date(sale.tanggal).toLocaleString('id-ID') : '—'}
                               </p>
                             </div>
                             <div className="text-right">
                               <p className="font-bold text-gray-900 dark:text-white">
-                                Rp {(sale.totalHarga || 0).toLocaleString()}
+                                Rp {(sale.finalPrice || 0).toLocaleString()}
                               </p>
                               <p className="text-sm text-gray-700 dark:text-gray-300">
                                 Qty: {sale.qty || 0}
@@ -643,17 +670,17 @@ export default function Dashboard() {
                       ) : Array.isArray(activeBazars) && activeBazars.length > 0 ? (
                         <div className="space-y-3 max-h-80 overflow-y-auto">
                           {activeBazars.map((bazar: any, index: number) => (
-                            <div key={bazar.id || index} className="p-3 bg-white/40 dark:bg-black/40 rounded-lg border border-white/20 dark:border-gray-600/30">
-                              <p className="font-medium text-gray-900 dark:text-white">{bazar.name || bazar.namaBazar || '—'}</p>
+                            <div key={bazar.bazarId || index} className="p-3 bg-white/40 dark:bg-black/40 rounded-lg border border-white/20 dark:border-gray-600/30">
+                              <p className="font-medium text-gray-900 dark:text-white">{bazar.bazarName || '—'}</p>
                               <p className="text-sm text-gray-700 dark:text-gray-300">
                                 <MapPin className="w-3 h-3 inline mr-1" />
-                                {bazar.location || bazar.lokasi || '—'}
+                                {bazar.location || '—'}
                               </p>
                               <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                                 <Calendar className="w-3 h-3 inline mr-1" />
-                                {bazar.startDate || bazar.start_date ? format(new Date(bazar.startDate || bazar.start_date), 'dd MMM') : '—'}
+                                {bazar.startDate ? format(new Date(bazar.startDate), 'dd MMM') : '—'}
                                 {' — '}
-                                {bazar.endDate || bazar.end_date ? format(new Date(bazar.endDate || bazar.end_date), 'dd MMM yyyy') : '—'}
+                                {bazar.endDate ? format(new Date(bazar.endDate), 'dd MMM yyyy') : '—'}
                               </p>
                             </div>
                           ))}

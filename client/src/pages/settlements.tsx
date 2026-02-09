@@ -302,7 +302,7 @@ export default function Settlements() {
                                   Bazar
                                 </Badge>
                               ) : (
-                                <Badge variant="outline" className="bg-gray-50 text-gray-600 border-gray-200">
+                                <Badge variant="outline" className="bg-gray-50 text-gray-600 dark:text-gray-300 border-gray-200">
                                   Regular
                                 </Badge>
                               )}

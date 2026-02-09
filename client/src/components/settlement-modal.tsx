@@ -430,7 +430,7 @@ export function SettlementModal({ isOpen, onClose, settlement }: SettlementModal
                     ))}
                     {edcEntries.length > 0 && (
                       <div className="flex justify-between items-center pt-2 border-t mt-2">
-                        <span className="text-sm font-medium text-gray-600">Total EDC:</span>
+                        <span className="text-sm font-medium text-gray-600 dark:text-gray-300">Total EDC:</span>
                         <span className="font-semibold text-blue-600">
                           {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(getTotalEdc())}
                         </span>

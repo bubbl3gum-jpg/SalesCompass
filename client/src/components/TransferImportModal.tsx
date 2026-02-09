@@ -331,7 +331,7 @@ export function TransferImportModal({ isOpen, onClose, transferId, onImportCompl
               data-testid="dropzone-file-upload"
             >
               <Upload className="mx-auto h-12 w-12 text-gray-400 mb-4" />
-              <p className="text-lg font-medium text-gray-900">
+              <p className="text-lg font-medium text-gray-900 dark:text-white">
                 Drop your CSV or Excel file here
               </p>
               <p className="text-sm text-gray-500 mt-2">

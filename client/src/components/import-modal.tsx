@@ -404,7 +404,7 @@ export function ImportModal({
               
               {/* Progress Stage */}
               {progressStage && (
-                <div className="text-xs text-gray-600 flex items-center justify-between">
+                <div className="text-xs text-gray-600 dark:text-gray-300 flex items-center justify-between">
                   <span>{progressStage}</span>
                   {jobId && (
                     <span className="font-mono text-blue-600">Job: {jobId.substring(0, 8)}...</span>
