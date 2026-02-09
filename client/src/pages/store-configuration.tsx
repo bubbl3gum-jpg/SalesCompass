@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Dialog,
@@ -28,6 +29,16 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Search, Plus, Trash2, Upload, Package } from "lucide-react";
+import type { VirtualStoreInventory } from "@shared/schema";
 
 interface StoreConfig {
   kodeGudang: string;
@@ -73,6 +84,13 @@ export default function StoreConfiguration() {
   const [removingDiscount, setRemovingDiscount] = useState<any>(null);
   const [removingEdc, setRemovingEdc] = useState<any>(null);
 
+  const [inventorySearch, setInventorySearch] = useState("");
+  const [showAddInventoryModal, setShowAddInventoryModal] = useState(false);
+  const [showImportInventoryModal, setShowImportInventoryModal] = useState(false);
+  const [newInventoryItem, setNewInventoryItem] = useState({ sn: "", kodeItem: "", sc: "", namaBarang: "", qty: 1 });
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+
   const { data: storeConfigs, isLoading } = useQuery<StoreConfig[]>({
     queryKey: ['/api/store-config'],
   });
@@ -83,6 +101,15 @@ export default function StoreConfiguration() {
 
   const { data: allEdcs } = useQuery<any[]>({
     queryKey: ['/api/edc'],
+  });
+
+  const { data: storeInventory, isLoading: inventoryLoading } = useQuery<VirtualStoreInventory[]>({
+    queryKey: ['/api/virtual-inventory', selectedStore],
+    queryFn: async () => {
+      const res = await apiRequest('GET', `/api/virtual-inventory?store=${selectedStore}`);
+      return res.json();
+    },
+    enabled: !!selectedStore,
   });
 
   const updateStoreMutation = useMutation({
@@ -153,6 +180,86 @@ export default function StoreConfiguration() {
     },
   });
 
+  const invalidateInventory = () => {
+    queryClient.invalidateQueries({
+      predicate: (query) => {
+        const key = query.queryKey[0];
+        return typeof key === 'string' && key.startsWith('/api/virtual-inventory');
+      }
+    });
+    queryClient.invalidateQueries({ queryKey: ['/api/virtual-inventory', selectedStore] });
+  };
+
+  const createInventoryMutation = useMutation({
+    mutationFn: async (data: any) => {
+      return await apiRequest('POST', '/api/virtual-inventory', data);
+    },
+    onSuccess: () => {
+      invalidateInventory();
+      setShowAddInventoryModal(false);
+      setNewInventoryItem({ sn: "", kodeItem: "", sc: "", namaBarang: "", qty: 1 });
+      toast({ title: "Success", description: "Inventory item added successfully" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message || "Failed to add item", variant: "destructive" });
+    },
+  });
+
+  const deleteInventoryMutation = useMutation({
+    mutationFn: async (inventoryId: number) => {
+      return await apiRequest('DELETE', `/api/virtual-inventory/${inventoryId}`);
+    },
+    onSuccess: () => {
+      invalidateInventory();
+      toast({ title: "Success", description: "Item deleted successfully" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message || "Failed to delete item", variant: "destructive" });
+    },
+  });
+
+  const handleAddInventoryItem = () => {
+    if (!selectedStore) return;
+    if (!newInventoryItem.sn) {
+      toast({ title: "Error", description: "Serial number (SN) is required", variant: "destructive" });
+      return;
+    }
+    createInventoryMutation.mutate({ kodeGudang: selectedStore, ...newInventoryItem });
+  };
+
+  const handleInventoryFileUpload = async () => {
+    if (!selectedStore) {
+      toast({ title: "Error", description: "Please select a store first", variant: "destructive" });
+      return;
+    }
+    if (!importFile) {
+      toast({ title: "Error", description: "Please select a file to upload", variant: "destructive" });
+      return;
+    }
+    setIsUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', importFile);
+      formData.append('kodeGudang', selectedStore);
+      const token = localStorage.getItem('accessToken');
+      const response = await fetch('/api/virtual-inventory/upload', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` },
+        body: formData
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.message || 'Upload failed');
+      invalidateInventory();
+      setShowImportInventoryModal(false);
+      setImportFile(null);
+      toast({ title: "Import Complete", description: `Successfully imported ${result.success} items.` });
+    } catch (error: any) {
+      toast({ title: "Import Failed", description: error.message || "Failed to import file", variant: "destructive" });
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
   const filteredStores = useMemo(() => {
     if (!storeConfigs) return [];
     let filtered = storeConfigs;
@@ -200,6 +307,17 @@ export default function StoreConfiguration() {
     if (!selectedStore || !assigningDiscount) return;
     assignDiscountMutation.mutate({ kodeGudang: selectedStore, discountId: parseInt(assigningDiscount) });
   };
+
+  const filteredInventory = useMemo(() => {
+    if (!storeInventory) return [];
+    if (!inventorySearch) return storeInventory;
+    const query = inventorySearch.toLowerCase();
+    return storeInventory.filter(item =>
+      item.sn?.toLowerCase().includes(query) ||
+      item.kodeItem?.toLowerCase().includes(query) ||
+      item.namaBarang?.toLowerCase().includes(query)
+    );
+  }, [storeInventory, inventorySearch]);
 
   const handleAssignEdc = () => {
     if (!selectedStore || !assigningEdcId) return;
@@ -509,6 +627,93 @@ export default function StoreConfiguration() {
                       )}
                     </CardContent>
                   </Card>
+
+                  {/* Virtual Store Inventory Section */}
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <div className="flex items-center justify-between">
+                        <CardTitle className="text-base">
+                          <Package className="inline-block w-4 h-4 mr-2 text-purple-500" />
+                          Virtual Store Inventory
+                        </CardTitle>
+                        {isAdmin && (
+                          <div className="flex gap-2">
+                            <Button size="sm" variant="outline" onClick={() => setShowImportInventoryModal(true)}>
+                              <Upload className="w-3 h-3 mr-1" /> Import
+                            </Button>
+                            <Button size="sm" variant="outline" onClick={() => setShowAddInventoryModal(true)}>
+                              <Plus className="w-3 h-3 mr-1" /> Add Item
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                      <div className="mt-2">
+                        <div className="relative">
+                          <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-gray-400" />
+                          <Input
+                            placeholder="Search by SN, item code, or name..."
+                            value={inventorySearch}
+                            onChange={(e) => setInventorySearch(e.target.value)}
+                            className="h-9 pl-8 text-sm"
+                          />
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="mb-2">
+                        <p className="text-xs text-gray-500">
+                          {filteredInventory.length} item{filteredInventory.length !== 1 ? 's' : ''}
+                          {inventorySearch && storeInventory ? ` (filtered from ${storeInventory.length})` : ''}
+                        </p>
+                      </div>
+                      {inventoryLoading ? (
+                        <div className="space-y-2">
+                          {[1, 2, 3].map(i => <Skeleton key={i} className="h-10 w-full" />)}
+                        </div>
+                      ) : filteredInventory.length === 0 ? (
+                        <p className="text-sm text-gray-400 text-center py-4">
+                          {storeInventory?.length === 0 ? 'No inventory items for this store' : 'No items match your search'}
+                        </p>
+                      ) : (
+                        <div className="max-h-[300px] overflow-y-auto border rounded-md">
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead className="text-xs py-2">SN</TableHead>
+                                <TableHead className="text-xs py-2">Item Code</TableHead>
+                                <TableHead className="text-xs py-2">Item Name</TableHead>
+                                <TableHead className="text-xs py-2 text-right">Qty</TableHead>
+                                {isAdmin && <TableHead className="text-xs py-2 w-10"></TableHead>}
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {filteredInventory.map((item) => (
+                                <TableRow key={item.inventoryId}>
+                                  <TableCell className="text-xs py-1.5 font-mono">{item.sn || '-'}</TableCell>
+                                  <TableCell className="text-xs py-1.5">{item.kodeItem || '-'}</TableCell>
+                                  <TableCell className="text-xs py-1.5 truncate max-w-[150px]">{item.namaBarang || '-'}</TableCell>
+                                  <TableCell className="text-xs py-1.5 text-right">{item.qty}</TableCell>
+                                  {isAdmin && (
+                                    <TableCell className="text-xs py-1.5">
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-6 w-6 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
+                                        onClick={() => deleteInventoryMutation.mutate(item.inventoryId)}
+                                        disabled={deleteInventoryMutation.isPending}
+                                      >
+                                        <Trash2 className="w-3 h-3" />
+                                      </Button>
+                                    </TableCell>
+                                  )}
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
                 </div>
               ) : null}
             </div>
@@ -638,6 +843,108 @@ export default function StoreConfiguration() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Add Inventory Item Modal */}
+      <Dialog open={showAddInventoryModal} onOpenChange={setShowAddInventoryModal}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add Inventory Item</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label className="text-sm font-medium">SN *</Label>
+              <Input
+                value={newInventoryItem.sn}
+                onChange={(e) => setNewInventoryItem(prev => ({ ...prev, sn: e.target.value }))}
+                placeholder="Serial number"
+                className="mt-1"
+              />
+            </div>
+            <div>
+              <Label className="text-sm font-medium">Item Code</Label>
+              <Input
+                value={newInventoryItem.kodeItem}
+                onChange={(e) => setNewInventoryItem(prev => ({ ...prev, kodeItem: e.target.value }))}
+                placeholder="Item code"
+                className="mt-1"
+              />
+            </div>
+            <div>
+              <Label className="text-sm font-medium">SC</Label>
+              <Input
+                value={newInventoryItem.sc}
+                onChange={(e) => setNewInventoryItem(prev => ({ ...prev, sc: e.target.value }))}
+                placeholder="SC"
+                className="mt-1"
+              />
+            </div>
+            <div>
+              <Label className="text-sm font-medium">Item Name</Label>
+              <Input
+                value={newInventoryItem.namaBarang}
+                onChange={(e) => setNewInventoryItem(prev => ({ ...prev, namaBarang: e.target.value }))}
+                placeholder="Item name"
+                className="mt-1"
+              />
+            </div>
+            <div>
+              <Label className="text-sm font-medium">Quantity</Label>
+              <Input
+                type="number"
+                min={1}
+                value={newInventoryItem.qty}
+                onChange={(e) => setNewInventoryItem(prev => ({ ...prev, qty: parseInt(e.target.value) || 1 }))}
+                className="mt-1"
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => { setShowAddInventoryModal(false); setNewInventoryItem({ sn: "", kodeItem: "", sc: "", namaBarang: "", qty: 1 }); }}>
+                Cancel
+              </Button>
+              <Button
+                onClick={handleAddInventoryItem}
+                disabled={createInventoryMutation.isPending}
+              >
+                {createInventoryMutation.isPending ? "Adding..." : "Add Item"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Import Inventory Modal */}
+      <Dialog open={showImportInventoryModal} onOpenChange={setShowImportInventoryModal}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Import Inventory from File</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label className="text-sm font-medium">Select File (Excel/CSV)</Label>
+              <Input
+                type="file"
+                accept=".csv,.xlsx,.xls"
+                onChange={(e) => setImportFile(e.target.files?.[0] || null)}
+                className="mt-1"
+              />
+              {importFile && (
+                <p className="text-xs text-gray-500 mt-1">Selected: {importFile.name}</p>
+              )}
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => { setShowImportInventoryModal(false); setImportFile(null); }}>
+                Cancel
+              </Button>
+              <Button
+                onClick={handleInventoryFileUpload}
+                disabled={!importFile || isUploading}
+              >
+                {isUploading ? "Uploading..." : "Upload & Import"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

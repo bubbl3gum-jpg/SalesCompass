@@ -34,7 +34,10 @@ The system supports 6 different user roles (SPG, Supervisor, Stockist, Sales Adm
 - **API Routes**: GET/PATCH /api/store-config, GET /api/store-config/:kodeGudang, POST/DELETE /api/store-edc, plus existing store-discounts endpoints
 - **Permissions**: `store:config` permission for System Administrator (full control) and Supervisor (read-only, scoped to their store)
 - **Discounts Page**: Simplified to only show discount types CRUD; store assignments moved to Store Configuration page
+- **Virtual Inventory Tab**: Store Configuration now includes a Virtual Store Inventory section showing per-store inventory with search, add, delete, and file import
 - **SPG View**: Still sees store-specific discounts in sales entry modal via /api/store-discounts/:kodeGudang
+- **Sales Entry Discount**: Discount dropdown now always visible when item is selected or in manual mode; shows store-assigned discounts from Store Configuration
+- **Sidebar Cleanup**: Bazars and Virtual Store Inventory removed from sidebar navigation (data/routes remain intact)
 
 ## User Preferences
 

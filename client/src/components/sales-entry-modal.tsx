@@ -203,6 +203,21 @@ export function SalesEntryModal({ isOpen, onClose, selectedStore, editingSale }:
     retry: false,
   });
 
+  // Update applicable discounts when store discounts are fetched (for manual mode)
+  useEffect(() => {
+    if (storeDiscounts && Array.isArray(storeDiscounts) && searchMode === 'manual') {
+      const activeDiscounts = storeDiscounts.filter((discount: any) => {
+        const now = new Date();
+        const startDate = discount.startFrom ? new Date(discount.startFrom) : null;
+        const endDate = discount.endAt ? new Date(discount.endAt) : null;
+        if (startDate && now < startDate) return false;
+        if (endDate && now > endDate) return false;
+        return true;
+      });
+      setApplicableDiscounts(activeDiscounts || []);
+    }
+  }, [storeDiscounts, searchMode]);
+
   // Unified search function - now searches actual store inventory
   const performSearch = async () => {
     if (!searchQuery.trim() || !form.getValues('kodeGudang')) return;
@@ -776,15 +791,15 @@ export function SalesEntryModal({ isOpen, onClose, selectedStore, editingSale }:
               />
             </div>
 
-            {/* Discount Selection */}
-            {applicableDiscounts.length > 0 && (
+            {/* Discount Selection - visible when item is selected or in manual mode */}
+            {(selectedItemData || searchMode === 'manual') && (
               <FormField
                 control={form.control}
                 name="discountType"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Apply Discount (Optional)</FormLabel>
-                    <Select onValueChange={handleDiscountChange} value={field.value}>
+                    <FormLabel>Discount</FormLabel>
+                    <Select onValueChange={handleDiscountChange} value={field.value || "none"}>
                       <FormControl>
                         <SelectTrigger data-testid="select-discount">
                           <SelectValue placeholder="No discount" />
@@ -804,6 +819,9 @@ export function SalesEntryModal({ isOpen, onClose, selectedStore, editingSale }:
                         ))}
                       </SelectContent>
                     </Select>
+                    {applicableDiscounts.length === 0 && (
+                      <p className="text-xs text-gray-400">No discounts assigned to this store. Assign discounts in Store Configuration.</p>
+                    )}
                     <FormMessage />
                   </FormItem>
                 )}

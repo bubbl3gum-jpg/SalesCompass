@@ -75,12 +75,6 @@ const navigationItems = [
         icon: "fas fa-exchange-alt",
         permission: "transfer:read"
       },
-      {
-        name: "Virtual Store Inventory",
-        href: "/virtual-inventory",
-        icon: "fas fa-warehouse",
-        permission: "stock:opname"
-      },
     ]
   },
   {
@@ -96,12 +90,6 @@ const navigationItems = [
         name: "Admin Settings",
         href: "/admin-settings",
         icon: "fas fa-cogs",
-        permission: "admin:settings"
-      },
-      {
-        name: "Bazars",
-        href: "/bazars",
-        icon: "fas fa-store",
         permission: "admin:settings"
       },
       {
