@@ -26,7 +26,8 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { Plus, Trash2, CreditCard } from "lucide-react";
+import { Plus, Trash2, CreditCard, Store } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 const settlementFormSchema = z.object({
   settlementType: z.enum(["store", "bazar"]),
@@ -264,106 +265,50 @@ export function SettlementModal({ isOpen, onClose, settlement }: SettlementModal
         
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            {bazarStores.length > 0 && (
-              <FormField
-                control={form.control}
-                name="settlementType"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Settlement Type</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select type" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="bazar">
-                          <span className="flex items-center gap-2">
-                            <span className="w-2 h-2 rounded-full bg-purple-500" />
-                            Bazar Settlement
-                          </span>
-                        </SelectItem>
-                        <SelectItem value="store">
-                          <span className="flex items-center gap-2">
-                            <span className="w-2 h-2 rounded-full bg-blue-500" />
-                            Regular Store Settlement
-                          </span>
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            )}
-
-            {settlementType === "store" && (
-              <FormField
-                control={form.control}
-                name="kodeGudang"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Store</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
-                      <FormControl>
-                        <SelectTrigger data-testid="select-store">
-                          <SelectValue placeholder="Select a store" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {storesLoading ? (
-                          <SelectItem value="" disabled>Loading stores...</SelectItem>
-                        ) : availableStores.length === 0 ? (
-                          <SelectItem value="" disabled>No stores available</SelectItem>
-                        ) : (
-                          availableStores.map((store) => (
-                            <SelectItem key={store.kodeGudang} value={store.kodeGudang}>
+            {/* Combined Store Selection */}
+            <FormField
+              control={form.control}
+              name="kodeGudang"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Select Store / Bazar</FormLabel>
+                  <Select onValueChange={(value) => {
+                    field.onChange(value);
+                    const store = stores.find(s => s.kodeGudang === value);
+                    form.setValue("settlementType", store?.storeCategory === 'bazar' ? "bazar" : "store");
+                  }} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger data-testid="select-store">
+                        <SelectValue placeholder="Select a store or bazar" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {storesLoading ? (
+                        <SelectItem value="" disabled>Loading stores...</SelectItem>
+                      ) : stores.length === 0 ? (
+                        <SelectItem value="" disabled>No stores available</SelectItem>
+                      ) : (
+                        stores.map((store) => (
+                          <SelectItem key={store.kodeGudang} value={store.kodeGudang}>
+                            <span className="flex items-center gap-2">
+                              <span className={cn(
+                                "w-2 h-2 rounded-full",
+                                store.storeCategory === 'bazar' ? "bg-purple-500" : "bg-blue-500"
+                              )} />
                               {store.namaGudang} ({store.kodeGudang})
-                            </SelectItem>
-                          ))
-                        )}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            )}
-
-            {settlementType === "bazar" && (
-              <FormField
-                control={form.control}
-                name="kodeGudang"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Select Bazar Store</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl>
-                        <SelectTrigger data-testid="select-bazar">
-                          <SelectValue placeholder="Select a bazar store" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {bazarStores.length === 0 ? (
-                          <SelectItem value="" disabled>No bazar stores available</SelectItem>
-                        ) : (
-                          bazarStores.map((store) => (
-                            <SelectItem key={store.kodeGudang} value={store.kodeGudang}>
-                              <span className="flex items-center gap-2">
-                                <span className="w-2 h-2 rounded-full bg-purple-500" />
-                                {store.namaGudang} ({store.kodeGudang})
-                              </span>
-                            </SelectItem>
-                          ))
-                        )}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            )}
+                              {store.storeCategory === 'bazar' && (
+                                <Badge variant="outline" className="text-[10px] ml-1 border-purple-200 text-purple-600 h-4 px-1">Bazar</Badge>
+                              )}
+                            </span>
+                          </SelectItem>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
             <FormField
               control={form.control}
