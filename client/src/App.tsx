@@ -88,54 +88,53 @@ function Router() {
     error = null;
   }
 
+  if (isLoading) {
+    return <PageLoader />;
+  }
+
+  if (!user) {
+    return (
+      <Suspense fallback={<PageLoader />}>
+        <Login />
+      </Suspense>
+    );
+  }
+
   return (
     <Suspense fallback={<PageLoader />}>
       <Switch>
-        {isLoading ? (
-          // Show loading for any route while authentication is loading
-          <Route><PageLoader /></Route>
-        ) : !user ? (
-          <>
-            {/* When not authenticated, show login for all routes */}
-            <Route component={Login} />
-          </>
-        ) : (
-          <>
-            {/* Authenticated user routes */}
-            <Route path="/" component={Dashboard} />
-            <Route path="/sales-entry" component={SalesEntry} />
-            <Route path="/settlements" component={Settlements} />
-            <Route path="/stock-opname" component={StockOpname} />
-            <Route path="/transfers" component={Transfers} />
-            <Route path="/virtual-inventory">
-              {(params) => <ProtectedRoute component={VirtualInventory} permission="stock:opname" {...params} />}
-            </Route>
-            <Route path="/price-lists">
-              {(params) => <ProtectedRoute component={PriceLists} permission="pricelist:read" {...params} />}
-            </Route>
-            <Route path="/payment-methods">
-              {(params) => <ProtectedRoute component={PaymentMethods} permission="admin:settings" {...params} />}
-            </Route>
-            <Route path="/reference-sheet">
-              {(params) => <ProtectedRoute component={ReferenceSheet} permission="admin:settings" {...params} />}
-            </Route>
-            <Route path="/discounts">
-              {(params) => <ProtectedRoute component={Discounts} permission="discount:read" {...params} />}
-            </Route>
-            <Route path="/admin-settings">
-              {(params) => <ProtectedRoute component={AdminSettings} permission="admin:settings" {...params} />}
-            </Route>
-            <Route path="/bazars">
-              {(params) => <ProtectedRoute component={Bazars} permission="admin:settings" {...params} />}
-            </Route>
-            <Route path="/store-configuration">
-              {(params) => <ProtectedRoute component={StoreConfiguration} permission="store:config" {...params} />}
-            </Route>
-            <Route path="/dashboard" component={Dashboard} />
-            <Route path="/login" component={Dashboard} />
-            <Route component={Dashboard} />
-          </>
-        )}
+        <Route path="/" component={Dashboard} />
+        <Route path="/sales-entry" component={SalesEntry} />
+        <Route path="/settlements" component={Settlements} />
+        <Route path="/stock-opname" component={StockOpname} />
+        <Route path="/transfers" component={Transfers} />
+        <Route path="/virtual-inventory">
+          {(params) => <ProtectedRoute component={VirtualInventory} permission="stock:opname" {...params} />}
+        </Route>
+        <Route path="/price-lists">
+          {(params) => <ProtectedRoute component={PriceLists} permission="pricelist:read" {...params} />}
+        </Route>
+        <Route path="/payment-methods">
+          {(params) => <ProtectedRoute component={PaymentMethods} permission="admin:settings" {...params} />}
+        </Route>
+        <Route path="/reference-sheet">
+          {(params) => <ProtectedRoute component={ReferenceSheet} permission="admin:settings" {...params} />}
+        </Route>
+        <Route path="/discounts">
+          {(params) => <ProtectedRoute component={Discounts} permission="discount:read" {...params} />}
+        </Route>
+        <Route path="/admin-settings">
+          {(params) => <ProtectedRoute component={AdminSettings} permission="admin:settings" {...params} />}
+        </Route>
+        <Route path="/bazars">
+          {(params) => <ProtectedRoute component={Bazars} permission="admin:settings" {...params} />}
+        </Route>
+        <Route path="/store-configuration">
+          {(params) => <ProtectedRoute component={StoreConfiguration} permission="store:config" {...params} />}
+        </Route>
+        <Route path="/dashboard" component={Dashboard} />
+        <Route path="/login" component={Dashboard} />
+        <Route component={NotFound} />
       </Switch>
     </Suspense>
   );
