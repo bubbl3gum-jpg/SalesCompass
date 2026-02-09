@@ -61,6 +61,9 @@ import {
   type StoreDiscount,
   type StoreType,
   type InsertStoreType,
+  bazarTypes,
+  type BazarType,
+  type InsertBazarType,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, sql, desc, sum, or, ilike, inArray, gt } from "drizzle-orm";
@@ -105,6 +108,12 @@ export interface IStorage {
   createStoreType(data: InsertStoreType): Promise<StoreType>;
   updateStoreType(id: number, data: Partial<InsertStoreType>): Promise<StoreType>;
   deleteStoreType(id: number): Promise<void>;
+
+  // Bazar Type management operations
+  getBazarTypes(): Promise<BazarType[]>;
+  createBazarType(data: InsertBazarType): Promise<BazarType>;
+  updateBazarType(id: number, data: Partial<InsertBazarType>): Promise<BazarType>;
+  deleteBazarType(id: number): Promise<void>;
 
   // Discount operations
   getDiscountTypes(): Promise<DiscountType[]>;
@@ -2171,6 +2180,29 @@ export class DatabaseStorage implements IStorage {
 
   async deleteStoreType(id: number): Promise<void> {
     await db.delete(storeTypes).where(eq(storeTypes.id, id));
+  }
+
+  // Bazar Type operations implementation
+  async getBazarTypes(): Promise<BazarType[]> {
+    return await db.select().from(bazarTypes).orderBy(desc(bazarTypes.id));
+  }
+
+  async createBazarType(data: InsertBazarType): Promise<BazarType> {
+    const [result] = await db.insert(bazarTypes).values(data).returning();
+    return result;
+  }
+
+  async updateBazarType(id: number, data: Partial<InsertBazarType>): Promise<BazarType> {
+    const [result] = await db
+      .update(bazarTypes)
+      .set(data)
+      .where(eq(bazarTypes.id, id))
+      .returning();
+    return result;
+  }
+
+  async deleteBazarType(id: number): Promise<void> {
+    await db.delete(bazarTypes).where(eq(bazarTypes.id, id));
   }
 }
 

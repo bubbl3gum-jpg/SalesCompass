@@ -107,6 +107,10 @@ export default function StoreConfiguration() {
     queryKey: ['/api/store-types'],
   });
 
+  const { data: bazarTypes } = useQuery<Array<{ id: number; typeName: string }>>({
+    queryKey: ['/api/bazar-types'],
+  });
+
   const { data: storeInventory, isLoading: inventoryLoading } = useQuery<VirtualStoreInventory[]>({
     queryKey: ['/api/virtual-inventory', selectedStore],
     queryFn: async () => {
@@ -511,9 +515,11 @@ export default function StoreConfiguration() {
                           </p>
                         </div>
 
-                        {/* Store Type (Department Store) */}
+                        {/* Store Type */}
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Store Type</label>
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+                            {(selectedStoreData.storeCategory || "normal") === "bazar" ? "Bazar Type" : "Store Type"}
+                          </label>
                           <Select
                             value={selectedStoreData.storeType || ""}
                             onValueChange={(value) => {
@@ -523,17 +529,28 @@ export default function StoreConfiguration() {
                             disabled={!isAdmin}
                           >
                             <SelectTrigger className="h-10">
-                              <SelectValue placeholder="Select department store..." />
+                              <SelectValue placeholder={
+                                (selectedStoreData.storeCategory || "normal") === "bazar"
+                                  ? "Select bazar type..."
+                                  : "Select department store..."
+                              } />
                             </SelectTrigger>
                             <SelectContent>
                               <SelectItem value="Independent">Independent</SelectItem>
-                              {storeTypes?.map(type => (
-                                <SelectItem key={type.id} value={type.typeName}>{type.typeName}</SelectItem>
-                              ))}
+                              {(selectedStoreData.storeCategory || "normal") === "bazar"
+                                ? bazarTypes?.map(type => (
+                                    <SelectItem key={type.id} value={type.typeName}>{type.typeName}</SelectItem>
+                                  ))
+                                : storeTypes?.map(type => (
+                                    <SelectItem key={type.id} value={type.typeName}>{type.typeName}</SelectItem>
+                                  ))
+                              }
                             </SelectContent>
                           </Select>
                           <p className="text-xs text-gray-400 mt-1">
-                            Department store where this store is located (for EDC machine tracking)
+                            {(selectedStoreData.storeCategory || "normal") === "bazar"
+                              ? "Type of bazar event for this store"
+                              : "Department store where this store is located (for EDC machine tracking)"}
                           </p>
                         </div>
                       </div>

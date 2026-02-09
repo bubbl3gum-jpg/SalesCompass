@@ -3076,6 +3076,53 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ===== Bazar Types CRUD =====
+  app.get('/api/bazar-types', authenticate, async (req, res) => {
+    try {
+      const types = await storage.getBazarTypes();
+      res.json(types);
+    } catch (error) {
+      console.error('Bazar types fetch error:', error);
+      res.status(500).json({ message: 'Failed to get bazar types' });
+    }
+  });
+
+  app.post('/api/bazar-types', authenticate, checkRole(['System Administrator']), async (req, res) => {
+    try {
+      const { insertBazarTypeSchema } = await import("@shared/schema");
+      const validatedData = insertBazarTypeSchema.parse(req.body);
+      const type = await storage.createBazarType(validatedData);
+      res.json(type);
+    } catch (error) {
+      console.error('Bazar type creation error:', error);
+      res.status(400).json({ message: 'Failed to create bazar type' });
+    }
+  });
+
+  app.patch('/api/bazar-types/:id', authenticate, checkRole(['System Administrator']), async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ message: 'Invalid ID' });
+      const type = await storage.updateBazarType(id, req.body);
+      res.json(type);
+    } catch (error) {
+      console.error('Bazar type update error:', error);
+      res.status(400).json({ message: 'Failed to update bazar type' });
+    }
+  });
+
+  app.delete('/api/bazar-types/:id', authenticate, checkRole(['System Administrator']), async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ message: 'Invalid ID' });
+      await storage.deleteBazarType(id);
+      res.json({ message: 'Bazar type deleted' });
+    } catch (error) {
+      console.error('Bazar type delete error:', error);
+      res.status(500).json({ message: 'Failed to delete bazar type' });
+    }
+  });
+
   app.post('/api/virtual-inventory', authenticate, checkRole(['Stockist', 'Supervisor', 'System Administrator']), async (req, res) => {
     try {
       const item = await storage.createVirtualStoreInventory(req.body);

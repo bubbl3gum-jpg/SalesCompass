@@ -110,6 +110,16 @@ const tableConfigs: TableConfig[] = [
     fields: [
       { key: 'typeName', label: 'Department Store Name', type: 'text', required: true },
     ]
+  },
+  {
+    name: 'bazarTypes',
+    displayName: 'Bazar Types',
+    endpoint: '/api/bazar-types',
+    importTable: 'bazar_types',
+    keyField: 'id',
+    fields: [
+      { key: 'typeName', label: 'Bazar Type Name', type: 'text', required: true },
+    ]
   }
 ];
 
@@ -184,6 +194,7 @@ export default function AdminSettings() {
   const positionsQuery = useTableData('/api/positions', activeTab === 'positions' || activeTab === 'staff', currentPage['positions'] || 1, itemsPerPage);
   const staffQuery = useTableData('/api/staff', activeTab === 'staff', currentPage['staff'] || 1, itemsPerPage);
   const storeTypesQuery = useTableData('/api/store-types', activeTab === 'storeTypes', currentPage['storeTypes'] || 1, itemsPerPage);
+  const bazarTypesQuery = useTableData('/api/bazar-types', activeTab === 'bazarTypes', currentPage['bazarTypes'] || 1, itemsPerPage);
 
   // Get positions data for staff form
   const positions = positionsQuery.data || [];
@@ -607,6 +618,9 @@ export default function AdminSettings() {
       case 'storeTypes':
         queryResult = storeTypesQuery;
         break;
+      case 'bazarTypes':
+        queryResult = bazarTypesQuery;
+        break;
       default:
         queryResult = { data: null, isLoading: false, error: null };
     }
@@ -874,11 +888,12 @@ export default function AdminSettings() {
             </div>
 
             <Tabs value={activeTab} onValueChange={handleTabChange}>
-              <TabsList className="grid w-full grid-cols-5 bg-white/10 dark:bg-black/10 backdrop-blur-xl border-white/20 dark:border-gray-800/50">
+              <TabsList className="grid w-full grid-cols-6 bg-white/10 dark:bg-black/10 backdrop-blur-xl border-white/20 dark:border-gray-800/50">
                 <TabsTrigger value="stores" data-testid="tab-stores">Stores</TabsTrigger>
                 <TabsTrigger value="positions" data-testid="tab-positions">Positions</TabsTrigger>
                 <TabsTrigger value="staff" data-testid="tab-staff">Staff</TabsTrigger>
                 <TabsTrigger value="storeTypes" data-testid="tab-store-types">Store Types</TabsTrigger>
+                <TabsTrigger value="bazarTypes" data-testid="tab-bazar-types">Bazar Types</TabsTrigger>
                 <TabsTrigger value="bulk-upload" data-testid="tab-bulk-upload">Bulk Stock Upload</TabsTrigger>
               </TabsList>
 

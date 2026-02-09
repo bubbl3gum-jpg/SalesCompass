@@ -63,6 +63,16 @@ export type InsertStoreType = typeof storeTypes.$inferInsert;
 export type StoreType = typeof storeTypes.$inferSelect;
 export const insertStoreTypeSchema = createInsertSchema(storeTypes).omit({ id: true });
 
+// Bazar Types (types for bazar-category stores)
+export const bazarTypes = pgTable("bazar_types", {
+  id: serial("id").primaryKey(),
+  typeName: varchar("type_name", { length: 255 }).notNull(),
+});
+
+export type InsertBazarType = typeof bazarTypes.$inferInsert;
+export type BazarType = typeof bazarTypes.$inferSelect;
+export const insertBazarTypeSchema = createInsertSchema(bazarTypes).omit({ id: true });
+
 // Stores
 export const stores = pgTable("store", {
   kodeGudang: varchar("kode_gudang", { length: 50 }).primaryKey(),
