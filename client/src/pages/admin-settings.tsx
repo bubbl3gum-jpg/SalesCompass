@@ -599,22 +599,6 @@ export default function AdminSettings() {
 
     const { data: rawData, isLoading, error } = queryResult;
     
-    // Check for unauthorized error BEFORE any hooks
-    if (error && isUnauthorizedError(error)) {
-      console.error("Unauthorized access detected:", error);
-      return (
-        <div className="text-center py-8">
-          <p className="text-red-600 dark:text-red-400">Unauthorized access. Please log in again.</p>
-          <button 
-            onClick={() => window.location.replace("/api/login")}
-            className="mt-2 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-          >
-            Log In
-          </button>
-        </div>
-      );
-    }
-    
     // Handle both paginated and non-paginated data safely
     let actualData: any[] = [];
     
@@ -649,6 +633,22 @@ export default function AdminSettings() {
         });
       });
     }, [actualData, searchQuery, config.fields]);
+
+    // Check for unauthorized error
+    if (error && isUnauthorizedError(error)) {
+      console.error("Unauthorized access detected:", error);
+      return (
+        <div className="text-center py-8">
+          <p className="text-red-600 dark:text-red-400">Unauthorized access. Please log in again.</p>
+          <button 
+            onClick={() => window.location.replace("/api/login")}
+            className="mt-2 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+          >
+            Log In
+          </button>
+        </div>
+      );
+    }
     
     // Virtual rendering: only show first maxDisplayItems to prevent DOM overload
     const data = useMemo(() => {
