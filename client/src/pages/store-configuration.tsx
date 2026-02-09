@@ -3,6 +3,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useStoreAuth } from "@/hooks/useStoreAuth";
+import { useSidebar } from "@/hooks/useSidebar";
+import { cn } from "@/lib/utils";
 import { Sidebar } from "@/components/sidebar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -55,6 +57,7 @@ export default function StoreConfiguration() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { hasPermission, user } = useStoreAuth();
+  const { isExpanded } = useSidebar();
   const isAdmin = hasPermission("admin:settings");
   const isSupervisor = user?.role === "Supervisor";
 
@@ -215,7 +218,8 @@ export default function StoreConfiguration() {
   return (
     <div className="flex h-screen overflow-hidden bg-gray-50 dark:bg-gray-900">
       <Sidebar />
-      <main className="flex-1 overflow-y-auto">
+      <main className={cn("flex-1 flex flex-col overflow-hidden transition-all duration-300 ease-in-out", isExpanded ? "ml-64" : "ml-16")}>
+        <div className="flex-1 overflow-y-auto">
         <div className="p-4 md:p-6 max-w-full">
           <div className="mb-6">
             <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Store Configuration</h1>
@@ -509,6 +513,7 @@ export default function StoreConfiguration() {
               ) : null}
             </div>
           </div>
+        </div>
         </div>
       </main>
 
