@@ -416,11 +416,11 @@ export default function StoreConfiguration() {
                               </div>
                               <div className="flex flex-col items-end gap-1 ml-2 flex-shrink-0">
                                 <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${
-                                  (store.storeType || 'independent') === 'dependent' 
+                                  (store.storeType && store.storeType !== 'Independent') 
                                     ? 'border-orange-300 text-orange-600 dark:border-orange-600 dark:text-orange-400' 
                                     : 'border-green-300 text-green-600 dark:border-green-600 dark:text-green-400'
                                 }`}>
-                                  {(store.storeType || 'independent') === 'dependent' ? 'Dependent' : 'Independent'}
+                                  {(store.storeType && store.storeType !== 'Independent') ? store.storeType : 'Independent'}
                                 </Badge>
                                 {(store.storeCategory || 'normal') === 'bazar' && (
                                   <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-purple-300 text-purple-600 dark:border-purple-600 dark:text-purple-400">
