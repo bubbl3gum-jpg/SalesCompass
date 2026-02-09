@@ -19,16 +19,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Check, ChevronsUpDown, TrendingUp, TrendingDown, DollarSign, Package, AlertTriangle, Clock, Search, Plus, ArrowRightLeft, Calculator, ShoppingCart, Upload, Download, FileText, CheckCircle, XCircle, Loader2, Calendar, BarChart3, Activity, RefreshCw, X } from "lucide-react";
-import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
-import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, ResponsiveContainer, BarChart, Bar, ComposedChart } from "recharts";
-import { format, subDays, startOfDay, endOfDay } from "date-fns";
+import { Check, ChevronsUpDown, TrendingUp, DollarSign, Package, Clock, Plus, ArrowRightLeft, Calculator, ShoppingCart, Upload, FileText, CheckCircle, XCircle, Loader2, MapPin, Calendar } from "lucide-react";
+import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import * as z from "zod";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 
 // Types for better type safety
 interface Store {
@@ -43,12 +37,6 @@ interface Metrics {
   pendingSettlements?: number;
   lowStockItems?: number;
   activeTransfers?: number;
-}
-
-interface StockItem {
-  kodeItem: string;
-  qty: number;
-  serialNumber?: string;
 }
 
 interface SalesItem {
@@ -81,198 +69,6 @@ interface ImportJob {
   completedAt?: string;
 }
 
-// Schema for pricing form
-const pricelistSchema = z.object({
-  kodeItem: z.string().min(1, "Item code is required"),
-  normalPrice: z.number().min(0.01, "Price must be greater than 0"),
-  sp: z.number().optional(),
-});
-
-type PricelistFormData = z.infer<typeof pricelistSchema>;
-
-// Resolve Pricing Modal Component
-function ResolvePricingModal({
-  isOpen,
-  onClose,
-  stockWithoutPricing,
-  onPricingResolved
-}: {
-  isOpen: boolean;
-  onClose: () => void;
-  stockWithoutPricing: any[];
-  onPricingResolved: () => void;
-}) {
-  const { toast } = useToast();
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  const form = useForm<PricelistFormData>({
-    resolver: zodResolver(pricelistSchema),
-    defaultValues: {
-      kodeItem: "",
-      normalPrice: 0,
-      sp: undefined,
-    }
-  });
-
-  const uniqueItems = [...new Set(stockWithoutPricing.map(item => item.kodeItem))];
-
-  const handleSubmit = async (data: PricelistFormData) => {
-    try {
-      setIsSubmitting(true);
-
-      const payload = {
-        sn: null,
-        kodeItem: data.kodeItem,
-        normalPrice: data.normalPrice.toFixed(2),
-        sp: data.sp != null ? data.sp.toFixed(2) : null,
-      };
-
-      await apiRequest('/api/pricelist', {
-        method: 'POST',
-        body: JSON.stringify(payload)
-      });
-
-      toast({
-        title: "Pricing Added",
-        description: `Successfully added pricing for ${data.kodeItem}`,
-      });
-
-      // Reset form and close modal
-      form.reset();
-      onClose();
-      onPricingResolved(); // Refresh stock data
-
-    } catch (error: any) {
-      console.error("Error adding pricing:", error);
-      toast({
-        title: "Error",
-        description: error.message || "Failed to add pricing",
-        variant: "destructive"
-      });
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  return (
-    <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <DollarSign className="w-5 h-5" />
-            Resolve Pricing Issue
-          </DialogTitle>
-        </DialogHeader>
-
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
-            {/* Item Selection */}
-            <FormField
-              control={form.control}
-              name="kodeItem"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Select Item Without Pricing</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
-                    <FormControl>
-                      <SelectTrigger data-testid="select-item-code">
-                        <SelectValue placeholder="Choose an item to add pricing for" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {uniqueItems.map((itemCode) => (
-                        <SelectItem key={itemCode} value={itemCode}>
-                          {itemCode}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            {/* Normal Price */}
-            <FormField
-              control={form.control}
-              name="normalPrice"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Normal Price (Rp)</FormLabel>
-                  <FormControl>
-                    <Input
-                      {...field}
-                      type="number"
-                      step="0.01"
-                      min="0.01"
-                      placeholder="Enter normal price"
-                      onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
-                      data-testid="input-normal-price"
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            {/* Special Price */}
-            <FormField
-              control={form.control}
-              name="sp"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Special Price (Rp) - Optional</FormLabel>
-                  <FormControl>
-                    <Input
-                      {...field}
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      placeholder="Enter special price (optional)"
-                      onChange={(e) => field.onChange(e.target.value === '' ? undefined : parseFloat(e.target.value))}
-                      data-testid="input-special-price"
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <div className="flex justify-end gap-3 pt-4">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={onClose}
-                data-testid="button-cancel-pricing"
-              >
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                disabled={isSubmitting}
-                className="bg-red-600 hover:bg-red-700"
-                data-testid="button-save-pricing"
-              >
-                {isSubmitting ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Saving...
-                  </>
-                ) : (
-                  <>
-                    <Plus className="w-4 h-4 mr-2" />
-                    Add Pricing
-                  </>
-                )}
-              </Button>
-            </div>
-          </form>
-        </Form>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
 export default function Dashboard() {
   const { toast } = useToast();
   const { user, isLoading, hasPermission } = useStoreAuth(); // Get user for permissions
@@ -286,17 +82,7 @@ export default function Dashboard() {
   const [showSalesModal, setShowSalesModal] = useState(false);
   const [showTransferModal, setShowTransferModal] = useState(false);
   const [showSettlementModal, setShowSettlementModal] = useState(false);
-  const [searchTerm, setSearchTerm] = useState<string>('');
-  const [priceSearchTerm, setPriceSearchTerm] = useState<string>('');
-  const [stockSearchTerm, setStockSearchTerm] = useState<string>('');
   const [storeDropdownOpen, setStoreDropdownOpen] = useState(false);
-  const [dateRange, setDateRange] = useState({
-    from: subDays(new Date(), 7),
-    to: new Date()
-  });
-  const [movementsViewType, setMovementsViewType] = useState<'chart' | 'table'>('chart');
-  const [stockViewType, setStockViewType] = useState<'no-pricing' | 'on-hand' | 'sold-today' | 'low-stock' | 'inbound'>('no-pricing');
-  const [showResolvePricingModal, setShowResolvePricingModal] = useState(false);
 
   // Transfer form state
   const [transferForm, setTransferForm] = useState({
@@ -349,181 +135,52 @@ export default function Dashboard() {
     retry: false,
   });
 
-  // Stock overview from new stock table (for selected store)
-  const { data: stockOverview, isLoading: stockOverviewLoading } = useQuery({
-    queryKey: ['stores', 'stock', 'overview', { storeId: selectedStore, limit: 10 }],
-    queryFn: async () => {
-      const token = localStorage.getItem('accessToken');
-      const headers: HeadersInit = { 'Content-Type': 'application/json' };
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-      }
-      
-      const params = new URLSearchParams();
-      if (selectedStore && selectedStore !== 'ALL_STORE') {
-        params.append('store_id', selectedStore);
-      }
-      params.append('limit_items', '10');
-      
-      const response = await fetch(`/api/stores/stock/overview?${params}`, {
-        credentials: 'include',
-        headers,
-      });
-      
-      if (!response.ok) {
-        throw new Error(`${response.status}: ${response.statusText}`);
-      }
-      return response.json();
-    },
-    enabled: !!selectedStore,
-    retry: false,
-  });
-
-  // All stores overview data (for stores overview section)
-  const { data: allStoresOverview, isLoading: allStoresOverviewLoading, refetch: refetchAllStores, isFetching: isRefreshingAllStores } = useQuery({
-    queryKey: ['stores', 'stock', 'all-overview'],
-    queryFn: async () => {
-      const token = localStorage.getItem('accessToken');
-      const headers: HeadersInit = { 'Content-Type': 'application/json' };
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-      }
-      
-      // Don't pass store_id parameter to get all stores data
-      const response = await fetch('/api/stores/stock/overview', {
-        credentials: 'include',
-        headers,
-      });
-      
-      if (!response.ok) {
-        throw new Error(`${response.status}: ${response.statusText}`);
-      }
-      return response.json();
-    },
-    retry: false,
-  });
-
-  // Stock movements from new stock table with dynamic date range
-  const to = format(endOfDay(dateRange.to), 'yyyy-MM-dd');
-  const from = format(startOfDay(dateRange.from), 'yyyy-MM-dd');
-  
-  const { data: stockMovements, isLoading: stockMovementsLoading } = useQuery({
-    queryKey: ['stock', 'movements', { storeId: selectedStore, from, to }],
-    queryFn: async () => {
-      const token = localStorage.getItem('accessToken');
-      const headers: HeadersInit = { 'Content-Type': 'application/json' };
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-      }
-      
-      const params = new URLSearchParams();
-      if (selectedStore && selectedStore !== 'ALL_STORE') {
-        params.append('store_id', selectedStore);
-      }
-      params.append('from', from);
-      params.append('to', to);
-      
-      const response = await fetch(`/api/stock/movements?${params}`, {
-        credentials: 'include',
-        headers,
-      });
-      
-      if (!response.ok) {
-        throw new Error(`${response.status}: ${response.statusText}`);
-      }
-      return response.json();
-    },
-    enabled: !!selectedStore,
-    retry: false,
-  });
-
-  // Price search query (only if user has permission)
-  const { data: priceResults = [], isLoading: priceLoading } = useQuery<any[]>({
-    queryKey: ["/api/pricelist/search", priceSearchTerm],
-    enabled: !!priceSearchTerm && priceSearchTerm.length > 2 && hasPermission("pricelist:read"),
-    retry: false,
-  });
-
   // Get recent import jobs
   const { data: importJobs = [], isLoading: importsLoading, error: importsError, refetch: refetchImports } = useQuery<ImportJob[]>({
     queryKey: ["/api/import/jobs"],
     retry: false,
-    refetchInterval: 5000, // Refetch every 5 seconds for updates
-    refetchIntervalInBackground: false, // Don't refetch when window is not focused
-    staleTime: 30000, // Consider data fresh for 30 seconds
-  });
-
-  // Get stock without pricing
-  const { data: stockWithoutPricing = [], isLoading: stockWithoutPricingLoading } = useQuery<Array<{
-    stockId: number;
-    kodeGudang: string;
-    serialNumber: string;
-    kodeItem: string;
-    qty: number;
-    tanggalIn: string | null;
-  }>>({  
-    queryKey: ["/api/stock/without-pricing", selectedStore],
-    enabled: !!selectedStore,
-    retry: false,
-    staleTime: 30000,
-  });
-  
-  // Get actual stock data from stock table
-  const { data: stockData = [], isLoading: stockDataLoading } = useQuery<Array<{
-    stockId: number;
-    kodeGudang: string;
-    serialNumber: string;
-    kodeItem: string;
-    qty: number;
-    tanggalIn: string | null;
-  }>>({
-    queryKey: ["/api/stock/onhand", selectedStore],
-    enabled: !!selectedStore, // Always fetch when store is selected
-    retry: false,
+    refetchInterval: 5000,
+    refetchIntervalInBackground: false,
     staleTime: 30000,
   });
 
-  // Get sold today items
-  const { data: soldTodayItems = [], isLoading: soldTodayLoading } = useQuery<Array<{
-    kodeItem: string;
-    serialNumber: string;
-    qty: number;
-    tanggalOut: string | null;
-  }>>({  
-    queryKey: ["/api/stock/sold-today", selectedStore],
-    enabled: !!selectedStore, // Always fetch when store is selected
+  // Recent Transfers
+  const { data: transfers = [], isLoading: transfersLoading } = useQuery<any[]>({
+    queryKey: ["/api/transfers"],
     retry: false,
-    staleTime: 30000,
   });
 
-  // Get low stock items
-  const { data: lowStockItems = [], isLoading: lowStockLoading } = useQuery<Array<{
-    stockId: number;
-    kodeGudang: string;
-    serialNumber: string;
-    kodeItem: string;
-    qty: number;
-    tanggalIn: string | null;
-  }>>({  
-    queryKey: ["/api/stock/low-stock", selectedStore],
-    enabled: !!selectedStore, // Always fetch when store is selected
+  // Virtual Inventory Summary
+  const { data: virtualInventory, isLoading: inventoryLoading } = useQuery<any>({
+    queryKey: ["/api/virtual-inventory", { store: selectedStore }],
+    queryFn: async () => {
+      const token = localStorage.getItem('accessToken');
+      const headers: HeadersInit = {};
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+      const res = await fetch(`/api/virtual-inventory?store=${encodeURIComponent(selectedStore)}`, {
+        credentials: 'include',
+        headers,
+      });
+      if (!res.ok) throw new Error(`${res.status}: ${res.statusText}`);
+      return res.json();
+    },
+    enabled: !!selectedStore && selectedStore !== 'ALL_STORE',
     retry: false,
-    staleTime: 30000,
   });
 
-  // Get inbound items
-  const { data: inboundItems = [], isLoading: inboundLoading } = useQuery<Array<{
-    toNumber: string;
-    kodeItem: string;
-    namaItem: string | null;
-    qty: number;
-    fromStore: string;
-    tanggal: string | null;
-  }>>({  
-    queryKey: ["/api/stock/inbound", selectedStore],
-    enabled: !!selectedStore, // Always fetch when store is selected
+  // Active Bazars
+  const { data: activeBazars = [], isLoading: bazarsLoading } = useQuery<any[]>({
+    queryKey: ["/api/bazars/active"],
     retry: false,
-    staleTime: 30000,
+    enabled: !!user?.can_access_all_stores,
+  });
+
+  // Recent Settlements
+  const { data: settlements = [], isLoading: settlementsLoading } = useQuery<any[]>({
+    queryKey: ["/api/settlements"],
+    retry: false,
   });
 
   useEffect(() => {
@@ -572,18 +229,7 @@ export default function Dashboard() {
     setSettlementForm(prev => ({ ...prev, store: selectedStore }));
   }, [selectedStore]);
 
-  const isLoadingData = metricsLoading || salesLoading || stockOverviewLoading || stockMovementsLoading || allStoresOverviewLoading;
-
-  // Helper functions - use top items from stock overview for filtering
-  const filteredStock = stockOverview?.activeStore?.topItems?.filter((item: any) => 
-    item.kodeItem.toLowerCase().includes(stockSearchTerm.toLowerCase())
-  ) || [];
-
-  const getStockStatus = (qty: number) => {
-    if (qty === 0) return { status: 'Out of Stock', color: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300' };
-    if (qty < 10) return { status: 'Low Stock', color: 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300' };
-    return { status: 'In Stock', color: 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300' };
-  };
+  const isLoadingData = metricsLoading || salesLoading;
 
   const handleTransferSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -647,75 +293,10 @@ export default function Dashboard() {
     return `${Math.floor(diffSecs / 3600)}h ${Math.floor((diffSecs % 3600) / 60)}m`;
   };
 
-  // Data processing functions for stock movements
-  const processStockMovementsData = (data: any) => {
-    if (!data?.in || !data?.out) return [];
-    
-    // Create a map of all dates in the range
-    const dateMap = new Map();
-    
-    // Add IN data
-    data.in.forEach((item: any) => {
-      dateMap.set(item.date, {
-        date: item.date,
-        inCount: item.count,
-        outCount: 0,
-        netMovement: item.count
-      });
-    });
-    
-    // Add OUT data
-    data.out.forEach((item: any) => {
-      const existing = dateMap.get(item.date);
-      if (existing) {
-        existing.outCount = item.count;
-        existing.netMovement = existing.inCount - item.count;
-      } else {
-        dateMap.set(item.date, {
-          date: item.date,
-          inCount: 0,
-          outCount: item.count,
-          netMovement: -item.count
-        });
-      }
-    });
-    
-    // Convert to array and sort by date
-    return Array.from(dateMap.values())
-      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-      .map(item => ({
-        ...item,
-        dateFormatted: format(new Date(item.date), 'MMM dd'),
-        fullDate: format(new Date(item.date), 'MMM dd, yyyy')
-      }));
-  };
-
-  const getMovementsSummary = (data: any[]) => {
-    return {
-      totalIn: data.reduce((sum, item) => sum + item.inCount, 0),
-      totalOut: data.reduce((sum, item) => sum + item.outCount, 0),
-      netMovement: data.reduce((sum, item) => sum + item.netMovement, 0),
-      daysWithActivity: data.filter(item => item.inCount > 0 || item.outCount > 0).length
-    };
-  };
-
-  const chartData = processStockMovementsData(stockMovements);
-  const movementsSummary = getMovementsSummary(chartData);
-
-  const chartConfig = {
-    inCount: {
-      label: "Stock IN",
-      color: "hsl(142, 76%, 36%)", // Green for incoming
-    },
-    outCount: {
-      label: "Stock OUT", 
-      color: "hsl(0, 84%, 60%)", // Red for outgoing
-    },
-    netMovement: {
-      label: "Net Movement",
-      color: "hsl(217, 91%, 60%)", // Blue for net
-    },
-  };
+  // Computed values for KPI cards
+  const activeTransfersCount = Array.isArray(transfers) ? transfers.filter((t: any) => t.status !== 'completed').length : 0;
+  const inventoryItemsCount = Array.isArray(virtualInventory) ? virtualInventory.length : (virtualInventory?.items?.length || virtualInventory?.totalItems || 0);
+  const inventoryTotalQty = Array.isArray(virtualInventory) ? virtualInventory.reduce((sum: number, item: any) => sum + (item.qty || 0), 0) : (virtualInventory?.totalQuantity || 0);
 
   if (isLoading) {
     return (
@@ -824,593 +405,340 @@ export default function Dashboard() {
         <main className="p-6">
           {selectedStore ? (
             <div className="space-y-6">
-              {/* Stock without Pricing - Show items missing prices at the top */}
-              {stockWithoutPricing.length > 0 && (
-                <Card className="bg-gradient-to-br from-red-50/90 to-orange-50/90 dark:from-red-900/20 dark:to-orange-900/20 backdrop-blur-xl border border-red-200/50 dark:border-red-700/30 shadow-lg">
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-lg flex items-center gap-2 text-red-800 dark:text-red-200">
-                      <AlertTriangle className="w-5 h-5" />
-                      Stock Without Pricing ({stockWithoutPricing.length} items)
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="mb-3">
-                      <p className="text-red-700 dark:text-red-300 text-sm">
-                        These items are in stock but have no pricing information in the system.
-                      </p>
-                      {selectedStore === 'ALL_STORE' && user?.can_access_all_stores && hasPermission('pricelist:update') && (
-                        <div className="mt-3">
-                          <Button
-                            onClick={() => setShowResolvePricingModal(true)}
-                            className="bg-red-600 hover:bg-red-700 text-white"
-                            size="sm"
-                            data-testid="button-resolve-pricing"
-                          >
-                            <Plus className="w-4 h-4 mr-2" />
-                            Resolve Pricing
-                          </Button>
+              {/* KPI Metric Cards Row */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <Card className="bg-white/70 dark:bg-black/60 backdrop-blur-xl border border-white/30 dark:border-gray-700/50 shadow-lg">
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Today's Sales</p>
+                        <div className="text-xl font-bold text-gray-900 dark:text-white">
+                          {metricsLoading ? <Skeleton className="h-7 w-24" /> : `Rp ${(metrics?.todaySales || 0).toLocaleString()}`}
                         </div>
-                      )}
-                    </div>
-                    <div className="space-y-2 max-h-64 overflow-y-auto">
-                      {stockWithoutPricing.slice(0, 20).map((item) => {
-                        const stockStatus = item.qty === 0 ? 'Out of Stock' : 
-                                          item.qty < 10 ? 'Low Stock' : 'In Stock';
-                        const statusColor = item.qty === 0 ? 'bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-300' :
-                                          item.qty < 10 ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/20 dark:text-yellow-300' :
-                                          'bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-300';
-                        return (
-                          <div 
-                            key={`${item.stockId}-${item.kodeItem}`}
-                            className="flex items-center justify-between p-3 bg-white/60 dark:bg-black/20 rounded-lg border border-blue-200/30 dark:border-blue-700/20"
-                            data-testid={`row-stock-${item.kodeItem}`}
-                          >
-                            <div className="flex-1">
-                              <div className="font-medium text-gray-900 dark:text-white text-sm">
-                                {item.kodeItem}
-                              </div>
-                              <div className="text-xs text-gray-600 dark:text-gray-400">
-                                {item.serialNumber && item.serialNumber !== '-' ? `Serial: ${item.serialNumber}` : 'No Serial'}
-                              </div>
-                              <div className="text-xs text-gray-500 dark:text-gray-500 mt-1">
-                                Store: {item.kodeGudang} | Qty: {item.qty}
-                              </div>
-                            </div>
-                            <Badge 
-                              variant="outline" 
-                              className={cn("text-xs border-0", statusColor)}
-                            >
-                              {stockStatus}
-                            </Badge>
-                          </div>
-                        );
-                      })}
-                      {stockWithoutPricing.length > 20 && (
-                        <div className="text-center p-2 text-red-600 dark:text-red-400 text-sm">
-                          ... and {stockWithoutPricing.length - 20} more items without pricing
-                        </div>
-                      )}
+                      </div>
+                      <DollarSign className="w-8 h-8 text-green-600 dark:text-green-400" />
                     </div>
                   </CardContent>
                 </Card>
-              )}
+                <Card className="bg-white/70 dark:bg-black/60 backdrop-blur-xl border border-white/30 dark:border-gray-700/50 shadow-lg">
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Transactions</p>
+                        <div className="text-xl font-bold text-gray-900 dark:text-white">
+                          {metricsLoading ? <Skeleton className="h-7 w-16" /> : (metrics?.salesCount || 0)}
+                        </div>
+                      </div>
+                      <ShoppingCart className="w-8 h-8 text-blue-600 dark:text-blue-400" />
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card className="bg-white/70 dark:bg-black/60 backdrop-blur-xl border border-white/30 dark:border-gray-700/50 shadow-lg">
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Active Transfers</p>
+                        <div className="text-xl font-bold text-gray-900 dark:text-white">
+                          {transfersLoading ? <Skeleton className="h-7 w-16" /> : activeTransfersCount}
+                        </div>
+                      </div>
+                      <ArrowRightLeft className="w-8 h-8 text-orange-600 dark:text-orange-400" />
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card className="bg-white/70 dark:bg-black/60 backdrop-blur-xl border border-white/30 dark:border-gray-700/50 shadow-lg">
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Inventory Items</p>
+                        <div className="text-xl font-bold text-gray-900 dark:text-white">
+                          {selectedStore === 'ALL_STORE' ? '—' : inventoryLoading ? <Skeleton className="h-7 w-16" /> : inventoryItemsCount}
+                        </div>
+                      </div>
+                      <Package className="w-8 h-8 text-purple-600 dark:text-purple-400" />
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
 
-              {/* Stores Overview - Show all stores data */}
-              {user?.can_access_all_stores && (
+              {/* Two-column grid: Recent Sales + Recent Transfers */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Recent Sales */}
                 <Card className="bg-white/70 dark:bg-black/60 backdrop-blur-xl border border-white/30 dark:border-gray-700/50 shadow-lg">
                   <CardHeader className="pb-3">
-                    <CardTitle className="text-lg flex items-center justify-between text-gray-900 dark:text-white">
-                      <div className="flex items-center gap-2">
-                        <Package className="w-5 h-5" />
-                        Stores Overview
-                      </div>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => refetchAllStores()}
-                        disabled={isRefreshingAllStores}
-                        className="h-8 w-8 p-0 bg-white/20 dark:bg-black/20 hover:bg-white/40 dark:hover:bg-black/40 border-white/30 dark:border-gray-600/30"
-                        data-testid="button-refresh-stores"
-                      >
-                        <RefreshCw className={cn("h-4 w-4", isRefreshingAllStores && "animate-spin")} />
-                      </Button>
+                    <CardTitle className="text-lg flex items-center gap-2 text-gray-900 dark:text-white">
+                      <ShoppingCart className="w-5 h-5" />
+                      Recent Sales
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    {allStoresOverviewLoading ? (
-                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4">
-                        {[...Array(6)].map((_, i) => (
-                          <div key={i} className="bg-white/40 dark:bg-black/40 rounded-lg p-4 border border-white/20 dark:border-gray-600/30">
-                            <Skeleton className="h-4 w-20 mb-2" />
-                            <Skeleton className="h-6 w-16 mb-1" />
-                            <Skeleton className="h-3 w-12" />
+                    {salesLoading ? (
+                      <div className="space-y-3">
+                        {[...Array(3)].map((_, i) => (
+                          <div key={i} className="animate-pulse space-y-2">
+                            <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-3/4"></div>
+                            <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-1/2"></div>
                           </div>
                         ))}
                       </div>
-                    ) : allStoresOverview?.stores?.length > 0 ? (
-                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4">
-                        {allStoresOverview.stores
-                          .filter((store: any) => store.kodeGudang && store.namaGudang && store.onHand !== undefined)
-                          .map((store: any) => {
-                            const totalOnHand = store.onHand || 0;
-                            const isLowStock = totalOnHand < 50;
-                            const isOutOfStock = totalOnHand === 0;
-                            
-                            return (
-                              <div 
-                                key={store.kodeGudang}
-                                className="bg-white/40 dark:bg-black/40 rounded-lg p-4 border border-white/20 dark:border-gray-600/30 hover:bg-white/60 dark:hover:bg-black/60 transition-colors cursor-pointer"
-                                onClick={() => setSelectedStore(store.kodeGudang)}
-                                data-testid={`store-overview-${store.kodeGudang}`}
-                              >
-                                <div className="flex items-center justify-between mb-2">
-                                  <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 truncate" title={store.namaGudang}>
-                                    {store.namaGudang}
-                                  </h4>
-                                  {isOutOfStock ? (
-                                    <AlertTriangle className="w-4 h-4 text-red-500" />
-                                  ) : isLowStock ? (
-                                    <AlertTriangle className="w-4 h-4 text-orange-500" />
-                                  ) : (
-                                    <Package className="w-4 h-4 text-green-500" />
-                                  )}
-                                </div>
-                                <div className="space-y-1">
-                                  <p className="text-lg font-bold text-gray-900 dark:text-white" data-testid={`text-onhand-${store.kodeGudang}`}>
-                                    {totalOnHand.toLocaleString()}
-                                  </p>
-                                  <p className="text-xs text-gray-500 dark:text-gray-400">
-                                    {store.kodeGudang}
-                                  </p>
-                                  <Badge 
-                                    className={cn(
-                                      "text-xs px-2 py-1",
-                                      isOutOfStock 
-                                        ? "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300" 
-                                        : isLowStock 
-                                        ? "bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300"
-                                        : "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300"
-                                    )}
-                                  >
-                                    {isOutOfStock ? "Out" : isLowStock ? "Low" : "OK"}
-                                  </Badge>
-                                </div>
-                              </div>
-                            );
-                          })}
+                    ) : recentSales.length > 0 ? (
+                      <div className="space-y-3 max-h-80 overflow-y-auto">
+                        {recentSales.slice(0, 5).map((sale, index) => (
+                          <div key={index} className="flex items-center justify-between p-3 bg-white/40 dark:bg-black/40 rounded-lg border border-white/20 dark:border-gray-600/30">
+                            <div className="flex-1">
+                              <p className="font-medium text-gray-900 dark:text-white">{sale.kodeItem}</p>
+                              <p className="text-sm text-gray-700 dark:text-gray-300">
+                                {new Date(sale.tanggalJual).toLocaleString('id-ID')}
+                              </p>
+                            </div>
+                            <div className="text-right">
+                              <p className="font-bold text-gray-900 dark:text-white">
+                                Rp {(sale.totalHarga || 0).toLocaleString()}
+                              </p>
+                              <p className="text-sm text-gray-700 dark:text-gray-300">
+                                Qty: {sale.qty || 0}
+                              </p>
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     ) : (
-                      <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-                        <Package className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                        <p>No store data available</p>
+                      <div className="text-center py-6">
+                        <ShoppingCart className="w-12 h-12 text-gray-500 dark:text-gray-400 mx-auto mb-3" />
+                        <p className="text-sm text-gray-700 dark:text-gray-300">No recent sales</p>
                       </div>
                     )}
                   </CardContent>
                 </Card>
-              )}
-              {/* Store Overview - Clickable KPIs */}
-              <Card className="bg-white/70 dark:bg-black/60 backdrop-blur-xl border border-white/30 dark:border-gray-700/50 shadow-lg">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-lg flex items-center gap-2 text-gray-900 dark:text-white">
-                    <Package className="w-5 h-5" />
-                    Store Overview
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <button
-                      onClick={() => setStockViewType('on-hand')}
-                      className={cn(
-                        "bg-white/40 dark:bg-black/40 rounded-lg p-4 border border-white/20 dark:border-gray-600/30 text-left hover:bg-white/60 dark:hover:bg-black/60 transition-colors cursor-pointer",
-                        stockViewType === 'on-hand' && "ring-2 ring-blue-500"
-                      )}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-sm font-medium text-gray-700 dark:text-gray-300">On-hand</p>
-                          <p className="text-xl font-bold text-gray-900 dark:text-white" data-testid="text-onhand">
-                            {stockData.length}
-                          </p>
-                        </div>
-                        <Package className="w-8 h-8 text-blue-600 dark:text-blue-400" />
-                      </div>
-                    </button>
-                    <button
-                      onClick={() => setStockViewType('sold-today')}
-                      className={cn(
-                        "bg-white/40 dark:bg-black/40 rounded-lg p-4 border border-white/20 dark:border-gray-600/30 text-left hover:bg-white/60 dark:hover:bg-black/60 transition-colors cursor-pointer",
-                        stockViewType === 'sold-today' && "ring-2 ring-green-500"
-                      )}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Sold Today</p>
-                          <p className="text-xl font-bold text-gray-900 dark:text-white" data-testid="text-sold-today">
-                            {soldTodayItems.length}
-                          </p>
-                        </div>
-                        <DollarSign className="w-8 h-8 text-green-600 dark:text-green-400" />
-                      </div>
-                    </button>
-                    <button
-                      onClick={() => setStockViewType('low-stock')}
-                      className={cn(
-                        "bg-white/40 dark:bg-black/40 rounded-lg p-4 border border-white/20 dark:border-gray-600/30 text-left hover:bg-white/60 dark:hover:bg-black/60 transition-colors cursor-pointer",
-                        stockViewType === 'low-stock' && "ring-2 ring-orange-500"
-                      )}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Low-Stock</p>
-                          <p className="text-xl font-bold text-gray-900 dark:text-white" data-testid="text-low-stock-alerts">
-                            {lowStockItems.length}
-                          </p>
-                        </div>
-                        <AlertTriangle className="w-8 h-8 text-orange-600 dark:text-orange-400" />
-                      </div>
-                    </button>
-                    <button
-                      onClick={() => setStockViewType('inbound')}
-                      className={cn(
-                        "bg-white/40 dark:bg-black/40 rounded-lg p-4 border border-white/20 dark:border-gray-600/30 text-left hover:bg-white/60 dark:hover:bg-black/60 transition-colors cursor-pointer",
-                        stockViewType === 'inbound' && "ring-2 ring-purple-500"
-                      )}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Inbound</p>
-                          <p className="text-xl font-bold text-gray-900 dark:text-white" data-testid="text-inbound">
-                            {inboundItems.length}
-                          </p>
-                        </div>
-                        <TrendingUp className="w-8 h-8 text-purple-600 dark:text-purple-400" />
-                      </div>
-                    </button>
-                  </div>
-                </CardContent>
-              </Card>
 
-              {/* Filtered Stock Views - Show based on selected view */}
-              {stockViewType === 'on-hand' && stockData.length > 0 && (
+                {/* Recent Transfers */}
                 <Card className="bg-white/70 dark:bg-black/60 backdrop-blur-xl border border-white/30 dark:border-gray-700/50 shadow-lg">
                   <CardHeader className="pb-3">
                     <CardTitle className="text-lg flex items-center gap-2 text-gray-900 dark:text-white">
-                      <Package className="w-5 h-5" />
-                      All Stock on Hand ({stockData.length} items)
+                      <ArrowRightLeft className="w-5 h-5" />
+                      Recent Transfers
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className="space-y-2 max-h-96 overflow-y-auto">
-                      {stockData.map((item) => (
-                        <div 
-                          key={`${item.stockId}-${item.kodeItem}`}
-                          className="flex items-center justify-between p-3 bg-white/60 dark:bg-black/20 rounded-lg"
-                        >
-                          <div className="flex-1">
-                            <div className="font-medium text-gray-900 dark:text-white text-sm">{item.kodeItem}</div>
-                            <div className="text-xs text-gray-600 dark:text-gray-400">
-                              {item.serialNumber && item.serialNumber !== '-' ? `Serial: ${item.serialNumber}` : 'No Serial'} | Store: {item.kodeGudang}
-                            </div>
-                          </div>
-                          <Badge variant="outline" className="text-xs">
-                            Qty: {item.qty}
-                          </Badge>
-                        </div>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-
-              {stockViewType === 'sold-today' && soldTodayItems.length > 0 && (
-                <Card className="bg-white/70 dark:bg-black/60 backdrop-blur-xl border border-white/30 dark:border-gray-700/50 shadow-lg">
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-lg flex items-center gap-2 text-gray-900 dark:text-white">
-                      <DollarSign className="w-5 h-5" />
-                      Items Sold Today ({soldTodayItems.length} items)
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-2 max-h-96 overflow-y-auto">
-                      {soldTodayItems.map((item, idx) => (
-                        <div 
-                          key={`${item.kodeItem}-${idx}`}
-                          className="flex items-center justify-between p-3 bg-green-50 dark:bg-green-900/20 rounded-lg"
-                        >
-                          <div className="flex-1">
-                            <div className="font-medium text-gray-900 dark:text-white text-sm">{item.kodeItem}</div>
-                            <div className="text-xs text-gray-600 dark:text-gray-400">
-                              {item.serialNumber || 'No Serial'}
-                            </div>
-                          </div>
-                          <Badge variant="outline" className="text-xs bg-green-100 dark:bg-green-900/40">
-                            Sold
-                          </Badge>
-                        </div>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-
-              {stockViewType === 'low-stock' && lowStockItems.length > 0 && (
-                <Card className="bg-white/70 dark:bg-black/60 backdrop-blur-xl border border-white/30 dark:border-gray-700/50 shadow-lg">
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-lg flex items-center gap-2 text-gray-900 dark:text-white">
-                      <AlertTriangle className="w-5 h-5" />
-                      Low Stock Items ({lowStockItems.length} items)
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-2 max-h-96 overflow-y-auto">
-                      {lowStockItems.map((item) => (
-                        <div 
-                          key={`${item.stockId}-${item.kodeItem}`}
-                          className="flex items-center justify-between p-3 bg-orange-50 dark:bg-orange-900/20 rounded-lg"
-                        >
-                          <div className="flex-1">
-                            <div className="font-medium text-gray-900 dark:text-white text-sm">{item.kodeItem}</div>
-                            <div className="text-xs text-gray-600 dark:text-gray-400">
-                              Store: {item.kodeGudang} | {item.serialNumber || 'No Serial'}
-                            </div>
-                          </div>
-                          <Badge variant="outline" className="text-xs bg-orange-100 dark:bg-orange-900/40">
-                            Only {item.qty} left
-                          </Badge>
-                        </div>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-
-              {stockViewType === 'inbound' && inboundItems.length > 0 && (
-                <Card className="bg-white/70 dark:bg-black/60 backdrop-blur-xl border border-white/30 dark:border-gray-700/50 shadow-lg">
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-lg flex items-center gap-2 text-gray-900 dark:text-white">
-                      <TrendingUp className="w-5 h-5" />
-                      Inbound Stock ({inboundItems.length} items)
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-2 max-h-96 overflow-y-auto">
-                      {inboundItems.map((item, idx) => (
-                        <div 
-                          key={`${item.toNumber}-${idx}`}
-                          className="flex items-center justify-between p-3 bg-purple-50 dark:bg-purple-900/20 rounded-lg"
-                        >
-                          <div className="flex-1">
-                            <div className="font-medium text-gray-900 dark:text-white text-sm">{item.namaItem || item.kodeItem}</div>
-                            <div className="text-xs text-gray-600 dark:text-gray-400">
-                              Transfer: {item.toNumber} | From: {item.fromStore}
-                            </div>
-                          </div>
-                          <Badge variant="outline" className="text-xs bg-purple-100 dark:bg-purple-900/40">
-                            Qty: {item.qty}
-                          </Badge>
-                        </div>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-
-              {/* Enhanced Stock Movements with Chart Visualization */}
-              <Card className="bg-white/70 dark:bg-black/60 backdrop-blur-xl border border-white/30 dark:border-gray-700/50 shadow-lg">
-                <CardHeader className="pb-3">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-lg flex items-center gap-2 text-gray-900 dark:text-white">
-                      <Activity className="w-5 h-5" />
-                      Stock Movements Analysis
-                    </CardTitle>
-                    <div className="flex items-center gap-2">
-                      {/* Date Range Controls */}
-                      <div className="flex items-center gap-2 text-sm">
-                        <Calendar className="w-4 h-4 text-gray-500" />
-                        <Input
-                          type="date"
-                          value={dateRange.from.toISOString().split('T')[0]}
-                          onChange={(e) => setDateRange(prev => ({ ...prev, from: new Date(e.target.value) }))}
-                          className="w-auto h-8 text-xs"
-                          data-testid="input-date-from"
-                        />
-                        <span className="text-gray-500">to</span>
-                        <Input
-                          type="date"
-                          value={dateRange.to.toISOString().split('T')[0]}
-                          onChange={(e) => setDateRange(prev => ({ ...prev, to: new Date(e.target.value) }))}
-                          className="w-auto h-8 text-xs"
-                          data-testid="input-date-to"
-                        />
-                      </div>
-                      {/* View Toggle */}
-                      <div className="flex rounded-lg border border-white/20 dark:border-gray-600/30 p-1">
-                        <Button
-                          variant={movementsViewType === 'chart' ? 'default' : 'ghost'}
-                          size="sm"
-                          onClick={() => setMovementsViewType('chart')}
-                          className="h-6 px-2 text-xs"
-                          data-testid="button-chart-view"
-                        >
-                          <BarChart3 className="w-3 h-3 mr-1" />
-                          Chart
-                        </Button>
-                        <Button
-                          variant={movementsViewType === 'table' ? 'default' : 'ghost'}
-                          size="sm"
-                          onClick={() => setMovementsViewType('table')}
-                          className="h-6 px-2 text-xs"
-                          data-testid="button-table-view"
-                        >
-                          <FileText className="w-3 h-3 mr-1" />
-                          Table
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  {stockMovementsLoading ? (
-                    <div className="space-y-4">
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        {[...Array(4)].map((_, i) => (
-                          <div key={i} className="space-y-2">
-                            <Skeleton className="h-4 w-16" />
-                            <Skeleton className="h-8 w-full" />
+                    {transfersLoading ? (
+                      <div className="space-y-3">
+                        {[...Array(3)].map((_, i) => (
+                          <div key={i} className="animate-pulse space-y-2">
+                            <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-3/4"></div>
+                            <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-1/2"></div>
                           </div>
                         ))}
                       </div>
-                      <Skeleton className="h-64 w-full" />
-                    </div>
-                  ) : chartData.length > 0 ? (
-                    <div className="space-y-6">
-                      {/* Summary Statistics */}
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <div className="bg-white/40 dark:bg-black/40 rounded-lg p-3 border border-white/20 dark:border-gray-600/30">
-                          <div className="flex items-center gap-2">
-                            <Upload className="w-4 h-4 text-green-600" />
-                            <div>
-                              <p className="text-xs text-gray-600 dark:text-gray-400">Total IN</p>
-                              <p className="text-lg font-bold text-green-700 dark:text-green-300" data-testid="text-total-in">
-                                {movementsSummary.totalIn.toLocaleString()}
-                              </p>
+                    ) : Array.isArray(transfers) && transfers.length > 0 ? (
+                      <div className="space-y-3 max-h-80 overflow-y-auto">
+                        {transfers.slice(0, 5).map((transfer: any, index: number) => {
+                          const statusColor = transfer.status === 'completed' 
+                            ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300'
+                            : transfer.status === 'cancelled'
+                            ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300'
+                            : 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300';
+                          return (
+                            <div key={transfer.id || index} className="flex items-center justify-between p-3 bg-white/40 dark:bg-black/40 rounded-lg border border-white/20 dark:border-gray-600/30">
+                              <div className="flex-1">
+                                <p className="font-medium text-gray-900 dark:text-white">{transfer.toNumber || transfer.to_number || `TO-${index + 1}`}</p>
+                                <p className="text-sm text-gray-700 dark:text-gray-300">
+                                  {transfer.fromStore || transfer.from_store || '—'} → {transfer.toStore || transfer.to_store || '—'}
+                                </p>
+                                <p className="text-xs text-gray-500 dark:text-gray-400">
+                                  {transfer.tanggal || transfer.date ? format(new Date(transfer.tanggal || transfer.date), 'dd MMM yyyy') : '—'}
+                                </p>
+                              </div>
+                              <Badge className={cn("text-xs border-0", statusColor)}>
+                                {transfer.status || 'pending'}
+                              </Badge>
                             </div>
-                          </div>
-                        </div>
-                        <div className="bg-white/40 dark:bg-black/40 rounded-lg p-3 border border-white/20 dark:border-gray-600/30">
-                          <div className="flex items-center gap-2">
-                            <Download className="w-4 h-4 text-red-600" />
-                            <div>
-                              <p className="text-xs text-gray-600 dark:text-gray-400">Total OUT</p>
-                              <p className="text-lg font-bold text-red-700 dark:text-red-300" data-testid="text-total-out">
-                                {movementsSummary.totalOut.toLocaleString()}
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="bg-white/40 dark:bg-black/40 rounded-lg p-3 border border-white/20 dark:border-gray-600/30">
-                          <div className="flex items-center gap-2">
-                            <TrendingUp className={`w-4 h-4 ${movementsSummary.netMovement >= 0 ? 'text-green-600' : 'text-red-600'}`} />
-                            <div>
-                              <p className="text-xs text-gray-600 dark:text-gray-400">Net Movement</p>
-                              <p className={`text-lg font-bold ${movementsSummary.netMovement >= 0 ? 'text-green-700 dark:text-green-300' : 'text-red-700 dark:text-red-300'}`} data-testid="text-net-movement">
-                                {movementsSummary.netMovement >= 0 ? '+' : ''}{movementsSummary.netMovement.toLocaleString()}
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="bg-white/40 dark:bg-black/40 rounded-lg p-3 border border-white/20 dark:border-gray-600/30">
-                          <div className="flex items-center gap-2">
-                            <Activity className="w-4 h-4 text-blue-600" />
-                            <div>
-                              <p className="text-xs text-gray-600 dark:text-gray-400">Active Days</p>
-                              <p className="text-lg font-bold text-blue-700 dark:text-blue-300" data-testid="text-active-days">
-                                {movementsSummary.daysWithActivity}
-                              </p>
-                            </div>
-                          </div>
-                        </div>
+                          );
+                        })}
                       </div>
-                      
-                      {/* Chart or Table View */}
-                      {movementsViewType === 'chart' ? (
-                        <div className="h-80">
-                          <ChartContainer config={chartConfig}>
-                            <ComposedChart data={chartData}>
-                              <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                              <XAxis 
-                                dataKey="dateFormatted" 
-                                className="fill-muted-foreground text-xs"
-                                tick={{ fontSize: 12 }}
-                              />
-                              <YAxis className="fill-muted-foreground text-xs" tick={{ fontSize: 12 }} />
-                              <ChartTooltip 
-                                content={<ChartTooltipContent />}
-                                formatter={(value: any, name: string) => [
-                                  `${value}`,
-                                  name === 'inCount' ? 'Stock IN' : name === 'outCount' ? 'Stock OUT' : 'Net Movement'
-                                ]}
-                                labelFormatter={(label: any, payload: any) => {
-                                  if (payload && payload[0] && payload[0].payload) {
-                                    return payload[0].payload.fullDate;
-                                  }
-                                  return label;
-                                }}
-                              />
-                              <Bar 
-                                dataKey="inCount" 
-                                fill="var(--color-inCount)" 
-                                name="Stock IN"
-                                radius={[2, 2, 0, 0]}
-                              />
-                              <Bar 
-                                dataKey="outCount" 
-                                fill="var(--color-outCount)" 
-                                name="Stock OUT"
-                                radius={[2, 2, 0, 0]}
-                              />
-                              <Line 
-                                type="monotone" 
-                                dataKey="netMovement" 
-                                stroke="var(--color-netMovement)" 
-                                strokeWidth={2}
-                                dot={{ fill: "var(--color-netMovement)", strokeWidth: 2, r: 4 }}
-                                name="Net Movement"
-                              />
-                            </ComposedChart>
-                          </ChartContainer>
-                        </div>
-                      ) : (
-                        <div className="space-y-2 max-h-80 overflow-y-auto">
-                          <div className="grid grid-cols-5 gap-4 p-3 bg-white/20 dark:bg-black/20 rounded-lg font-medium text-sm text-gray-700 dark:text-gray-300">
-                            <span>Date</span>
-                            <span className="text-green-700 dark:text-green-300">IN</span>
-                            <span className="text-red-700 dark:text-red-300">OUT</span>
-                            <span className="text-blue-700 dark:text-blue-300">Net</span>
-                            <span>Activity</span>
+                    ) : (
+                      <div className="text-center py-6">
+                        <ArrowRightLeft className="w-12 h-12 text-gray-500 dark:text-gray-400 mx-auto mb-3" />
+                        <p className="text-sm text-gray-700 dark:text-gray-300">No recent transfers</p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Two-column grid: Recent Settlements + Active Bazars / Import Activity */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Recent Settlements */}
+                <Card className="bg-white/70 dark:bg-black/60 backdrop-blur-xl border border-white/30 dark:border-gray-700/50 shadow-lg">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-lg flex items-center gap-2 text-gray-900 dark:text-white">
+                      <Calculator className="w-5 h-5" />
+                      Recent Settlements
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {settlementsLoading ? (
+                      <div className="space-y-3">
+                        {[...Array(3)].map((_, i) => (
+                          <div key={i} className="animate-pulse space-y-2">
+                            <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-3/4"></div>
+                            <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-1/2"></div>
                           </div>
-                          {chartData.map((item, index) => (
-                            <div key={index} className="grid grid-cols-5 gap-4 p-3 bg-white/40 dark:bg-black/40 rounded-lg border border-white/20 dark:border-gray-600/30 text-sm" data-testid={`row-movement-${index}`}>
-                              <span className="text-gray-700 dark:text-gray-300">{item.dateFormatted}</span>
-                              <span className="text-green-700 dark:text-green-300 font-medium">+{item.inCount}</span>
-                              <span className="text-red-700 dark:text-red-300 font-medium">-{item.outCount}</span>
-                              <span className={`font-medium ${item.netMovement >= 0 ? 'text-green-700 dark:text-green-300' : 'text-red-700 dark:text-red-300'}`}>
-                                {item.netMovement >= 0 ? '+' : ''}{item.netMovement}
-                              </span>
-                              <span className="text-gray-600 dark:text-gray-400">
-                                {item.inCount > 0 || item.outCount > 0 ? (
-                                  <Badge variant="secondary" className="text-xs">
-                                    Active
-                                  </Badge>
-                                ) : (
-                                  <span className="text-xs">Idle</span>
-                                )}
-                              </span>
+                        ))}
+                      </div>
+                    ) : Array.isArray(settlements) && settlements.length > 0 ? (
+                      <div className="space-y-3 max-h-80 overflow-y-auto">
+                        {settlements.slice(0, 5).map((settlement: any, index: number) => (
+                          <div key={settlement.id || index} className="flex items-center justify-between p-3 bg-white/40 dark:bg-black/40 rounded-lg border border-white/20 dark:border-gray-600/30">
+                            <div className="flex-1">
+                              <p className="font-medium text-gray-900 dark:text-white">
+                                {settlement.tanggal || settlement.date ? format(new Date(settlement.tanggal || settlement.date), 'dd MMM yyyy') : '—'}
+                              </p>
+                              <p className="text-sm text-gray-700 dark:text-gray-300">
+                                {settlement.kodeGudang || settlement.store || settlement.bazarName || '—'}
+                              </p>
+                            </div>
+                            <div className="text-right">
+                              <p className="font-bold text-gray-900 dark:text-white">
+                                Rp {(settlement.cashAmount || settlement.cash_amount || 0).toLocaleString()}
+                              </p>
+                              <Badge className={cn("text-xs border-0", 
+                                settlement.status === 'completed' || settlement.status === 'settled'
+                                  ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300'
+                                  : 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300'
+                              )}>
+                                {settlement.status || 'pending'}
+                              </Badge>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-center py-6">
+                        <Calculator className="w-12 h-12 text-gray-500 dark:text-gray-400 mx-auto mb-3" />
+                        <p className="text-sm text-gray-700 dark:text-gray-300">No recent settlements</p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Active Bazars (for all-store users) or Import Activity */}
+                {user?.can_access_all_stores ? (
+                  <Card className="bg-white/70 dark:bg-black/60 backdrop-blur-xl border border-white/30 dark:border-gray-700/50 shadow-lg">
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-lg flex items-center gap-2 text-gray-900 dark:text-white">
+                        <MapPin className="w-5 h-5" />
+                        Active Bazars
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      {bazarsLoading ? (
+                        <div className="space-y-3">
+                          {[...Array(3)].map((_, i) => (
+                            <div key={i} className="animate-pulse space-y-2">
+                              <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-3/4"></div>
+                              <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-1/2"></div>
                             </div>
                           ))}
                         </div>
+                      ) : Array.isArray(activeBazars) && activeBazars.length > 0 ? (
+                        <div className="space-y-3 max-h-80 overflow-y-auto">
+                          {activeBazars.map((bazar: any, index: number) => (
+                            <div key={bazar.id || index} className="p-3 bg-white/40 dark:bg-black/40 rounded-lg border border-white/20 dark:border-gray-600/30">
+                              <p className="font-medium text-gray-900 dark:text-white">{bazar.name || bazar.namaBazar || '—'}</p>
+                              <p className="text-sm text-gray-700 dark:text-gray-300">
+                                <MapPin className="w-3 h-3 inline mr-1" />
+                                {bazar.location || bazar.lokasi || '—'}
+                              </p>
+                              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                <Calendar className="w-3 h-3 inline mr-1" />
+                                {bazar.startDate || bazar.start_date ? format(new Date(bazar.startDate || bazar.start_date), 'dd MMM') : '—'}
+                                {' — '}
+                                {bazar.endDate || bazar.end_date ? format(new Date(bazar.endDate || bazar.end_date), 'dd MMM yyyy') : '—'}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-center py-6">
+                          <MapPin className="w-12 h-12 text-gray-500 dark:text-gray-400 mx-auto mb-3" />
+                          <p className="text-sm text-gray-700 dark:text-gray-300">No active bazars</p>
+                        </div>
                       )}
-                    </div>
-                  ) : (
-                    <div className="text-center py-12">
-                      <Activity className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                      <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">No Movement Data</h3>
-                      <p className="text-gray-600 dark:text-gray-400 mb-4">No stock movements found for the selected date range.</p>
-                      <Button 
-                        onClick={() => setDateRange({ from: subDays(new Date(), 7), to: new Date() })}
-                        variant="outline"
-                        size="sm"
-                        data-testid="button-reset-dates"
-                      >
-                        <Calendar className="w-4 h-4 mr-2" />
-                        Reset to Last 7 Days
-                      </Button>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
+                    </CardContent>
+                  </Card>
+                ) : (
+                  <Card className="bg-white/70 dark:bg-black/60 backdrop-blur-xl border border-white/30 dark:border-gray-700/50 shadow-lg">
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-lg flex items-center gap-2 text-gray-900 dark:text-white">
+                        <Upload className="w-5 h-5" />
+                        Import Activity
+                        {importJobs.filter(job => job.status === 'processing' || job.status === 'queued').length > 0 && (
+                          <Badge variant="secondary" className="ml-auto">
+                            {importJobs.filter(job => job.status === 'processing' || job.status === 'queued').length} active
+                          </Badge>
+                        )}
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      {importsLoading ? (
+                        <div className="space-y-3">
+                          {[...Array(3)].map((_, i) => (
+                            <div key={i} className="animate-pulse space-y-2">
+                              <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-3/4"></div>
+                              <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded"></div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : importJobs.length > 0 ? (
+                        <div className="space-y-4 max-h-80 overflow-y-auto">
+                          {importJobs.slice(0, 5).map((job) => {
+                            const progressPercent = job.progress.total > 0 ? (job.progress.current / job.progress.total) * 100 : 0;
+                            const isActive = job.status === 'processing' || job.status === 'queued';
+                            return (
+                              <div key={job.id} className="space-y-2 p-3 bg-white/40 dark:bg-black/40 rounded-lg border border-white/20 dark:border-gray-600/30">
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-2">
+                                    {getImportStatusIcon(job.status)}
+                                    <div>
+                                      <p className="font-medium text-sm text-gray-900 dark:text-white">{job.fileName}</p>
+                                      <p className="text-xs text-gray-700 dark:text-gray-300">{job.tableName} • {formatDuration(job.createdAt, job.completedAt)}</p>
+                                    </div>
+                                  </div>
+                                  <Badge className={getImportStatusColor(job.status)}>{job.status}</Badge>
+                                </div>
+                                {isActive && (
+                                  <div className="space-y-1">
+                                    <div className="flex justify-between text-xs">
+                                      <span className="text-gray-700 dark:text-gray-300">{job.progress.stage}</span>
+                                      <span className="text-gray-700 dark:text-gray-300">{job.progress.current.toLocaleString()} / {job.progress.total.toLocaleString()}{job.progress.throughputRps && ` (${Math.round(job.progress.throughputRps)}/s)`}</span>
+                                    </div>
+                                    <Progress value={progressPercent} className="h-2" />
+                                  </div>
+                                )}
+                                {job.status === 'completed' && job.result && (
+                                  <div className="flex justify-between text-xs text-gray-700 dark:text-gray-300">
+                                    <span>✅ {job.result.newRecords} new</span>
+                                    <span>🔄 {job.result.updatedRecords} updated</span>
+                                    {job.result.errorRecords > 0 && <span className="text-red-700 dark:text-red-300">❌ {job.result.errorRecords} errors</span>}
+                                  </div>
+                                )}
+                                {job.status === 'failed' && job.error && <p className="text-xs text-red-700 dark:text-red-300 truncate">Error: {job.error}</p>}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div className="text-center py-6">
+                          <FileText className="w-12 h-12 text-gray-500 dark:text-gray-400 mx-auto mb-3" />
+                          <p className="text-sm text-gray-700 dark:text-gray-300">No recent imports</p>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                )}
+              </div>
 
-              {/* Quick Actions - Grouped Together */}
+              {/* Quick Actions */}
               <Card className="bg-white/70 dark:bg-black/60 backdrop-blur-xl border border-white/30 dark:border-gray-700/50 shadow-lg">
                 <CardHeader className="pb-3">
                   <CardTitle className="text-lg flex items-center gap-2 text-gray-900 dark:text-white">
@@ -1419,7 +747,7 @@ export default function Dashboard() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                     {/* Quick Transfer */}
                     <Dialog open={showTransferModal} onOpenChange={setShowTransferModal}>
                       <DialogTrigger asChild>
@@ -1543,63 +871,6 @@ export default function Dashboard() {
                       </DialogContent>
                     </Dialog>
 
-                    {/* Quick Pricelist Search - Only show if user has permission */}
-                    {hasPermission && hasPermission("pricelist:read") && (
-                      <div className="space-y-2">
-                        <div className="relative">
-                          <Input
-                            placeholder="Find Price..."
-                            value={priceSearchTerm}
-                            onChange={(e) => setPriceSearchTerm(e.target.value)}
-                            className="pr-10"
-                          />
-                          <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-                        </div>
-                        {priceSearchTerm && priceResults.length > 0 && (
-                          <Card className="absolute z-10 w-64 max-h-48 overflow-y-auto">
-                            <CardContent className="p-2">
-                              {priceResults.slice(0, 5).map((item: any, index: number) => (
-                                <div key={index} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded text-sm">
-                                  <div className="font-medium">{item.kodeItem}</div>
-                                  <div className="text-green-600 dark:text-green-400">Rp {item.harga?.toLocaleString()}</div>
-                                </div>
-                              ))}
-                            </CardContent>
-                          </Card>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Quick Stock Search */}
-                    <div className="space-y-2">
-                      <div className="relative">
-                        <Input
-                          placeholder="Find Stock..."
-                          value={stockSearchTerm}
-                          onChange={(e) => setStockSearchTerm(e.target.value)}
-                          className="pr-10"
-                        />
-                        <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-                      </div>
-                      {stockSearchTerm && filteredStock.length > 0 && (
-                        <Card className="absolute z-10 w-64 max-h-48 overflow-y-auto">
-                          <CardContent className="p-2">
-                            {filteredStock.slice(0, 5).map((item: any, index: number) => {
-                              const status = getStockStatus(item.qtyOnHand || item.qty || 0);
-                              return (
-                                <div key={index} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded text-sm">
-                                  <div className="flex justify-between items-center">
-                                    <div className="font-medium">{item.kodeItem}</div>
-                                    <Badge className={status.color}>{item.qtyOnHand || item.qty || 0}</Badge>
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </CardContent>
-                        </Card>
-                      )}
-                    </div>
-
                     {/* Quick Sale */}
                     <Button 
                       onClick={() => setShowSalesModal(true)}
@@ -1619,7 +890,7 @@ export default function Dashboard() {
               </Card>
 
               {/* Analytics Section */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Sales Today */}
                 <Card className="bg-white/70 dark:bg-black/60 backdrop-blur-xl border border-white/30 dark:border-gray-700/50 shadow-lg">
                   <CardHeader className="pb-3">
@@ -1665,40 +936,10 @@ export default function Dashboard() {
                     </div>
                   </CardContent>
                 </Card>
-
-                {/* Stock Movement */}
-                <Card className="bg-white/70 dark:bg-black/60 backdrop-blur-xl border border-white/30 dark:border-gray-700/50 shadow-lg">
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-base flex items-center justify-between text-gray-900 dark:text-white">
-                      <span>Stock Movement</span>
-                      <Package className="w-4 h-4" />
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-3">
-                      <div className="flex justify-between">
-                        <span className="text-sm text-gray-700 dark:text-gray-300">Top Items</span>
-                        <span className="font-semibold text-green-700 dark:text-green-300">{stockOverview?.activeStore?.topItems?.length || 0}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-sm text-gray-700 dark:text-gray-300">Total On-Hand</span>
-                        <span className="font-semibold text-blue-700 dark:text-blue-300">{stockOverview?.activeStore?.onHand || 0}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-sm text-gray-700 dark:text-gray-300">All Stores</span>
-                        <span className="font-semibold text-purple-700 dark:text-purple-300">{stockOverview?.stores?.length || 0}</span>
-                      </div>
-                      <div className="text-xs text-center text-gray-700 dark:text-gray-300">
-                        {stockOverview?.activeStore?.onHand ? '🟢 Stock Available' : '🔴 No Stock Data'}
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
               </div>
 
-              {/* Imports Widget - Live Progress */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Imports Widget */}
+              {/* Import Activity (for all-store users, show here since Active Bazars took its slot above) */}
+              {user?.can_access_all_stores && (
                 <Card className="bg-white/70 dark:bg-black/60 backdrop-blur-xl border border-white/30 dark:border-gray-700/50 shadow-lg">
                   <CardHeader className="pb-3">
                     <CardTitle className="text-lg flex items-center gap-2 text-gray-900 dark:text-white">
@@ -1791,41 +1032,7 @@ export default function Dashboard() {
                     )}
                   </CardContent>
                 </Card>
-
-                {/* Recent Sales Activity */}
-                {recentSales.length > 0 && (
-                  <Card className="bg-white/70 dark:bg-black/60 backdrop-blur-xl border border-white/30 dark:border-gray-700/50 shadow-lg">
-                    <CardHeader className="pb-3">
-                      <CardTitle className="text-lg flex items-center gap-2 text-gray-900 dark:text-white">
-                        <ShoppingCart className="w-5 h-5" />
-                        Recent Sales Activity
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-3 max-h-80 overflow-y-auto">
-                        {recentSales.slice(0, 8).map((sale, index) => (
-                          <div key={index} className="flex items-center justify-between p-3 bg-white/40 dark:bg-black/40 rounded-lg border border-white/20 dark:border-gray-600/30">
-                            <div className="flex-1">
-                              <p className="font-medium text-gray-900 dark:text-white">{sale.kodeItem}</p>
-                              <p className="text-sm text-gray-700 dark:text-gray-300">
-                                {new Date(sale.tanggalJual).toLocaleString('id-ID')}
-                              </p>
-                            </div>
-                            <div className="text-right">
-                              <p className="font-bold text-gray-900 dark:text-white">
-                                Rp {(sale.totalHarga || 0).toLocaleString()}
-                              </p>
-                              <p className="text-sm text-gray-700 dark:text-gray-300">
-                                Qty: {sale.qty || 0}
-                              </p>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </CardContent>
-                  </Card>
-                )}
-              </div>
+              )}
 
               {/* Loading State */}
               {isLoadingData && (
@@ -1858,17 +1065,6 @@ export default function Dashboard() {
       <SalesEntryModal 
         isOpen={showSalesModal} 
         onClose={() => setShowSalesModal(false)} 
-      />
-
-      {/* Resolve Pricing Modal */}
-      <ResolvePricingModal 
-        isOpen={showResolvePricingModal} 
-        onClose={() => setShowResolvePricingModal(false)} 
-        stockWithoutPricing={stockWithoutPricing}
-        onPricingResolved={() => {
-          // Refresh stock data after pricing is resolved
-          queryClient.invalidateQueries({ queryKey: ['/api/stock/without-pricing', selectedStore] });
-        }}
       />
     </div>
   );
