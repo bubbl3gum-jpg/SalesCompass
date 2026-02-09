@@ -168,7 +168,7 @@ export function SettlementModal({ isOpen, onClose, settlement }: SettlementModal
         setEdcEntries([]);
       }
     }
-  }, [isOpen, settlement, existingEdcSettlements, form, bazarStores, user]);
+  }, [isOpen, settlement, existingEdcSettlements, form, stores, user]);
 
   useEffect(() => {
     if (watchCashAwal && watchCashAkhir) {
