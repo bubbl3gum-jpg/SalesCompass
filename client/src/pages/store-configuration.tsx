@@ -331,17 +331,17 @@ export default function StoreConfiguration() {
 
   const handleAssignEdc = () => {
     if (!selectedStore || !assigningEdcId) return;
-    const edcData = allEdcs?.find(e => e.edcId === parseInt(assigningEdcId));
+    const edcData = allEdcs?.find((e: any) => e.edcId === parseInt(assigningEdcId));
     if (!edcData) return;
     const store = selectedStoreData;
     assignEdcMutation.mutate({
       kodeGudang: selectedStore,
       edcId: edcData.edcId,
       namaGudang: store?.namaGudang || "",
-      merchantName: edcData.merchantName,
-      edcType: edcData.edcType,
-      adminFee: edcData.adminFee,
-      edcKey: edcData.edcKey,
+      merchantName: edcData.namaEdc || edcData.merchantName || "",
+      edcType: edcData.jenisEdc || edcData.edcType || "",
+      adminFee: edcData.biayaAdmin || edcData.adminFee || null,
+      edcKey: edcData.edcKey || null,
     });
   };
 
