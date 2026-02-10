@@ -53,6 +53,7 @@ interface Store {
   kodeGudang: string;
   namaGudang: string;
   storeCategory?: string | null;
+  storeType?: string | null;
 }
 
 interface Edc {
@@ -102,11 +103,6 @@ export function SettlementModal({ isOpen, onClose, settlement }: SettlementModal
 
   const bazarStores = stores.filter(s => s.storeCategory === 'bazar');
 
-  const edcOptions = useQuery<Edc[]>({
-    queryKey: ["/api/edc"],
-    retry: false,
-  }).data || [];
-
   const form = useForm<SettlementFormData>({
     resolver: zodResolver(settlementFormSchema),
     defaultValues: {
@@ -123,6 +119,19 @@ export function SettlementModal({ isOpen, onClose, settlement }: SettlementModal
   const settlementType = form.watch("settlementType");
   const watchCashAwal = form.watch("cashAwal");
   const watchCashAkhir = form.watch("cashAkhir");
+  const watchKodeGudang = form.watch("kodeGudang");
+
+  const { data: storeEdcOptions = [] } = useQuery<any[]>({
+    queryKey: ['/api/store-edc', watchKodeGudang],
+    queryFn: async () => {
+      if (!watchKodeGudang) return [];
+      const res = await apiRequest('GET', `/api/store-edc/${watchKodeGudang}`);
+      return res.json();
+    },
+    enabled: !!watchKodeGudang,
+  });
+
+  const selectedStoreData = stores.find(s => s.kodeGudang === watchKodeGudang);
 
   const { data: existingEdcSettlements } = useQuery<EdcSettlement[]>({
     queryKey: ['/api/edc-settlements', { settlement_id: settlement?.settlementId }],
@@ -252,8 +261,8 @@ export function SettlementModal({ isOpen, onClose, settlement }: SettlementModal
     : stores.filter(store => store.kodeGudang === user?.store_id);
 
   const getEdcName = (edcId: string) => {
-    const edc = edcOptions.find(e => e.edcId.toString() === edcId);
-    return edc ? `${edc.namaEdc} (${edc.jenisEdc})` : "";
+    const edc = storeEdcOptions.find((e: any) => e.storeEdcId.toString() === edcId);
+    return edc ? `${edc.merchantName}${edc.edcType ? ` - ${edc.edcType}` : ''}` : "";
   };
 
   return (
@@ -363,7 +372,12 @@ export function SettlementModal({ isOpen, onClose, settlement }: SettlementModal
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2">
                     <CreditCard className="h-4 w-4 text-blue-600" />
-                    <span className="font-medium text-sm">EDC Payments</span>
+                    <span className="font-medium text-sm">Payment Methods</span>
+                    {selectedStoreData?.storeType && selectedStoreData.storeType.toLowerCase() !== 'independent' && (
+                      <Badge variant="outline" className="text-xs bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400">
+                        {selectedStoreData.storeType}
+                      </Badge>
+                    )}
                     {edcEntries.length > 0 && (
                       <Badge variant="outline" className="bg-blue-50 text-blue-700">
                         {edcEntries.length} entry
@@ -375,20 +389,20 @@ export function SettlementModal({ isOpen, onClose, settlement }: SettlementModal
                     variant="outline"
                     size="sm"
                     onClick={addEdcEntry}
-                    disabled={edcOptions.length === 0}
+                    disabled={storeEdcOptions.length === 0}
                   >
                     <Plus className="h-3 w-3 mr-1" />
-                    Add EDC
+                    Add Payment
                   </Button>
                 </div>
 
-                {edcOptions.length === 0 ? (
+                {storeEdcOptions.length === 0 ? (
                   <p className="text-sm text-muted-foreground text-center py-2">
-                    No payment methods configured. Add EDC options in Admin Settings.
+                    No payment methods configured for this store. Configure in Store Configuration.
                   </p>
                 ) : edcEntries.length === 0 ? (
                   <p className="text-sm text-muted-foreground text-center py-2">
-                    No EDC payments added. Click "Add EDC" to include card payments.
+                    No card/bank payments added. Click "Add Payment" to include non-cash payments.
                   </p>
                 ) : (
                   <div className="space-y-2">
@@ -399,12 +413,12 @@ export function SettlementModal({ isOpen, onClose, settlement }: SettlementModal
                           onValueChange={(val) => updateEdcEntry(index, "edcId", val)}
                         >
                           <SelectTrigger className="flex-1">
-                            <SelectValue placeholder="Select bank/EDC" />
+                            <SelectValue placeholder="Select payment method" />
                           </SelectTrigger>
                           <SelectContent>
-                            {edcOptions.map((edc) => (
-                              <SelectItem key={edc.edcId} value={edc.edcId.toString()}>
-                                {edc.namaEdc} ({edc.jenisEdc})
+                            {storeEdcOptions.map((edc: any) => (
+                              <SelectItem key={edc.storeEdcId} value={edc.storeEdcId.toString()}>
+                                {edc.merchantName}{edc.edcType ? ` - ${edc.edcType}` : ''}
                               </SelectItem>
                             ))}
                           </SelectContent>
@@ -430,7 +444,7 @@ export function SettlementModal({ isOpen, onClose, settlement }: SettlementModal
                     ))}
                     {edcEntries.length > 0 && (
                       <div className="flex justify-between items-center pt-2 border-t mt-2">
-                        <span className="text-sm font-medium text-gray-600 dark:text-gray-300">Total EDC:</span>
+                        <span className="text-sm font-medium text-gray-600 dark:text-gray-300">Total Payments:</span>
                         <span className="font-semibold text-blue-600">
                           {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(getTotalEdc())}
                         </span>

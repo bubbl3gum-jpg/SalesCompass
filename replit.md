@@ -26,17 +26,17 @@ The system supports 6 different user roles (SPG, Supervisor, Stockist, Sales Adm
 
 **Store Configuration (February 2026)**:
 - **Centralized Store Config**: New "Store Configuration" page under Administration centralizes all per-store settings
-- **Schema Update**: Added `storeType` (independent/dependent) and `storeCategory` (normal/bazar) fields to stores table
-- **Store Type**: Independent = owns its own EDC; Dependent = borrows EDC from another company
+- **Schema Update**: Added `storeType` and `storeCategory` (normal/bazar) fields to stores table
+- **Store Type**: Identifies the department store (e.g., Sogo, Matahari, Metro) or "Independent" for standalone stores. Used to track which department store owns the borrowed EDC machines for payment reconciliation.
 - **Store Category**: Normal = regular retail store; Bazar = event-based store with daily settlement tracking
+- **Payment Methods (formerly EDC Machines)**: Admin can assign/remove payment methods per store from the config page. Each payment method shows the bank/issuer name, type (EDC/QRIS), and associated department store badge. Payment methods are store-specific - only methods configured for a store appear in that store's sales entry and settlement forms.
 - **Discount Assignments**: Admin can assign/remove specific discounts per store from the config page
-- **EDC Machine Assignments**: Admin can assign/remove EDC machines per store from the config page
-- **API Routes**: GET/PATCH /api/store-config, GET /api/store-config/:kodeGudang, POST/DELETE /api/store-edc, plus existing store-discounts endpoints
+- **API Routes**: GET/PATCH /api/store-config, GET /api/store-config/:kodeGudang, GET /api/store-edc/:kodeGudang, POST/DELETE /api/store-edc, plus existing store-discounts endpoints
 - **Permissions**: `store:config` permission for System Administrator (full control) and Supervisor (read-only, scoped to their store)
+- **Sales Entry Payment**: Payment method dropdown shows only store-specific methods (from store_edc) plus Cash. Department store indicator shown when store type is not Independent.
+- **Settlement Payment**: Settlement modal shows store-specific payment methods for non-cash entries. Department store badge displayed when applicable.
 - **Discounts Page**: Simplified to only show discount types CRUD; store assignments moved to Store Configuration page
 - **Virtual Inventory Tab**: Store Configuration now includes a Virtual Store Inventory section showing per-store inventory with search, add, delete, and file import
-- **SPG View**: Still sees store-specific discounts in sales entry modal via /api/store-discounts/:kodeGudang
-- **Sales Entry Discount**: Discount dropdown now always visible when item is selected or in manual mode; shows store-assigned discounts from Store Configuration
 - **Sidebar Cleanup**: Bazars and Virtual Store Inventory removed from sidebar navigation (data/routes remain intact)
 
 ## User Preferences

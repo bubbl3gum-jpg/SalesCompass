@@ -170,10 +170,10 @@ export default function StoreConfiguration() {
       queryClient.invalidateQueries({ queryKey: ['/api/store-config'] });
       setShowAssignEdcModal(false);
       setAssigningEdcId("");
-      toast({ title: "EDC assigned", description: "EDC machine added to store" });
+      toast({ title: "Payment method assigned", description: "Payment method added to store" });
     },
     onError: () => {
-      toast({ title: "Error", description: "Failed to assign EDC to store", variant: "destructive" });
+      toast({ title: "Error", description: "Failed to assign payment method to store", variant: "destructive" });
     },
   });
 
@@ -184,7 +184,7 @@ export default function StoreConfiguration() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/store-config'] });
       setRemovingEdc(null);
-      toast({ title: "EDC removed", description: "EDC machine removed from store" });
+      toast({ title: "Payment method removed", description: "Payment method removed from store" });
     },
   });
 
@@ -350,7 +350,7 @@ export default function StoreConfiguration() {
           <div className="mb-6">
             <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Store Configuration</h1>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-              Central hub for managing store settings, discounts, and EDC machines
+              Central hub for managing store settings, discounts, and payment methods
             </p>
           </div>
 
@@ -420,13 +420,13 @@ export default function StoreConfiguration() {
                               </div>
                               <div className="flex flex-col items-end gap-1 ml-2 flex-shrink-0">
                                 <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${
-                                  store.storeType && store.storeType !== 'Independent'
+                                  store.storeType && store.storeType.toLowerCase() !== 'independent'
                                     ? 'border-orange-300 text-orange-600 dark:border-orange-600 dark:text-orange-400' 
-                                    : store.storeType === 'Independent'
+                                    : store.storeType?.toLowerCase() === 'independent'
                                     ? 'border-green-300 text-green-600 dark:border-green-600 dark:text-green-400'
                                     : 'border-red-300 text-red-500 dark:border-red-600 dark:text-red-400'
                                 }`}>
-                                  {store.storeType && store.storeType !== 'Independent' ? store.storeType : store.storeType === 'Independent' ? 'Independent' : '-'}
+                                  {store.storeType && store.storeType.toLowerCase() !== 'independent' ? store.storeType : store.storeType?.toLowerCase() === 'independent' ? 'Independent' : '-'}
                                 </Badge>
                                 {(store.storeCategory || 'normal') === 'bazar' && (
                                   <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-purple-300 text-purple-600 dark:border-purple-600 dark:text-purple-400">
@@ -443,7 +443,7 @@ export default function StoreConfiguration() {
                               )}
                               {store.edcs.length > 0 && (
                                 <span className="text-[10px] text-gray-400">
-                                  <i className="fas fa-credit-card mr-1" />{store.edcs.length} EDC
+                                  <i className="fas fa-credit-card mr-1" />{store.edcs.length} payment methods
                                 </span>
                               )}
                             </div>
@@ -550,7 +550,7 @@ export default function StoreConfiguration() {
                           <p className="text-xs text-gray-400 mt-1">
                             {(selectedStoreData.storeCategory || "normal") === "bazar"
                               ? "Type of bazar event for this store"
-                              : "Department store where this store is located (for EDC machine tracking)"}
+                              : "Department store where this store is located (for payment method tracking)"}
                           </p>
                         </div>
                       </div>
@@ -606,24 +606,31 @@ export default function StoreConfiguration() {
                     </CardContent>
                   </Card>
 
-                  {/* EDC Machines Section */}
+                  {/* Payment Methods Section */}
                   <Card>
                     <CardHeader className="pb-3">
                       <div className="flex items-center justify-between">
-                        <CardTitle className="text-base">
-                          <i className="fas fa-credit-card mr-2 text-green-500" />
-                          EDC Machines
-                        </CardTitle>
+                        <div>
+                          <CardTitle className="text-base">
+                            <i className="fas fa-credit-card mr-2 text-green-500" />
+                            Payment Methods
+                          </CardTitle>
+                          {selectedStoreData.storeType && selectedStoreData.storeType.toLowerCase() !== 'independent' && (
+                            <p className="text-xs text-blue-600 dark:text-blue-400 mt-1 ml-6">
+                              Dept. Store: {selectedStoreData.storeType}
+                            </p>
+                          )}
+                        </div>
                         {isAdmin && (
                           <Button size="sm" variant="outline" onClick={() => setShowAssignEdcModal(true)}>
-                            <i className="fas fa-plus mr-1" /> Add EDC
+                            <i className="fas fa-plus mr-1" /> Add Payment Method
                           </Button>
                         )}
                       </div>
                     </CardHeader>
                     <CardContent>
                       {selectedStoreData.edcs.length === 0 ? (
-                        <p className="text-sm text-gray-400 text-center py-4">No EDC machines assigned to this store</p>
+                        <p className="text-sm text-gray-400 text-center py-4">No payment methods assigned to this store</p>
                       ) : (
                         <div className="space-y-2">
                           {selectedStoreData.edcs.map(edcItem => (
@@ -631,11 +638,21 @@ export default function StoreConfiguration() {
                               key={edcItem.storeEdcId}
                               className="flex items-center justify-between p-3 rounded-lg bg-gray-50 dark:bg-gray-800"
                             >
-                              <div>
-                                <p className="font-medium text-sm">{edcItem.merchantName || `EDC #${edcItem.edcId}`}</p>
-                                <p className="text-xs text-gray-500">
-                                  {edcItem.edcType && <Badge variant="outline" className="text-[10px]">{edcItem.edcType}</Badge>}
-                                </p>
+                              <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center flex-shrink-0">
+                                  <i className="fas fa-credit-card text-green-600 dark:text-green-400 text-xs" />
+                                </div>
+                                <div>
+                                  <p className="font-medium text-sm">{edcItem.merchantName || `Payment Method #${edcItem.edcId}`}</p>
+                                  <div className="flex items-center gap-1.5 mt-0.5">
+                                    {edcItem.edcType && <Badge variant="outline" className="text-[10px]">{edcItem.edcType}</Badge>}
+                                    {selectedStoreData.storeType && selectedStoreData.storeType.toLowerCase() !== 'independent' && (
+                                      <Badge variant="outline" className="text-[10px] border-blue-200 text-blue-600 dark:border-blue-700 dark:text-blue-400">
+                                        {selectedStoreData.storeType}
+                                      </Badge>
+                                    )}
+                                  </div>
+                                </div>
                               </div>
                               {isAdmin && (
                                 <Button
@@ -792,14 +809,14 @@ export default function StoreConfiguration() {
       <Dialog open={showAssignEdcModal} onOpenChange={setShowAssignEdcModal}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Assign EDC Machine to Store</DialogTitle>
+            <DialogTitle>Add Payment Method to Store</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium mb-1.5">Select EDC Machine</label>
+              <label className="block text-sm font-medium mb-1.5">Select Payment Method</label>
               <Select value={assigningEdcId} onValueChange={setAssigningEdcId}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Choose an EDC machine..." />
+                  <SelectValue placeholder="Choose a payment method..." />
                 </SelectTrigger>
                 <SelectContent>
                   {availableEdcsForStore.map(e => (
@@ -810,7 +827,7 @@ export default function StoreConfiguration() {
                 </SelectContent>
               </Select>
               {availableEdcsForStore.length === 0 && (
-                <p className="text-xs text-gray-400 mt-1">All EDC machines are already assigned to this store</p>
+                <p className="text-xs text-gray-400 mt-1">All payment methods are already assigned to this store</p>
               )}
             </div>
             <div className="flex justify-end gap-2">
@@ -821,7 +838,7 @@ export default function StoreConfiguration() {
                 onClick={handleAssignEdc}
                 disabled={!assigningEdcId || assignEdcMutation.isPending}
               >
-                {assignEdcMutation.isPending ? "Assigning..." : "Assign EDC"}
+                {assignEdcMutation.isPending ? "Adding..." : "Add Payment Method"}
               </Button>
             </div>
           </div>
@@ -853,7 +870,7 @@ export default function StoreConfiguration() {
       <AlertDialog open={!!removingEdc} onOpenChange={(open) => !open && setRemovingEdc(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Remove EDC Machine</AlertDialogTitle>
+            <AlertDialogTitle>Remove Payment Method</AlertDialogTitle>
             <AlertDialogDescription>
               Are you sure you want to remove "{removingEdc?.merchantName}" from this store?
             </AlertDialogDescription>

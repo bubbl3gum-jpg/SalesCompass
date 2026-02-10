@@ -91,12 +91,6 @@ export function SalesEntryModal({ isOpen, onClose, selectedStore, editingSale }:
   const [applicableDiscounts, setApplicableDiscounts] = useState<DiscountOption[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   
-  // Fetch payment methods from database
-  const { data: paymentMethods = [] } = useQuery({
-    queryKey: ['/api/edc'],
-    enabled: isOpen,
-  });
-
   const form = useForm<SalesFormData>({
     resolver: zodResolver(salesFormSchema),
     defaultValues: editingSale ? {
@@ -124,6 +118,28 @@ export function SalesEntryModal({ isOpen, onClose, selectedStore, editingSale }:
       paymentMethod: "Cash",
       notes: "",
     },
+  });
+
+  const activeStore = form.watch('kodeGudang') || selectedStore;
+  
+  const { data: storePaymentMethods = [] } = useQuery({
+    queryKey: ['/api/store-edc', activeStore],
+    queryFn: async () => {
+      if (!activeStore || activeStore === 'ALL_STORE') return [];
+      const res = await apiRequest('GET', `/api/store-edc/${activeStore}`);
+      return res.json();
+    },
+    enabled: isOpen && !!activeStore && activeStore !== 'ALL_STORE',
+  });
+
+  const { data: storeConfig } = useQuery<{ storeType?: string }>({
+    queryKey: ['/api/store-config', activeStore],
+    queryFn: async () => {
+      if (!activeStore || activeStore === 'ALL_STORE') return {};
+      const res = await apiRequest('GET', `/api/store-config/${activeStore}`);
+      return res.json();
+    },
+    enabled: isOpen && !!activeStore && activeStore !== 'ALL_STORE',
   });
 
   // Update form when selectedStore changes
@@ -835,6 +851,11 @@ export function SalesEntryModal({ isOpen, onClose, selectedStore, editingSale }:
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Payment Method</FormLabel>
+                  {storeConfig?.storeType && storeConfig.storeType.toLowerCase() !== 'independent' && (
+                    <p className="text-xs text-blue-600 dark:text-blue-400">
+                      Dept. Store: {storeConfig.storeType}
+                    </p>
+                  )}
                   <Select onValueChange={field.onChange} value={field.value}>
                     <FormControl>
                       <SelectTrigger data-testid="select-payment-method">
@@ -843,13 +864,16 @@ export function SalesEntryModal({ isOpen, onClose, selectedStore, editingSale }:
                     </FormControl>
                     <SelectContent>
                       <SelectItem value="Cash">Cash</SelectItem>
-                      {Array.isArray(paymentMethods) && paymentMethods.map((method: any) => (
-                        <SelectItem key={method.edcId} value={method.namaEdc}>
-                          {method.namaEdc} {method.jenisEdc ? `(${method.jenisEdc})` : ''}
+                      {Array.isArray(storePaymentMethods) && storePaymentMethods.map((method: any) => (
+                        <SelectItem key={method.storeEdcId} value={method.merchantName || `Method-${method.storeEdcId}`}>
+                          {method.merchantName}{method.edcType ? ` - ${method.edcType}` : ''}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
+                  {storePaymentMethods.length === 0 && (
+                    <p className="text-xs text-gray-400">No payment methods configured for this store. Configure in Store Configuration.</p>
+                  )}
                   <FormMessage />
                 </FormItem>
               )}
