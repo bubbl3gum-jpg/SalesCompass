@@ -132,6 +132,8 @@ export const edc = pgTable("edc", {
   edcId: integer("edc_id").primaryKey().generatedByDefaultAsIdentity(),
   merchantName: varchar("merchant_name", { length: 255 }),
   edcType: varchar("edc_type", { length: 50 }),
+  adminFee: decimal("admin_fee", { precision: 12, scale: 2 }),
+  edcKey: varchar("edc_key", { length: 100 }),
 });
 
 // Store EDC
@@ -142,6 +144,8 @@ export const storeEdc = pgTable("store_edc", {
   namaGudang: varchar("nama_gudang", { length: 255 }),
   merchantName: varchar("merchant_name", { length: 255 }),
   edcType: varchar("edc_type", { length: 50 }),
+  adminFee: decimal("admin_fee", { precision: 12, scale: 2 }),
+  edcKey: varchar("edc_key", { length: 100 }),
 });
 
 // Sales (Laporan Penjualan)

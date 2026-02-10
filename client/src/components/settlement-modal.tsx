@@ -262,7 +262,11 @@ export function SettlementModal({ isOpen, onClose, settlement }: SettlementModal
 
   const getEdcName = (edcId: string) => {
     const edc = storeEdcOptions.find((e: any) => e.storeEdcId.toString() === edcId);
-    return edc ? `${edc.merchantName}${edc.edcType ? ` - ${edc.edcType}` : ''}` : "";
+    if (!edc) return "";
+    let name = edc.merchantName || '';
+    if (edc.edcType) name += ` - ${edc.edcType}`;
+    if (edc.edcKey) name += ` [${edc.edcKey}]`;
+    return name;
   };
 
   return (
@@ -418,7 +422,7 @@ export function SettlementModal({ isOpen, onClose, settlement }: SettlementModal
                           <SelectContent>
                             {storeEdcOptions.map((edc: any) => (
                               <SelectItem key={edc.storeEdcId} value={edc.storeEdcId.toString()}>
-                                {edc.merchantName}{edc.edcType ? ` - ${edc.edcType}` : ''}
+                                {edc.merchantName} - {edc.edcType || 'EDC'}{edc.edcKey ? ` [${edc.edcKey}]` : ''}
                               </SelectItem>
                             ))}
                           </SelectContent>

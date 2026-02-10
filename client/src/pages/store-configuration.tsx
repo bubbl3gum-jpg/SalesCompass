@@ -61,6 +61,8 @@ interface StoreConfig {
     namaGudang: string | null;
     merchantName: string | null;
     edcType: string | null;
+    adminFee: string | null;
+    edcKey: string | null;
   }>;
 }
 
@@ -338,6 +340,8 @@ export default function StoreConfiguration() {
       namaGudang: store?.namaGudang || "",
       merchantName: edcData.merchantName,
       edcType: edcData.edcType,
+      adminFee: edcData.adminFee,
+      edcKey: edcData.edcKey,
     });
   };
 
@@ -644,8 +648,18 @@ export default function StoreConfiguration() {
                                 </div>
                                 <div>
                                   <p className="font-medium text-sm">{edcItem.merchantName || `Payment Method #${edcItem.edcId}`}</p>
-                                  <div className="flex items-center gap-1.5 mt-0.5">
+                                  <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                                     {edcItem.edcType && <Badge variant="outline" className="text-[10px]">{edcItem.edcType}</Badge>}
+                                    {edcItem.edcKey && (
+                                      <Badge variant="outline" className="text-[10px] border-gray-300 text-gray-500 dark:border-gray-600 dark:text-gray-400">
+                                        Key: {edcItem.edcKey}
+                                      </Badge>
+                                    )}
+                                    {edcItem.adminFee && Number(edcItem.adminFee) > 0 && (
+                                      <Badge variant="outline" className="text-[10px] border-amber-300 text-amber-600 dark:border-amber-600 dark:text-amber-400">
+                                        Fee: {Number(edcItem.adminFee)}%
+                                      </Badge>
+                                    )}
                                     {selectedStoreData.storeType && selectedStoreData.storeType.toLowerCase() !== 'independent' && (
                                       <Badge variant="outline" className="text-[10px] border-blue-200 text-blue-600 dark:border-blue-700 dark:text-blue-400">
                                         {selectedStoreData.storeType}
@@ -821,7 +835,7 @@ export default function StoreConfiguration() {
                 <SelectContent>
                   {availableEdcsForStore.map(e => (
                     <SelectItem key={e.edcId} value={e.edcId.toString()}>
-                      {e.merchantName} ({e.edcType})
+                      {e.merchantName} - {e.edcType}{e.edcKey ? ` [${e.edcKey}]` : ''}
                     </SelectItem>
                   ))}
                 </SelectContent>

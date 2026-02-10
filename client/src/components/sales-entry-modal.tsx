@@ -866,7 +866,7 @@ export function SalesEntryModal({ isOpen, onClose, selectedStore, editingSale }:
                       <SelectItem value="Cash">Cash</SelectItem>
                       {Array.isArray(storePaymentMethods) && storePaymentMethods.map((method: any) => (
                         <SelectItem key={method.storeEdcId} value={method.merchantName || `Method-${method.storeEdcId}`}>
-                          {method.merchantName}{method.edcType ? ` - ${method.edcType}` : ''}
+                          {method.merchantName} - {method.edcType || 'EDC'}{method.edcKey ? ` [${method.edcKey}]` : ''}
                         </SelectItem>
                       ))}
                     </SelectContent>

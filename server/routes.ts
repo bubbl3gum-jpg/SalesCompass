@@ -2336,11 +2336,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post('/api/store-edc', authenticate, checkRole(['System Administrator']), async (req, res) => {
     try {
-      const { kodeGudang, edcId, namaGudang, merchantName, edcType } = req.body;
+      const { kodeGudang, edcId, namaGudang, merchantName, edcType, adminFee, edcKey } = req.body;
       if (!kodeGudang || !edcId) {
         return res.status(400).json({ message: 'Store code and EDC ID are required' });
       }
-      const result = await storage.createStoreEdc({ kodeGudang, edcId, namaGudang, merchantName, edcType });
+      const result = await storage.createStoreEdc({ kodeGudang, edcId, namaGudang, merchantName, edcType, adminFee: adminFee ? String(adminFee) : null, edcKey: edcKey || null });
       res.json(result);
     } catch (error: any) {
       console.error('Assign EDC to store error:', error);
@@ -2714,12 +2714,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/edc', authenticate, async (req, res) => {
     try {
       const edcList = await storage.getEdc();
-      // Transform to frontend format
       const transformedList = edcList.map(edc => ({
         edcId: edc.edcId,
         namaEdc: edc.merchantName || '',
         jenisEdc: edc.edcType || '',
-        biayaAdmin: 0
+        biayaAdmin: edc.adminFee ? Number(edc.adminFee) : 0,
+        edcKey: edc.edcKey || ''
       }));
       res.json(transformedList);
     } catch (error) {
@@ -2729,27 +2729,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post('/api/edc', authenticate, checkRole(['System Administrator']), async (req, res) => {
     try {
-      // More flexible validation
       const validatedData = z.object({
         namaEdc: z.string(),
         jenisEdc: z.string(),
-        biayaAdmin: z.any().optional() // Accept any type and handle it
+        biayaAdmin: z.any().optional(),
+        edcKey: z.string().optional()
       }).parse(req.body);
       
-      // Transform to database format
       const edcData = {
         merchantName: validatedData.namaEdc,
-        edcType: validatedData.jenisEdc
+        edcType: validatedData.jenisEdc,
+        adminFee: validatedData.biayaAdmin !== undefined ? String(validatedData.biayaAdmin) : null,
+        edcKey: validatedData.edcKey || null
       };
       
       const edc = await storage.createEdc(edcData);
       
-      // Return in frontend format
       res.json({
         edcId: edc.edcId,
         namaEdc: edc.merchantName,
         jenisEdc: edc.edcType,
-        biayaAdmin: validatedData.biayaAdmin !== undefined ? Number(validatedData.biayaAdmin) : 0
+        biayaAdmin: edc.adminFee ? Number(edc.adminFee) : 0,
+        edcKey: edc.edcKey || ''
       });
     } catch (error) {
       console.error('EDC creation error:', error);
@@ -2770,6 +2771,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         merchantName: z.string().optional(),
         edcType: z.string().optional(),
         biayaAdmin: z.any().optional(),
+        edcKey: z.string().optional(),
       }).parse(req.body);
       
       const edcData: any = {};
@@ -2779,13 +2781,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (validatedData.jenisEdc || validatedData.edcType) {
         edcData.edcType = validatedData.jenisEdc || validatedData.edcType;
       }
+      if (validatedData.biayaAdmin !== undefined) {
+        edcData.adminFee = String(validatedData.biayaAdmin);
+      }
+      if (validatedData.edcKey !== undefined) {
+        edcData.edcKey = validatedData.edcKey;
+      }
       
       const edc = await storage.updateEdc(parseInt(edcId), edcData);
       res.json({
         edcId: edc.edcId,
         namaEdc: edc.merchantName,
         jenisEdc: edc.edcType,
-        biayaAdmin: 0
+        biayaAdmin: edc.adminFee ? Number(edc.adminFee) : 0,
+        edcKey: edc.edcKey || ''
       });
     } catch (error) {
       console.error('EDC update error:', error);

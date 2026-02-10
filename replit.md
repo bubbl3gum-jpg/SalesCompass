@@ -29,7 +29,7 @@ The system supports 6 different user roles (SPG, Supervisor, Stockist, Sales Adm
 - **Schema Update**: Added `storeType` and `storeCategory` (normal/bazar) fields to stores table
 - **Store Type**: Identifies the department store (e.g., Sogo, Matahari, Metro) or "Independent" for standalone stores. Used to track which department store owns the borrowed EDC machines for payment reconciliation.
 - **Store Category**: Normal = regular retail store; Bazar = event-based store with daily settlement tracking
-- **Payment Methods (formerly EDC Machines)**: Admin can assign/remove payment methods per store from the config page. Each payment method shows the bank/issuer name, type (EDC/QRIS), and associated department store badge. Payment methods are store-specific - only methods configured for a store appear in that store's sales entry and settlement forms.
+- **Payment Methods (formerly EDC Machines)**: Admin can assign/remove payment methods per store from the config page. Each payment method has: Bank (financial institution name), Payment Type (EDC/QRIS/Debit/Credit/Transfer dropdown), EDC Key (terminal/merchant ID for identifying specific machines), and Admin Fee (% charged by bank). Payment methods are store-specific - only methods configured for a store appear in that store's sales entry and settlement forms.
 - **Discount Assignments**: Admin can assign/remove specific discounts per store from the config page
 - **API Routes**: GET/PATCH /api/store-config, GET /api/store-config/:kodeGudang, GET /api/store-edc/:kodeGudang, POST/DELETE /api/store-edc, plus existing store-discounts endpoints
 - **Permissions**: `store:config` permission for System Administrator (full control) and Supervisor (read-only, scoped to their store)

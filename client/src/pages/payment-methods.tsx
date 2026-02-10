@@ -21,10 +21,17 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { ImportModal } from "@/components/import-modal";
 import { apiRequest } from "@/lib/queryClient";
 import { Sidebar } from "@/components/sidebar";
-import { Edit3, Trash2, Plus, Upload, Search } from "lucide-react";
+import { Edit3, Trash2, Plus, Upload, Search, CreditCard, QrCode, Banknote, Key } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ImportProgress } from "@/components/ImportProgress";
 
@@ -33,6 +40,30 @@ interface PaymentMethod {
   namaEdc: string;
   jenisEdc: string;
   biayaAdmin?: number;
+  edcKey?: string;
+}
+
+const PAYMENT_TYPES = [
+  { value: "EDC", label: "EDC (Debit/Credit Card)" },
+  { value: "QRIS", label: "QRIS (QR Payment)" },
+  { value: "Debit", label: "Debit Card" },
+  { value: "Credit", label: "Credit Card" },
+  { value: "Transfer", label: "Bank Transfer" },
+];
+
+function getPaymentTypeIcon(type: string) {
+  switch (type?.toUpperCase()) {
+    case "QRIS":
+      return <QrCode className="w-3.5 h-3.5" />;
+    case "EDC":
+    case "DEBIT":
+    case "CREDIT":
+      return <CreditCard className="w-3.5 h-3.5" />;
+    case "TRANSFER":
+      return <Banknote className="w-3.5 h-3.5" />;
+    default:
+      return <CreditCard className="w-3.5 h-3.5" />;
+  }
 }
 
 export default function PaymentMethods() {
@@ -48,14 +79,14 @@ export default function PaymentMethods() {
   const [formData, setFormData] = useState({
     namaEdc: '',
     jenisEdc: '',
-    biayaAdmin: ''
+    biayaAdmin: '',
+    edcKey: ''
   });
   const [searchQuery, setSearchQuery] = useState('');
   const [currentImportId, setCurrentImportId] = useState<string | null>(null);
   const [isImporting, setIsImporting] = useState(false);
   const [deletingMethod, setDeletingMethod] = useState<PaymentMethod | null>(null);
 
-  // Fetch payment methods
   const { data: paymentMethods, isLoading, error } = useQuery({
     queryKey: ['/api/edc'],
     retry: false,
@@ -63,10 +94,10 @@ export default function PaymentMethods() {
 
   const filteredMethods = Array.isArray(paymentMethods) ? paymentMethods.filter((method: PaymentMethod) =>
     method.namaEdc?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    method.jenisEdc?.toLowerCase().includes(searchQuery.toLowerCase())
+    method.jenisEdc?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    method.edcKey?.toLowerCase().includes(searchQuery.toLowerCase())
   ) : [];
 
-  // Create mutation
   const createMutation = useMutation({
     mutationFn: async (data: Partial<PaymentMethod>) => {
       const response = await apiRequest('POST', '/api/edc', data);
@@ -75,7 +106,7 @@ export default function PaymentMethods() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/edc'] });
       setShowCreateModal(false);
-      setFormData({ namaEdc: '', jenisEdc: '', biayaAdmin: '' });
+      setFormData({ namaEdc: '', jenisEdc: '', biayaAdmin: '', edcKey: '' });
       toast({
         title: "Success",
         description: "Payment method created successfully",
@@ -101,7 +132,6 @@ export default function PaymentMethods() {
     },
   });
 
-  // Update mutation
   const updateMutation = useMutation({
     mutationFn: async ({ id, data }: { id: number; data: Partial<PaymentMethod> }) => {
       const response = await apiRequest('PATCH', `/api/edc/${id}`, data);
@@ -111,7 +141,7 @@ export default function PaymentMethods() {
       queryClient.invalidateQueries({ queryKey: ['/api/edc'] });
       setShowEditModal(false);
       setEditingMethod(null);
-      setFormData({ namaEdc: '', jenisEdc: '', biayaAdmin: '' });
+      setFormData({ namaEdc: '', jenisEdc: '', biayaAdmin: '', edcKey: '' });
       toast({
         title: "Success",
         description: "Payment method updated successfully",
@@ -137,7 +167,6 @@ export default function PaymentMethods() {
     },
   });
 
-  // Delete mutation
   const deleteMutation = useMutation({
     mutationFn: async (id: number) => {
       const response = await apiRequest('DELETE', `/api/edc/${id}`);
@@ -178,6 +207,7 @@ export default function PaymentMethods() {
       namaEdc: formData.namaEdc,
       jenisEdc: formData.jenisEdc,
       biayaAdmin: formData.biayaAdmin ? Number(formData.biayaAdmin) : undefined,
+      edcKey: formData.edcKey || undefined,
     };
 
     if (editingMethod) {
@@ -193,6 +223,7 @@ export default function PaymentMethods() {
       namaEdc: method.namaEdc || '',
       jenisEdc: method.jenisEdc || '',
       biayaAdmin: method.biayaAdmin?.toString() || '',
+      edcKey: method.edcKey || '',
     });
     setShowEditModal(true);
   };
@@ -239,7 +270,7 @@ export default function PaymentMethods() {
                 Payment Methods
               </h1>
               <p className="text-gray-600 dark:text-gray-400 mt-2">
-                Manage EDC and payment methods for your stores
+                Manage banks, payment types, and EDC terminals for your stores
               </p>
             </div>
 
@@ -271,12 +302,11 @@ export default function PaymentMethods() {
                 </div>
               </CardHeader>
               <CardContent>
-                {/* Search */}
                 <div className="mb-6">
                   <div className="relative">
                     <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
                     <Input
-                      placeholder="Search payment methods..."
+                      placeholder="Search by bank, type, or EDC key..."
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                       className="pl-10"
@@ -285,7 +315,6 @@ export default function PaymentMethods() {
                   </div>
                 </div>
 
-                {/* Import Progress */}
                 {currentImportId && (
                   <div className="mb-6">
                     <ImportProgress 
@@ -295,7 +324,6 @@ export default function PaymentMethods() {
                   </div>
                 )}
 
-                {/* Payment Methods List */}
                 {isLoading ? (
                   <div className="space-y-4">
                     {Array.from({ length: 5 }).map((_, i) => (
@@ -318,7 +346,7 @@ export default function PaymentMethods() {
                     </p>
                   </div>
                 ) : (
-                  <div className="space-y-4">
+                  <div className="space-y-3">
                     {filteredMethods.map((method: PaymentMethod) => (
                       <div
                         key={method.edcId}
@@ -326,19 +354,28 @@ export default function PaymentMethods() {
                         data-testid={`payment-method-${method.edcId}`}
                       >
                         <div className="flex-1">
-                          <div className="flex items-center gap-3 mb-2">
-                            <h3 className="font-medium text-gray-900 dark:text-white">
+                          <div className="flex items-center gap-3 mb-1">
+                            <h3 className="font-semibold text-gray-900 dark:text-white text-base">
                               {method.namaEdc}
                             </h3>
-                            <Badge variant="secondary">
+                            <Badge variant="secondary" className="flex items-center gap-1">
+                              {getPaymentTypeIcon(method.jenisEdc)}
                               {method.jenisEdc}
                             </Badge>
                           </div>
-                          {method.biayaAdmin && (
-                            <p className="text-sm text-gray-600 dark:text-gray-400">
-                              Admin Fee: Rp {method.biayaAdmin.toLocaleString()}
-                            </p>
-                          )}
+                          <div className="flex items-center gap-4 text-sm text-gray-500 dark:text-gray-400">
+                            {method.edcKey && (
+                              <span className="flex items-center gap-1">
+                                <Key className="w-3 h-3" />
+                                EDC Key: {method.edcKey}
+                              </span>
+                            )}
+                            {method.biayaAdmin !== undefined && method.biayaAdmin > 0 && (
+                              <span>
+                                Admin Fee: {method.biayaAdmin}%
+                              </span>
+                            )}
+                          </div>
                         </div>
                         <div className="flex gap-2">
                           <Button
@@ -375,7 +412,7 @@ export default function PaymentMethods() {
           setShowCreateModal(false);
           setShowEditModal(false);
           setEditingMethod(null);
-          setFormData({ namaEdc: '', jenisEdc: '', biayaAdmin: '' });
+          setFormData({ namaEdc: '', jenisEdc: '', biayaAdmin: '', edcKey: '' });
         }
       }}>
         <DialogContent className="max-w-md">
@@ -387,36 +424,65 @@ export default function PaymentMethods() {
           
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <Label htmlFor="namaEdc">Payment Method Name *</Label>
+              <Label htmlFor="namaEdc">Bank *</Label>
               <Input
                 id="namaEdc"
+                placeholder="e.g. BCA, Mandiri, OCBC"
                 value={formData.namaEdc}
                 onChange={(e) => setFormData({ ...formData, namaEdc: e.target.value })}
                 required
                 data-testid="input-nama-edc"
               />
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">The bank or financial institution name</p>
             </div>
             
             <div>
-              <Label htmlFor="jenisEdc">Type *</Label>
-              <Input
-                id="jenisEdc"
+              <Label htmlFor="jenisEdc">Payment Type *</Label>
+              <Select
                 value={formData.jenisEdc}
-                onChange={(e) => setFormData({ ...formData, jenisEdc: e.target.value })}
-                required
-                data-testid="input-jenis-edc"
-              />
+                onValueChange={(value) => setFormData({ ...formData, jenisEdc: value })}
+              >
+                <SelectTrigger data-testid="input-jenis-edc">
+                  <SelectValue placeholder="Select payment type" />
+                </SelectTrigger>
+                <SelectContent>
+                  {PAYMENT_TYPES.map((type) => (
+                    <SelectItem key={type.value} value={type.value}>
+                      <span className="flex items-center gap-2">
+                        {getPaymentTypeIcon(type.value)}
+                        {type.label}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">How customers pay (card swipe, QR scan, etc.)</p>
             </div>
 
             <div>
-              <Label htmlFor="biayaAdmin">Admin Fee</Label>
+              <Label htmlFor="edcKey">EDC Key</Label>
+              <Input
+                id="edcKey"
+                placeholder="e.g. TID-001, MID-12345"
+                value={formData.edcKey}
+                onChange={(e) => setFormData({ ...formData, edcKey: e.target.value })}
+                data-testid="input-edc-key"
+              />
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Terminal ID or merchant ID to identify the EDC machine</p>
+            </div>
+
+            <div>
+              <Label htmlFor="biayaAdmin">Admin Fee (%)</Label>
               <Input
                 id="biayaAdmin"
                 type="number"
+                step="0.01"
+                placeholder="e.g. 1.5"
                 value={formData.biayaAdmin}
                 onChange={(e) => setFormData({ ...formData, biayaAdmin: e.target.value })}
                 data-testid="input-biaya-admin"
               />
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Transaction fee percentage charged by the bank</p>
             </div>
 
             <div className="flex justify-end gap-2 pt-4">
@@ -427,14 +493,14 @@ export default function PaymentMethods() {
                   setShowCreateModal(false);
                   setShowEditModal(false);
                   setEditingMethod(null);
-                  setFormData({ namaEdc: '', jenisEdc: '', biayaAdmin: '' });
+                  setFormData({ namaEdc: '', jenisEdc: '', biayaAdmin: '', edcKey: '' });
                 }}
               >
                 Cancel
               </Button>
               <Button 
                 type="submit" 
-                disabled={createMutation.isPending || updateMutation.isPending}
+                disabled={createMutation.isPending || updateMutation.isPending || !formData.namaEdc || !formData.jenisEdc}
                 data-testid="button-submit"
               >
                 {editingMethod ? 'Update' : 'Create'}
@@ -450,7 +516,7 @@ export default function PaymentMethods() {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Payment Method</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete "{deletingMethod?.namaEdc}"? This action cannot be undone.
+              Are you sure you want to delete "{deletingMethod?.namaEdc} ({deletingMethod?.jenisEdc})"? This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
