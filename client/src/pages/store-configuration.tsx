@@ -480,7 +480,7 @@ export default function StoreConfiguration() {
                     <CardHeader className="pb-3">
                       <div className="flex items-center justify-between">
                         <div>
-                          <CardTitle className="text-xl">{selectedStoreData.namaGudang || selectedStoreData.kodeGudang}</CardTitle>
+                          <CardTitle className="text-xl text-gray-900 dark:text-white">{selectedStoreData.namaGudang || selectedStoreData.kodeGudang}</CardTitle>
                           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Code: {selectedStoreData.kodeGudang}</p>
                         </div>
                         <Button variant="ghost" size="sm" onClick={() => setSelectedStore(null)} className="text-gray-400">
@@ -492,7 +492,7 @@ export default function StoreConfiguration() {
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {/* Store Category */}
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Store Category</label>
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1.5">Store Category</label>
                           <Select
                             value={selectedStoreData.storeCategory || "normal"}
                             onValueChange={(value) => {
@@ -521,7 +521,7 @@ export default function StoreConfiguration() {
 
                         {/* Store Type */}
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1.5">
                             {(selectedStoreData.storeCategory || "normal") === "bazar" ? "Bazar Type" : "Store Type"}
                           </label>
                           <Select
@@ -565,7 +565,7 @@ export default function StoreConfiguration() {
                   <Card>
                     <CardHeader className="pb-3">
                       <div className="flex items-center justify-between">
-                        <CardTitle className="text-base">
+                        <CardTitle className="text-base text-gray-900 dark:text-white">
                           <i className="fas fa-percentage mr-2 text-blue-500" />
                           Discounts
                         </CardTitle>
@@ -578,7 +578,7 @@ export default function StoreConfiguration() {
                     </CardHeader>
                     <CardContent>
                       {selectedStoreData.discounts.length === 0 ? (
-                        <p className="text-sm text-gray-400 text-center py-4">No discounts assigned to this store</p>
+                        <p className="text-sm text-gray-500 dark:text-gray-300 text-center py-4">No discounts assigned to this store</p>
                       ) : (
                         <div className="space-y-2">
                           {selectedStoreData.discounts.map(discount => (
@@ -615,7 +615,7 @@ export default function StoreConfiguration() {
                     <CardHeader className="pb-3">
                       <div className="flex items-center justify-between">
                         <div>
-                          <CardTitle className="text-base">
+                          <CardTitle className="text-base text-gray-900 dark:text-white">
                             <i className="fas fa-credit-card mr-2 text-green-500" />
                             Payment Methods
                           </CardTitle>
@@ -634,7 +634,7 @@ export default function StoreConfiguration() {
                     </CardHeader>
                     <CardContent>
                       {selectedStoreData.edcs.length === 0 ? (
-                        <p className="text-sm text-gray-400 text-center py-4">No payment methods assigned to this store</p>
+                        <p className="text-sm text-gray-500 dark:text-gray-300 text-center py-4">No payment methods assigned to this store</p>
                       ) : (
                         <div className="space-y-2">
                           {selectedStoreData.edcs.map(edcItem => (
@@ -689,7 +689,7 @@ export default function StoreConfiguration() {
                   <Card>
                     <CardHeader className="pb-3">
                       <div className="flex items-center justify-between">
-                        <CardTitle className="text-base">
+                        <CardTitle className="text-base text-gray-900 dark:text-white">
                           <Package className="inline-block w-4 h-4 mr-2 text-purple-500" />
                           Virtual Store Inventory
                         </CardTitle>
