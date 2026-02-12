@@ -669,14 +669,16 @@ export default function StoreConfiguration() {
                                 </div>
                               </div>
                               {isAdmin && (
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="text-red-500 hover:text-red-700 hover:bg-red-50"
-                                  onClick={() => setRemovingEdc(edcItem)}
-                                >
-                                  <i className="fas fa-trash text-xs" />
-                                </Button>
+                                <div className="flex items-center gap-1">
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/30"
+                                    onClick={() => setRemovingEdc(edcItem)}
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </Button>
+                                </div>
                               )}
                             </div>
                           ))}
